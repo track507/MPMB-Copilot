@@ -1,0 +1,32 @@
+{
+	"files.associations": {
+		"*.js": "javascript"
+	},
+	"editor.quickSuggestions": {
+		"other": true,
+		"comments": false,
+		"strings": true
+	},
+	"files.autoSave": "onFocusChange",
+	"editor.formatOnSave": true,
+	"[javascript]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"[json]": {
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
+	},
+	"javascript.validate.enable": true,
+	"javascript.suggestionActions.enabled": true,
+	"terminal.integrated.scrollback": 10000,
+	"terminal.integrated.fontSize": 13,
+	"workbench.colorCustomizations": {
+		"terminal.ansiGreen": "#00ff00",
+		"terminal.ansiRed": "#ff0000",
+		"terminal.ansiYellow": "#ffff00",
+		"terminal.ansiBlue": "#0000ff",
+		"terminal.ansiCyan": "#00ffff"
+	},
+	"eslint.validate": [
+		"javascript"
+	]
+}
