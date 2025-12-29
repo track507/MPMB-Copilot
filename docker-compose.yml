@@ -1,13 +1,14 @@
 services:
     # PostgreSQL Database for Session Persistence
     postgres:
-        image: postgres:16-alpine
+        build:
+            context: ./scripts
+            dockerfile: Dockerfile.postgres
         container_name: mpmb-postgres
         ports:
             - "5432:5432"
         volumes:
             - postgres_data:/var/lib/postgresql/data
-            - ./scripts:/docker-entrypoint-initdb.d:ro
         environment:
             POSTGRES_USER: ${POSTGRES_USER:-mpmb_user}
             POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mpmb_password}
