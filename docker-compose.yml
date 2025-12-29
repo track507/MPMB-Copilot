@@ -1,7 +1,28 @@
-version: "3.8"
-
 services:
-    # Vector Database
+    # PostgreSQL Database for Session Persistence
+    postgres:
+        image: postgres:16-alpine
+        container_name: mpmb-postgres
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./scripts:/docker-entrypoint-initdb.d:ro
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-mpmb_user}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mpmb_password}
+            POSTGRES_DB: ${POSTGRES_DB:-mpmb_copilot}
+            POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mpmb_user} -d ${POSTGRES_DB:-mpmb_copilot}"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+        networks:
+            - mpmb-network
+
+    # Qdrant Vector Database
     qdrant:
         image: qdrant/qdrant:latest
         container_name: mpmb-qdrant
@@ -10,80 +31,141 @@ services:
             - "6334:6334" # gRPC
         volumes:
             - qdrant_storage:/qdrant/storage
+            - qdrant_snapshots:/qdrant/snapshots
         environment:
             - QDRANT__SERVICE__GRPC_PORT=6334
+            - QDRANT__LOG_LEVEL=INFO
+        healthcheck:
+            test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
         restart: unless-stopped
         networks:
             - mpmb-network
 
-    # Python FastAPI Backend
+    # Python FastAPI Backend (Updated to 3.13)
     backend:
         build:
             context: ./backend
             dockerfile: Dockerfile
+            args:
+                PYTHON_VERSION: "3.13"
         container_name: mpmb-backend
         ports:
             - "8000:8000"
         volumes:
             - ./backend:/app
-            - ./data:/app/data # For MPMB source files
+            - ./data:/app/data
+            - backend_logs:/app/logs
         environment:
+            # Application
+            - ENVIRONMENT=development
+            - LOG_LEVEL=INFO
+            - DEBUG=true
+
+            # Database
+            - POSTGRES_HOST=postgres
+            - POSTGRES_PORT=5432
+            - POSTGRES_USER=${POSTGRES_USER:-mpmb_user}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mpmb_password}
+            - POSTGRES_DB=${POSTGRES_DB:-mpmb_copilot}
+            - DATABASE_URL=postgresql://${POSTGRES_USER:-mpmb_user}:${POSTGRES_PASSWORD:-mpmb_password}@postgres:5432/${POSTGRES_DB:-mpmb_copilot}
+
+            # Qdrant
             - QDRANT_HOST=qdrant
             - QDRANT_PORT=6333
-            - ENVIRONMENT=development
+            - QDRANT_COLLECTION=mpmb_code
+
+            # LLM Providers
             - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
             - OPENAI_API_KEY=${OPENAI_API_KEY:-}
             - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+            - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-anthropic}
+            - DEFAULT_MODEL=${DEFAULT_MODEL:-claude-sonnet-4-20250514}
         env_file:
             - .env
         depends_on:
-            - qdrant
+            postgres:
+                condition: service_healthy
+            qdrant:
+                condition: service_healthy
         restart: unless-stopped
         networks:
             - mpmb-network
         command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-    # C# SignalR Hub
-    hub:
-        build:
-            context: ./hub
-            dockerfile: Dockerfile
-        container_name: mpmb-hub
-        ports:
-            - "5000:5000"
-        environment:
-            - ASPNETCORE_ENVIRONMENT=Development
-            - ASPNETCORE_URLS=http://+:5000
-            - PythonBackend__BaseUrl=http://backend:8000
-            - AllowedOrigins__0=http://localhost:3000
-            - AllowedOrigins__1=http://localhost:5001
-        depends_on:
-            - backend
-        restart: unless-stopped
-        networks:
-            - mpmb-network
+    # C# SignalR Hub (.NET 10)
+    # hub:
+    #   build:
+    #     context: ./hub
+    #     dockerfile: Dockerfile
+    #     args:
+    #       DOTNET_VERSION: "10.0"
+    #   container_name: mpmb-hub
+    #   ports:
+    #     - "5000:5000"
+    #   volumes:
+    #     - hub_logs:/app/logs
+    #   environment:
+    #     - ASPNETCORE_ENVIRONMENT=Development
+    #     - ASPNETCORE_URLS=http://+:5000
+    #     - PythonBackend__BaseUrl=http://backend:8000
+    #     - PostgreSQL__ConnectionString=Host=postgres;Port=5432;Database=${POSTGRES_DB:-mpmb_copilot};Username=${POSTGRES_USER:-mpmb_user};Password=${POSTGRES_PASSWORD:-mpmb_password}
+    #     - AllowedOrigins__0=http://localhost:3000
+    #     - AllowedOrigins__1=http://localhost:5001
+    #   depends_on:
+    #     - backend
+    #     - postgres
+    #   restart: unless-stopped
+    #   networks:
+    #     - mpmb-network
 
-    # Blazor WebAssembly Frontend (optional - can run separately)
-    frontend:
-        build:
-            context: ./frontend
-            dockerfile: Dockerfile
-        container_name: mpmb-frontend
-        ports:
-            - "3000:80"
-        environment:
-            - ASPNETCORE_ENVIRONMENT=Development
-            - HubUrl=http://localhost:5000/chathub
-        depends_on:
-            - hub
-        restart: unless-stopped
-        networks:
-            - mpmb-network
+    # Blazor WebAssembly Frontend (.NET 10)
+    # frontend:
+    #   build:
+    #     context: ./frontend
+    #     dockerfile: Dockerfile
+    #     args:
+    #       DOTNET_VERSION: "10.0"
+    #   container_name: mpmb-frontend
+    #   ports:
+    #     - "3000:80"
+    #   environment:
+    #     - ASPNETCORE_ENVIRONMENT=Development
+    #     - HubUrl=http://localhost:5000/chathub
+    #     - ApiUrl=http://localhost:8000/api
+    #   depends_on:
+    #     - hub
+    #   restart: unless-stopped
+    #   networks:
+    #     - mpmb-network
 
 networks:
     mpmb-network:
         driver: bridge
+        name: mpmb-network
 
 volumes:
+    # PostgreSQL persistent storage
+    postgres_data:
+        driver: local
+        name: mpmb_postgres_data
+
+    # Qdrant persistent storage
     qdrant_storage:
         driver: local
+        name: mpmb_qdrant_storage
+
+    qdrant_snapshots:
+        driver: local
+        name: mpmb_qdrant_snapshots
+
+    # Application logs
+    backend_logs:
+        driver: local
+        name: mpmb_backend_logs
+
+    hub_logs:
+        driver: local
+        name: mpmb_hub_logs
