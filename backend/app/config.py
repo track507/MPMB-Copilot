@@ -1,9 +1,7 @@
 """Configuration management using pydantic-settings"""
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal, Optional
-
 
 class Settings(BaseSettings):
 	"""Application settings loaded from environment variables"""
@@ -84,7 +82,6 @@ class Settings(BaseSettings):
 		elif provider == "openai":
 			return self.openai_api_key
 		return None
-
 
 # Global settings instance
 settings = Settings()
