@@ -62,8 +62,18 @@ CREATE TABLE IF NOT EXISTS messages (
     -- Timestamps
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    -- Token usage tracking
-    tokens_used INTEGER DEFAULT 0,
+    -- LLM Provider Tracking
+    provider VARCHAR(50),           -- 'anthropic', 'openai', 'ollama'
+    model VARCHAR(100),              -- 'claude-sonnet-4-20250514', 'gpt-4', etc.
+
+    -- Token Usage Tracking
+    prompt_tokens INTEGER DEFAULT 0,
+    completion_tokens INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+
+    -- Performance Tracking
+    latency_ms INTEGER,              -- Response time in milliseconds
+    stop_reason VARCHAR(50),         -- 'end_turn', 'max_tokens', 'stop_sequence', etc.
 
     -- Metadata: retrieved documents, tool calls, streaming state, etc.
     metadata JSONB DEFAULT '{}'::jsonb,
@@ -79,6 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_role ON messages(role);
 CREATE INDEX IF NOT EXISTS idx_messages_sequence ON messages(session_id, sequence_number);
+CREATE INDEX IF NOT EXISTS idx_messages_provider ON messages(provider);
+CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 
 -- GIN index for JSONB content search
 CREATE INDEX IF NOT EXISTS idx_messages_content_gin ON messages USING gin(content);
@@ -93,7 +105,7 @@ CREATE TABLE IF NOT EXISTS files (
     -- File information
     filename VARCHAR(255) NOT NULL,
     original_filename VARCHAR(255) NOT NULL,
-    file_path VARCHAR(512) NOT NULL, -- Path on filesystem or S3 key
+    file_path VARCHAR(512) NOT NULL,
     content_type VARCHAR(100) NOT NULL,
     file_size BIGINT NOT NULL,
 
@@ -142,13 +154,35 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 CREATE INDEX IF NOT EXISTS idx_doc_chunks_source ON document_chunks(source_file);
 CREATE INDEX IF NOT EXISTS idx_doc_chunks_qdrant_id ON document_chunks(qdrant_id) WHERE qdrant_id IS NOT NULL;
 
+-- This table links messages to the document chunks that were used to generate them
+CREATE TABLE IF NOT EXISTS message_retrievals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    document_chunk_id UUID NOT NULL REFERENCES document_chunks(id) ON DELETE CASCADE,
+
+    -- Retrieval metadata
+    rank INTEGER NOT NULL,           -- Order in which chunk was retrieved (1 = most relevant)
+    score FLOAT NOT NULL,            -- Similarity score from vector search
+    snippet TEXT,                    -- Optional: exact text snippet shown to user
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT message_retrievals_unique UNIQUE (message_id, document_chunk_id)
+);
+
+-- Indexes for message_retrievals
+CREATE INDEX IF NOT EXISTS idx_msg_retrievals_message ON message_retrievals(message_id);
+CREATE INDEX IF NOT EXISTS idx_msg_retrievals_chunk ON message_retrievals(document_chunk_id);
+CREATE INDEX IF NOT EXISTS idx_msg_retrievals_score ON message_retrievals(score DESC);
+CREATE INDEX IF NOT EXISTS idx_msg_retrievals_rank ON message_retrievals(rank);
+
 -- Usage/Analytics Table (optional, for tracking)
 CREATE TABLE IF NOT EXISTS usage_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id UUID REFERENCES sessions(id) ON DELETE SET NULL,
 
     -- Event information
-    event_type VARCHAR(50) NOT NULL, -- 'message', 'search', 'error', etc.
+    event_type VARCHAR(50) NOT NULL,
 
     -- Details stored as JSONB
     event_data JSONB DEFAULT '{}'::jsonb,
@@ -185,7 +219,7 @@ BEGIN
         SELECT COALESCE(MAX(sequence_number), 0) + 1
         INTO NEW.sequence_number
         FROM messages
-        WHERE session_id = NEW.session_id;
+        WHERE session_id = NEW.sequence_id;
     END IF;
     RETURN NEW;
 END;
@@ -197,14 +231,6 @@ CREATE TRIGGER messages_sequence_trigger
     FOR EACH ROW
     EXECUTE FUNCTION set_message_sequence_number();
 
--- Grant permissions (adjust as needed for production)
+-- Grant permissions
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mpmb_user;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mpmb_user;
-
--- Sample data for testing (optional, remove in production)
--- Uncomment to create a test session
-/*
-INSERT INTO sessions (title, settings) VALUES
-    ('Test Session', '{"model": "claude-sonnet-4-20250514", "provider": "anthropic"}'::jsonb)
-RETURNING id;
-*/
