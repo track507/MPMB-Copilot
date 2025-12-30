@@ -50,7 +50,7 @@ class Session(Base):
 				"max_tokens": 4000,  # Default max tokens
 				"include_sources": true  # Whether to include RAG sources
 			}
-		metadata: Additional session metadata as JSONB. Structure:
+		meta_data: Additional session metadata as JSONB. Structure:
 			{
 				"tags": ["mpmb", "spells"],  # User-defined tags
 				"pinned": false,  # Whether session is pinned
@@ -75,7 +75,7 @@ class Session(Base):
 	updated_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 	user_id: Optional[str] = Column(String(255), nullable=True)
 	settings: dict = Column(JSONB, nullable=False, server_default='{}')
-	metadata: dict = Column(JSONB, nullable=False, server_default='{}')
+	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
 	deleted_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
 
 	# Relationships
@@ -113,7 +113,7 @@ class Message(Base):
 		latency_ms: Time taken to generate response in milliseconds
 		stop_reason: Why generation stopped (e.g., "end_turn", "max_tokens")
 
-		metadata: Additional message metadata as JSONB. Structure:
+		meta_data: Additional message metadata as JSONB. Structure:
 			{
 				"retrieval_time_ms": 45,  # Time spent retrieving context
 				"chunks_retrieved": 5,  # Number of RAG chunks used
@@ -147,7 +147,7 @@ class Message(Base):
 	latency_ms: Optional[int] = Column(Integer, nullable=True)
 	stop_reason: Optional[str] = Column(String(50), nullable=True)
 
-	metadata: dict = Column(JSONB, nullable=False, server_default='{}')
+	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
 	sequence_number: int = Column(Integer, nullable=False)
 
 	# Relationships
@@ -172,7 +172,7 @@ class File(Base):
 		file_size: File size in bytes
 		file_hash: SHA-256 hash for deduplication and integrity checking
 		uploaded_at: Timestamp when file was uploaded (UTC)
-		metadata: Additional file metadata as JSONB. Structure:
+		meta_data: Additional file metadata as JSONB. Structure:
 			{
 				"extraction_status": "completed",  # Text extraction status
 				"page_count": 10,  # For PDFs
@@ -201,7 +201,7 @@ class File(Base):
 	file_size: int = Column(Integer, nullable=False)
 	file_hash: Optional[str] = Column(String(64), nullable=True)
 	uploaded_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-	metadata: dict = Column(JSONB, nullable=False, server_default='{}')
+	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
 
 	# Relationships
 	session = relationship("Session", back_populates="files")
@@ -222,7 +222,7 @@ class DocumentChunk(Base):
 		chunk_index: Sequential index of this chunk within the source file (0-based)
 		content: The actual text content of this chunk
 		qdrant_id: UUID of corresponding vector in Qdrant collection (for sync)
-		metadata: Chunk metadata as JSONB. Structure:
+		meta_data: Chunk metadata as JSONB. Structure:
 			{
 				"start_line": 150,  # Starting line number in source
 				"end_line": 200,  # Ending line number in source
@@ -247,7 +247,7 @@ class DocumentChunk(Base):
 	chunk_index: int = Column(Integer, nullable=False)
 	content: str = Column(Text, nullable=False)
 	qdrant_id: Optional[str] = Column(String(255), unique=True, nullable=True)
-	metadata: dict = Column(JSONB, nullable=False, server_default='{}')
+	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
 	indexed_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
 	# Relationships

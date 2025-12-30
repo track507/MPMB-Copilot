@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api import health, chat, index
+from app.services.qdrant import qdrant_service
+
 
 # Configure logging
 logging.basicConfig(
@@ -26,7 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	logger.info(f"Default Model: {settings.default_model}")
 	logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
 
-	# TODO: Initialize Qdrant connection
+	qdrant_connected = await qdrant_service.connect()
+	if not qdrant_connected:
+		logger.warning("Failed to connect to Qdrant - vector search will not work")
+	else:
+		# Show collection info
+		collection_info = await qdrant_service.get_collection_info()
+		logger.info(f"Qdrant collection info: {collection_info}")
 	# TODO: Load embedding model
 	# TODO: Verify MPMB source files exist
 

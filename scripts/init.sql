@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     }'::jsonb,
 
     -- Metadata
-    metadata JSONB DEFAULT '{}'::jsonb,
+    meta_data JSONB DEFAULT '{}'::jsonb,
 
     -- Soft delete
     deleted_at TIMESTAMP WITH TIME ZONE,
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS messages (
     stop_reason VARCHAR(50),         -- 'end_turn', 'max_tokens', 'stop_sequence', etc.
 
     -- Metadata: retrieved documents, tool calls, streaming state, etc.
-    metadata JSONB DEFAULT '{}'::jsonb,
+    meta_data JSONB DEFAULT '{}'::jsonb,
 
     -- Message sequence within session
     sequence_number INTEGER NOT NULL,
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
 
 -- GIN index for JSONB content search
 CREATE INDEX IF NOT EXISTS idx_messages_content_gin ON messages USING gin(content);
-CREATE INDEX IF NOT EXISTS idx_messages_metadata_gin ON messages USING gin(metadata);
+CREATE INDEX IF NOT EXISTS idx_messages_metadata_gin ON messages USING gin(meta_data);
 
 -- Files Table (for uploaded files)
 CREATE TABLE IF NOT EXISTS files (
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS files (
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
     -- Metadata
-    metadata JSONB DEFAULT '{}'::jsonb,
+    meta_data JSONB DEFAULT '{}'::jsonb,
 
     CONSTRAINT files_size_positive CHECK (file_size > 0)
 );
@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     qdrant_id VARCHAR(255) UNIQUE,
 
     -- Metadata
-    metadata JSONB DEFAULT '{}'::jsonb,
+    meta_data JSONB DEFAULT '{}'::jsonb,
 
     -- Timestamps
     indexed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
