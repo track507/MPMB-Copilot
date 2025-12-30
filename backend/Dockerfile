@@ -17,6 +17,7 @@ RUN uv sync --frozen --no-dev
 FROM python:${PYTHON_VERSION}-slim-bookworm
 
 # Install PostgreSQL client libraries
+# curl is needed for healthcheck (mainly for Qdrant)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libpq5 \
