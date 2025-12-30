@@ -1,3 +1,15 @@
+# Data Directory - Exclude all generated/downloaded content
+data/mpmb_source/
+data/chunked_output/
+data/adobe_docs/
+data/index_cache/
+data/uploads/
+
+# But keep the directory structure
+!data/
+!data/.gitkeep
+!data/README.md
+
 # * Visual Studio .gitignore
 
 ## Ignore Visual Studio temporary files, build results, and
