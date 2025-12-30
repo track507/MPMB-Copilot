@@ -8,7 +8,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 
 # Install dependencies
 RUN uv sync --frozen --no-dev
@@ -38,8 +38,11 @@ WORKDIR /app
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Copy application code
-COPY . .
+# Copy application code (from backend/ subdirectory)
+COPY backend/ .
+
+# Copy data directory with chunked output (from project root)
+COPY data/ /app/data/
 
 EXPOSE 8000
 

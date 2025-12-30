@@ -48,15 +48,14 @@ services:
     # Python FastAPI Backend (Updated to 3.13)
     backend:
         build:
-            context: ./backend
-            dockerfile: Dockerfile
+            context: .
+            dockerfile: ./backend/Dockerfile
             args:
                 PYTHON_VERSION: "3.13"
         container_name: mpmb-backend
         ports:
             - "8000:8000"
         volumes:
-            - ./data:/app/data
             - backend_logs:/app/logs
         environment:
             # Application
