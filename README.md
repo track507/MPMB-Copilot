@@ -357,16 +357,16 @@ python scripts/chunk_mpmb.py
 
 - [x] Qdrant container setup
 - [x] Connection testing
-- [ ] **Data mounting (BLOCKED)**
-- [ ] **Full indexing pipeline**
+- [x] **Data mounting (FIXED)**
+- [x] **Full indexing pipeline**
 
 ### Phase 3: Data Indexing ⏳ NEXT
 
-- [ ] Clone MPMB repository
-- [ ] Run chunking script
-- [ ] Generate embeddings
-- [ ] Upload to Qdrant
-- [ ] Verify index quality
+- [x] Clone MPMB repository
+- [x] Run chunking script
+- [x] Generate embeddings
+- [x] Upload to Qdrant
+- [x] Verify index quality
 
 ### Phase 4: RAG Engine ⏳ WAITING
 

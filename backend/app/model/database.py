@@ -11,7 +11,7 @@ Models:
     DocumentChunk: Indexed code chunks for RAG retrieval
     MessageRetrieval: Junction table tracking which chunks informed each message
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 from uuid_utils import uuid7
@@ -71,8 +71,8 @@ class Session(Base):
 
 	id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
 	title: str = Column(String(255), nullable=False, default="New Conversation")
-	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-	updated_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+	updated_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 	user_id: Optional[str] = Column(String(255), nullable=True)
 	settings: dict = Column(JSONB, nullable=False, server_default='{}')
 	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
@@ -136,7 +136,7 @@ class Message(Base):
 	session_id: UUID = Column(PGUUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
 	role: str = Column(String(20), nullable=False)  # 'user', 'assistant', 'system'
 	content: dict = Column(JSONB, nullable=False)
-	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 	# LLM tracking
 	provider: Optional[str] = Column(String(50), nullable=True)
@@ -200,7 +200,7 @@ class File(Base):
 	content_type: str = Column(String(100), nullable=False)
 	file_size: int = Column(Integer, nullable=False)
 	file_hash: Optional[str] = Column(String(64), nullable=True)
-	uploaded_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+	uploaded_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
 
 	# Relationships
@@ -248,7 +248,7 @@ class DocumentChunk(Base):
 	content: str = Column(Text, nullable=False)
 	qdrant_id: Optional[str] = Column(String(255), unique=True, nullable=True)
 	meta_data: dict = Column(JSONB, nullable=False, server_default='{}')
-	indexed_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+	indexed_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 	# Relationships
 	message_retrievals = relationship("MessageRetrieval", back_populates="document_chunk", cascade="all, delete-orphan")
@@ -291,7 +291,7 @@ class MessageRetrieval(Base):
 	rank: int = Column(Integer, nullable=False)
 	score: float = Column(Float, nullable=False)
 	snippet: Optional[str] = Column(Text, nullable=True)
-	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+	created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 	# Relationships
 	message = relationship("Message", back_populates="retrievals")

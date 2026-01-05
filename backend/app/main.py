@@ -6,9 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
-from app.api import health, chat, index
+from app.api import health, chat, index, tasks
 from app.services.qdrant import qdrant_service
-
 
 # Configure logging
 logging.basicConfig(
@@ -82,6 +81,7 @@ async def global_exception_handler(request, exc: Exception):
 app.include_router(health.router, prefix=settings.api_prefix, tags=["Health"])
 app.include_router(chat.router, prefix=settings.api_prefix, tags=["Chat"])
 app.include_router(index.router, prefix=settings.api_prefix, tags=["Indexing"])
+app.include_router(tasks.router, prefix=settings.api_prefix, tags=["Tasks"])
 
 # Root endpoint
 @app.get("/")

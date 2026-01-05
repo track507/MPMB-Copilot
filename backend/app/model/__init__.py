@@ -34,6 +34,12 @@ from app.model.database import (
 	MessageRetrieval,
 )
 
+# Task Models
+from app.model.task import (
+	TaskListResponse,
+	TaskStatusResponse,
+)
+
 __all__ = [
 	# Health models
 	"HealthResponse",
@@ -66,4 +72,7 @@ __all__ = [
 	"File",
 	"DocumentChunk",
 	"MessageRetrieval",
+	# Task models
+	"TaskListResponse",
+	"TaskStatusResponse",
 ]

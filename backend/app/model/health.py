@@ -76,7 +76,7 @@ class HealthResponse(BaseModel):
 		...     status="healthy",
 		...     environment="production",
 		...     version="1.0.0",
-		...     timestamp=datetime.utcnow(),
+		...     timestamp=datetime.now(timezone.utc),
 		...     services={
 		...         "database": {"status": "healthy", "message": "PostgreSQL 15.3"},
 		...         "vector_db": {"status": "healthy", "message": "Qdrant 1.7.0"},
@@ -89,7 +89,7 @@ class HealthResponse(BaseModel):
 		...     status="degraded",
 		...     environment="production",
 		...     version="1.0.0",
-		...     timestamp=datetime.utcnow(),
+		...     timestamp=datetime.now(timezone.utc),
 		...     services={
 		...         "database": {"status": "healthy"},
 		...         "vector_db": {"status": "degraded", "message": "High latency: 850ms"},
