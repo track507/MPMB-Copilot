@@ -11,7 +11,7 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
 
 # Install dependencies
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-cache
 
 # Final stage - minimal runtime
 FROM python:${PYTHON_VERSION}-slim-bookworm
@@ -22,7 +22,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libpq5 \
         curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
@@ -31,18 +32,20 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    TRANSFORMERS_OFFLINE=0 \
+    HF_HOME=/tmp/huggingface
 
 WORKDIR /app
 
 # Create logs directory
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/logs /app/data
 
 # Copy application code (from backend/ subdirectory)
-COPY backend/ .
+COPY backend/app /app/app
 
 # Copy data directory with chunked output (from project root)
-COPY data/ /app/data/
+COPY data/chunked_output /app/data/chunked_output
 
 EXPOSE 8000
 

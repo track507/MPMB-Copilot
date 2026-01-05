@@ -58,10 +58,7 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-	"/app",
-	"/tests",
-]
+include = ["/app", "/tests"]
 
 [tool.black]
 line-length = 120
@@ -88,11 +85,11 @@ pythonpath = ["."]
 
 [dependency-groups]
 dev = [
-    "black>=25.12.0",
-    "httpx-ws>=0.8.2",
-    "mypy>=1.19.1",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.14.10",
+	"black>=25.12.0",
+	"httpx-ws>=0.8.2",
+	"mypy>=1.19.1",
+	"pytest>=9.0.2",
+	"pytest-asyncio>=1.3.0",
+	"pytest-cov>=7.0.0",
+	"ruff>=0.14.10",
 ]

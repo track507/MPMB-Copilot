@@ -1,0 +1,97 @@
+# ==============================================================================
+# .dockerignore for MPMB-Copilot Backend Build
+# Build context: Project root (.)
+# ==============================================================================
+
+# Python virtual environments - CRITICAL TO EXCLUDE
+backend/.venv
+backend/.venv/
+backend/venv
+backend/venv/
+.venv/
+venv/
+
+# Python bytecode and cache
+**/__pycache__
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.pytest_cache/
+**/.mypy_cache
+**/.mypy_cache/
+**/.ruff_cache
+**/.ruff_cache/
+
+# Testing and coverage
+backend/.coverage
+backend/htmlcov
+backend/htmlcov/
+backend/tests
+backend/tests/
+**/htmlcov/
+**/.coverage
+**/.tox/
+
+# Development files that don't need to be in image
+backend/.python-version
+backend/README.md
+**/*.md
+!data/README.md
+
+# IDE and editor files
+.vscode/
+.idea/
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+**/*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+**/.git/
+
+# Environment files
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Docker files (don't need these inside the image)
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+**/.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+**/.DS_Store
+**/Thumbs.db
+
+# Data directories that are large or generated at runtime
+data/mpmb_source
+data/mpmb_source/
+data/adobe_docs
+data/adobe_docs/
+data/index_cache
+data/index_cache/
+data/uploads
+data/uploads/
+
+# Scripts directory (except what's needed for postgres init)
+scripts/chunk_mpmb.py
+scripts/*.ps1
+
+# Build artifacts
+**/dist/
+**/build/
+**/*.egg-info/
+
+# Logs (keep directory structure, exclude log files)
+**/logs/*.log
+**/logs/*.txt
