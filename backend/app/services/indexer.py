@@ -22,12 +22,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from app.config import settings
+from app.config import config
 from app.services.embeddings import embedding_service
 
 logger = logging.getLogger(__name__)
 
-# Batch size for embedding generation + upsert
+# * Batch size for embedding generation + upsert
 EMBED_BATCH_SIZE = 128
 
 
@@ -143,7 +143,7 @@ class IndexingService:
 
         BLOCKING - run via TaskManager for async execution.
 
-        Reads all .json files from settings.chunked_output_path and
+        Reads all .json files from config.chunked_output_path and
         indexes them in sequence.
 
         Args:
@@ -152,7 +152,7 @@ class IndexingService:
         Returns:
                 Dict with total stats and per-file details.
         """
-        output_dir = settings.chunked_output_path
+        output_dir = config.chunked_output_path
 
         if not output_dir.exists():
             raise FileNotFoundError(
@@ -202,5 +202,5 @@ class IndexingService:
         }
 
 
-# Global instance
+# * Global instance
 indexing_service = IndexingService()

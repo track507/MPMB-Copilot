@@ -1,7 +1,7 @@
 """Configuration management using pydantic-settings
 
 Single source of truth for all application configuration.
-Import `settings` from this module anywhere in the app.
+Import `config` from this module anywhere in the app.
 """
 
 from pathlib import Path
@@ -11,7 +11,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Config(BaseSettings):
     """Application settings loaded from environment variables"""
 
     model_config = SettingsConfigDict(
@@ -204,5 +204,5 @@ class Settings(BaseSettings):
         return None
 
 
-# Global settings instance
-settings = Settings()
+# Global config instance
+config = Config()

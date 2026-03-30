@@ -9,7 +9,7 @@ os.environ["ENVIRONMENT"] = "testing"
 os.environ["LOG_LEVEL"] = "WARNING"
 
 from app.main import app
-from app.config import settings
+from app.config import config
 
 
 @pytest.fixture
@@ -20,9 +20,9 @@ def client():
 
 
 @pytest.fixture
-def test_settings():
-    """Settings fixture for tests"""
-    return settings
+def test_config():
+    """config fixture for tests"""
+    return config
 
 
 @pytest.fixture

@@ -4,7 +4,7 @@ MPMB Source Code Chunker - CLI Entrypoint
 Run from project root:
     python scripts/chunk_mpmb.py
 
-All configuration comes from .env via app.config.settings.
+All configuration comes from .env via app.config.config.
 Override with environment variables:
     MPMB_SOURCE_DIR=./my/mpmb python scripts/chunk_mpmb.py
 """
@@ -20,15 +20,15 @@ sys.path.insert(0, str(backend_dir))
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    from app.config import settings
+    from app.config import config
     from app.core.chunker import MPMBChunker
 
     print("=" * 70)
     print("MPMB SOURCE CODE CHUNKER")
     print("=" * 70)
 
-    source_configs = settings.source_configs
-    output_dir = settings.chunked_output_path
+    source_configs = config.source_configs
+    output_dir = config.chunked_output_path
 
     print(f"\nOutput: {output_dir}")
     print(f"Sources ({len(source_configs)}):")
@@ -37,12 +37,12 @@ def main() -> int:
 
     if not source_configs:
         print("\nNo source directories found. Clone the repos first:")
-        print(f"  git clone {settings.mpmb_repo_url} {settings.mpmb_source_dir}")
+        print(f"  git clone {config.mpmb_repo_url} {config.mpmb_source_dir}")
         print(
-            f"  git clone --branch {settings.mpmb_repo_branch_2024} "
-            f"{settings.mpmb_repo_url} {settings.mpmb_source_2024_dir}"
+            f"  git clone --branch {config.mpmb_repo_branch_2024} "
+            f"{config.mpmb_repo_url} {config.mpmb_source_2024_dir}"
         )
-        print(f"  git clone {settings.imports_repo_url} {settings.imports_source_dir}")
+        print(f"  git clone {config.imports_repo_url} {config.imports_source_dir}")
         return 1
 
     chunker = MPMBChunker()

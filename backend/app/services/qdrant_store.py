@@ -37,7 +37,7 @@ from qdrant_client.models import (
     VectorParams,
 )
 
-from app.config import settings
+from app.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ class QdrantStore:
 
     def __init__(self):
         self.client: Optional[QdrantClient] = None
-        self.collection_name = settings.qdrant_collection
-        self.dense_dim = settings.embedding_dimension
+        self.collection_name = config.qdrant_collection
+        self.dense_dim = config.embedding_dimension
         self._sparse_model = None  # Lazy-loaded BM25 model
         self._connected = False
         self._warned_missing_source_tier = False
@@ -136,21 +136,21 @@ class QdrantStore:
 
         return "community_example"
 
-    # Connection and collection management
+    # * Connection and collection management
 
     async def connect(self) -> bool:
         """Initialize client, ensure collection and payload indexes exist."""
         try:
             self.client = QdrantClient(
-                host=settings.qdrant_host,
-                port=settings.qdrant_port,
-                timeout=settings.qdrant_timeout,
+                host=config.qdrant_host,
+                port=config.qdrant_port,
+                timeout=config.qdrant_timeout,
             )
 
             # Verify connection
             collections = self.client.get_collections()
             logger.info(
-                f"Connected to Qdrant at {settings.qdrant_host}:{settings.qdrant_port}. "
+                f"Connected to Qdrant at {config.qdrant_host}:{config.qdrant_port}. "
                 f"Collections: {[c.name for c in collections.collections]}"
             )
 
@@ -217,7 +217,7 @@ class QdrantStore:
             f"+ {len(FULLTEXT_PAYLOAD_FIELDS)} text fields"
         )
 
-    # Upsert
+    # * Upsert
 
     async def upsert_chunks(
         self,
@@ -293,7 +293,7 @@ class QdrantStore:
         logger.info(f"Upserted {total_upserted} points to '{self.collection_name}'")
         return total_upserted
 
-    # Search
+    # * Search
 
     def _build_qdrant_filter(self, filters: Optional[dict]) -> Optional[Filter]:
         """Convert a simple filter dict into a Qdrant Filter object.
@@ -439,7 +439,7 @@ class QdrantStore:
 
         return self._format_results(results.points)
 
-    # Collection management
+    # * Collection management
 
     async def delete_collection(self) -> bool:
         """Delete and recreate the collection (loses all data)."""

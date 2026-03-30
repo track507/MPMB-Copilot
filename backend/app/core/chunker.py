@@ -1,7 +1,7 @@
 """MPMB source code chunking for RAG indexing.
 
 Extracts semantic chunks from MPMB JavaScript files across multiple
-repositories and editions. All file paths come from app.config.settings.
+repositories and editions. All file paths come from app.config.config.
 
 Every chunk gets three classification fields that drive retrieval:
         - edition:      "2014" | "2024" | "unknown"
@@ -35,7 +35,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.config import settings
+from app.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -717,14 +717,14 @@ class MPMBChunker:
         """Run the full chunking pipeline.
 
         Args:
-                source_configs: Defaults to settings.source_configs.
-                output_dir: Defaults to settings.chunked_output_path.
+                source_configs: Defaults to config.source_configs.
+                output_dir: Defaults to config.chunked_output_path.
 
         Returns:
                 Dict with stats and list of output filenames.
         """
-        source_configs = source_configs or settings.source_configs
-        output_dir = output_dir or settings.chunked_output_path
+        source_configs = source_configs or config.source_configs
+        output_dir = output_dir or config.chunked_output_path
         output_files: List[str] = []
 
         if not source_configs:
@@ -732,48 +732,48 @@ class MPMBChunker:
             return {"error": "no_sources", "stats": self.stats}
 
         # 1. Syntax Templates
-        for config in source_configs:
-            if config["repo"] != "mpmb":
+        for source_config in source_configs:
+            if source_config["repo"] != "mpmb":
                 continue
-            syntax_dir = config["path"] / "additional content syntax"
+            syntax_dir = source_config["path"] / "additional content syntax"
             if syntax_dir.exists():
-                logger.info(f"Chunking syntax templates: {config['description']}")
-                chunks = self.chunk_directory(syntax_dir, config, pattern="*.js")
+                logger.info(f"Chunking syntax templates: {source_config['description']}")
+                chunks = self.chunk_directory(syntax_dir, source_config, pattern="*.js")
                 if chunks:
-                    fname = f"syntax_templates_{config['edition']}.json"
+                    fname = f"syntax_templates_{source_config['edition']}.json"
                     self.save_chunks(chunks, output_dir, fname)
                     output_files.append(fname)
 
         # 2. Engine Functions
-        for config in source_configs:
-            if config["repo"] != "mpmb":
+        for source_config in source_configs:
+            if source_config["repo"] != "mpmb":
                 continue
-            func_dir = config["path"] / "_functions"
+            func_dir = source_config["path"] / "_functions"
             if func_dir.exists():
-                logger.info(f"Chunking engine functions: {config['description']}")
-                chunks = self.chunk_directory(func_dir, config, pattern="*.js")
+                logger.info(f"Chunking engine functions: {source_config['description']}")
+                chunks = self.chunk_directory(func_dir, source_config, pattern="*.js")
                 if chunks:
-                    fname = f"engine_functions_{config['edition']}.json"
+                    fname = f"engine_functions_{source_config['edition']}.json"
                     self.save_chunks(chunks, output_dir, fname)
                     output_files.append(fname)
 
         # 3. Built-in Variables (master only)
-        for config in source_configs:
-            if config["key"] != "mpmb_master":
+        for source_config in source_configs:
+            if source_config["key"] != "mpmb_master":
                 continue
-            vars_dir = config["path"] / "_variables"
+            vars_dir = source_config["path"] / "_variables"
             if vars_dir.exists():
                 logger.info("Chunking built-in variables")
-                chunks = self.chunk_directory(vars_dir, config, pattern="*.js")
+                chunks = self.chunk_directory(vars_dir, source_config, pattern="*.js")
                 if chunks:
                     self.save_chunks(chunks, output_dir, "builtin_variables.json")
                     output_files.append("builtin_variables.json")
 
         # 4. Imports Content
-        for config in source_configs:
-            if config["repo"] != "imports":
+        for source_config in source_configs:
+            if source_config["repo"] != "imports":
                 continue
-            imports_path = config["path"]
+            imports_path = source_config["path"]
 
             for subfolder, edition_tag, out_name in [
                 ("WotC material", "2014", "imports_2014.json"),
@@ -783,34 +783,34 @@ class MPMBChunker:
                 sub = imports_path / subfolder
                 if sub.exists():
                     logger.info(f"Chunking imports: {subfolder}")
-                    chunks = self.chunk_directory(sub, {**config, "edition": edition_tag}, pattern="*.js")
+                    chunks = self.chunk_directory(sub, {**source_config, "edition": edition_tag}, pattern="*.js")
                     if chunks:
                         self.save_chunks(chunks, output_dir, out_name)
                         output_files.append(out_name)
 
         # 5. Additional Content Examples (master)
-        for config in source_configs:
-            if config["key"] != "mpmb_master":
+        for source_config in source_configs:
+            if source_config["key"] != "mpmb_master":
                 continue
-            content_dir = config["path"] / "additional content"
+            content_dir = source_config["path"] / "additional content"
             if content_dir.exists():
                 logger.info("Chunking additional content examples")
                 all_content: List[CodeChunk] = []
                 for subdir in sorted(content_dir.iterdir()):
                     if subdir.is_dir() and subdir.name != "syntax":
-                        all_content.extend(self.chunk_directory(subdir, config, pattern="*.js"))
+                        all_content.extend(self.chunk_directory(subdir, source_config, pattern="*.js"))
                 if all_content:
                     self.save_chunks(all_content, output_dir, "additional_content_examples.json")
                     output_files.append("additional_content_examples.json")
 
         # 6. User-provided sources
-        for config in source_configs:
-            if config["repo"] != "user":
+        for source_config in source_configs:
+            if source_config["repo"] != "user":
                 continue
-            logger.info(f"Chunking user source: {config['path']}")
-            chunks = self.chunk_directory(config["path"], config, pattern="**/*.js")
+            logger.info(f"Chunking user source: {source_config['path']}")
+            chunks = self.chunk_directory(source_config["path"], source_config, pattern="**/*.js")
             if chunks:
-                fname = f"user_{config['key']}.json"
+                fname = f"user_{source_config['key']}.json"
                 self.save_chunks(chunks, output_dir, fname)
                 output_files.append(fname)
 

@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
-from app.config import settings
+from app.config import config
 from app.model import ChatRequest, ChatResponse, ChatStreamChunk
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ async def generate_rag_response(request: ChatRequest) -> str:
     # Placeholder response
     return (
         f"RAG response placeholder for: {request.message}\n\n"
-        f"Provider: {request.provider or settings.default_llm_provider}\n"
-        f"Model: {request.model or settings.default_model}\n\n"
+        f"Provider: {request.provider or config.default_llm_provider}\n"
+        f"Model: {request.model or config.default_model}\n\n"
         "This will be replaced with actual RAG implementation in Phase 4."
     )
 
@@ -109,9 +109,9 @@ async def chat(request: ChatRequest):
             conversation_id=conversation_id,
             sources=sources,
             metadata={
-                "provider": request.provider or settings.default_llm_provider,
-                "model": request.model or settings.default_model,
-                "temperature": request.temperature or settings.temperature,
+                "provider": request.provider or config.default_llm_provider,
+                "model": request.model or config.default_model,
+                "temperature": request.temperature or config.temperature,
             },
         )
 

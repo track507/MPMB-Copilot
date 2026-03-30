@@ -1,16 +1,16 @@
-"""Embedding generation using sentence-transformers"""
+"""Embedding generation using sentence-transformers."""
 
 import logging
 from typing import Optional
 
-from app.config import settings
+from app.config import config
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
-    Service for generating text embeddings using sentence-transformers
+    Service for generating text embeddings using sentence-transformers.
     """
 
     def __init__(self, model_name: Optional[str] = None):
@@ -22,9 +22,9 @@ class EmbeddingService:
         - Cache model in memory
         - Support batching for efficiency
         """
-        self.model_name = model_name or settings.embedding_model
+        self.model_name = model_name or config.embedding_model
         self.model = None  # TODO: Load model
-        self.dimension = settings.embedding_dimension
+        self.dimension = config.embedding_dimension
         logger.info(f"Embedding service initialized: {self.model_name}")
 
     async def embed_text(self, text: str) -> list[float]:

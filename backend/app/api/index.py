@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.config import settings
+from app.config import config
 from app.model.index import IndexRequest, IndexResponse, IndexStatus
 from app.services.indexer import indexing_service
 from app.services.task_manager import task_manager
@@ -42,7 +42,7 @@ async def get_index_status():
         store = await _get_ready_store()
         if store is None:
             return IndexStatus(
-                collection_name=settings.qdrant_collection,
+                collection_name=config.qdrant_collection,
                 total_vectors=0,
                 indexed_files=0,
                 last_updated=None,
@@ -53,7 +53,7 @@ async def get_index_status():
 
         if "error" in collection_info:
             return IndexStatus(
-                collection_name=settings.qdrant_collection,
+                collection_name=config.qdrant_collection,
                 total_vectors=0,
                 indexed_files=0,
                 last_updated=None,
@@ -64,7 +64,7 @@ async def get_index_status():
         index_status = "ready" if points_count > 0 else "empty"
 
         return IndexStatus(
-            collection_name=settings.qdrant_collection,
+            collection_name=config.qdrant_collection,
             total_vectors=points_count,
             indexed_files=0,  # TODO: track in database
             last_updated=None,  # TODO: track in database
@@ -175,7 +175,7 @@ async def clear_index():
                 detail="Failed to clear vector collection",
             )
 
-        logger.info(f"Collection '{settings.qdrant_collection}' cleared")
+        logger.info(f"Collection '{config.qdrant_collection}' cleared")
 
         return {
             "status": "success",

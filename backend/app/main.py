@@ -9,12 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api import chat, health, index, tasks
-from app.config import settings
+from app.config import config
 from app.services import get_vector_store, task_manager
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, settings.log_level),
+    level=getattr(logging, config.log_level),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events"""
     # Startup
-    logger.info(f"Starting {settings.app_name} v{app.version}")
-    logger.info(f"Environment: {settings.environment}")
-    logger.info(f"LLM Provider: {settings.default_llm_provider}")
-    logger.info(f"Default Model: {settings.default_model}")
-    logger.info(f"Vector Store: {settings.vector_store}")
-    logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
+    logger.info(f"Starting {config.app_name} v{app.version}")
+    logger.info(f"Environment: {config.environment}")
+    logger.info(f"LLM Provider: {config.default_llm_provider}")
+    logger.info(f"Default Model: {config.default_model}")
+    logger.info(f"Vector Store: {config.vector_store}")
+    logger.info(f"Qdrant: {config.qdrant_host}:{config.qdrant_port}")
 
     store = get_vector_store()
     store_connected = await store.connect()
@@ -46,25 +46,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
-    logger.info(f"Shutting down {settings.app_name}")
+    logger.info(f"Shutting down {config.app_name}")
     await task_manager.shutdown()
 
 
 # Create FastAPI application
 app = FastAPI(
-    title=settings.app_name,
+    title=config.app_name,
     description="RAG-powered assistant for MPMB character sheet development using Adobe Acrobat JavaScript (ES5)",
     version="0.1.0",
     lifespan=lifespan,
-    docs_url=f"{settings.api_prefix}/docs",
-    redoc_url=f"{settings.api_prefix}/redoc",
-    openapi_url=f"{settings.api_prefix}/openapi.json",
+    docs_url=f"{config.api_prefix}/docs",
+    redoc_url=f"{config.api_prefix}/redoc",
+    openapi_url=f"{config.api_prefix}/openapi.json",
 )
 
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=config.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,17 +80,17 @@ async def global_exception_handler(request, exc: Exception):
         status_code=500,
         content={
             "error": "Internal server error",
-            "message": str(exc) if settings.is_development else "An unexpected error occurred",
+            "message": str(exc) if config.is_development else "An unexpected error occurred",
             "type": type(exc).__name__,
         },
     )
 
 
 # Include API routers
-app.include_router(health.router, prefix=settings.api_prefix, tags=["Health"])
-app.include_router(chat.router, prefix=settings.api_prefix, tags=["Chat"])
-app.include_router(index.router, prefix=settings.api_prefix, tags=["Indexing"])
-app.include_router(tasks.router, prefix=settings.api_prefix, tags=["Tasks"])
+app.include_router(health.router, prefix=config.api_prefix, tags=["Health"])
+app.include_router(chat.router, prefix=config.api_prefix, tags=["Chat"])
+app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"])
+app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"])
 
 
 # Root endpoint
@@ -98,11 +98,11 @@ app.include_router(tasks.router, prefix=settings.api_prefix, tags=["Tasks"])
 async def root():
     """Root endpoint - redirect to docs"""
     return {
-        "name": settings.app_name,
+        "name": config.app_name,
         "version": "0.1.0",
         "status": "running",
-        "docs": f"{settings.api_prefix}/docs",
-        "health": f"{settings.api_prefix}/health",
+        "docs": f"{config.api_prefix}/docs",
+        "health": f"{config.api_prefix}/health",
     }
 
 
@@ -113,6 +113,6 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=settings.is_development,
-        log_level=settings.log_level.lower(),
+        reload=config.is_development,
+        log_level=config.log_level.lower(),
     )

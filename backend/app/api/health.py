@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, status
 
-from app.config import settings
+from app.config import config
 from app.model.health import HealthResponse, ServiceStatus
 from app.services.vector_store import get_vector_store
 
@@ -26,7 +26,7 @@ async def check_qdrant() -> ServiceStatus:
 
         vectors_count = collection_info.get("points_count", 0)
         return ServiceStatus(
-            status="healthy", message=f"{settings.qdrant_host}:{settings.qdrant_port} ({vectors_count} vectors)"
+            status="healthy", message=f"{config.qdrant_host}:{config.qdrant_port} ({vectors_count} vectors)"
         )
     except Exception as e:
         logger.error(f"Qdrant health check failed: {e}")
@@ -36,18 +36,18 @@ async def check_qdrant() -> ServiceStatus:
 async def check_llm_provider() -> ServiceStatus:
     """Check LLM provider configuration"""
     try:
-        api_key = settings.get_llm_api_key()
-        if settings.default_llm_provider == "ollama":
-            return ServiceStatus(status="configured", message=f"Ollama at {settings.ollama_host}")
+        api_key = config.get_llm_api_key()
+        if config.default_llm_provider == "ollama":
+            return ServiceStatus(status="configured", message=f"Ollama at {config.ollama_host}")
         elif api_key:
             return ServiceStatus(
                 status="configured",
-                message=f"{settings.default_llm_provider} - {settings.default_model}",
+                message=f"{config.default_llm_provider} - {config.default_model}",
             )
         else:
             return ServiceStatus(
                 status="not_configured",
-                message=f"Missing API key for {settings.default_llm_provider}",
+                message=f"Missing API key for {config.default_llm_provider}",
             )
     except Exception as e:
         logger.error(f"LLM provider check failed: {e}")
@@ -60,7 +60,7 @@ async def check_embedding_model() -> ServiceStatus:
         # TODO: Actually load and test the model
         return ServiceStatus(
             status="ready",
-            message=f"{settings.embedding_provider}/{settings.embedding_model}",
+            message=f"{config.embedding_provider}/{config.embedding_model}",
         )
     except Exception as e:
         logger.error(f"Embedding model check failed: {e}")
@@ -90,7 +90,7 @@ async def health_check():
 
     return HealthResponse(
         status=overall_status,
-        environment=settings.environment,
+        environment=config.environment,
         version="0.1.0",
         timestamp=datetime.now(timezone.utc),
         services={

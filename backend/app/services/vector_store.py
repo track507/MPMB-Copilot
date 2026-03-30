@@ -19,7 +19,7 @@ Usage:
 import logging
 from typing import Optional, Protocol, runtime_checkable
 
-from app.config import settings
+from app.config import config
 
 logger = logging.getLogger(__name__)
 _store_instance: Optional["VectorStore"] = None
@@ -122,14 +122,14 @@ class VectorStore(Protocol):
 def get_vector_store() -> VectorStore:
     """Factory: return the configured vector store implementation.
 
-    Reads VECTOR_STORE from settings and returns a cached singleton.
+    Reads VECTOR_STORE from config and returns a cached singleton.
     """
     global _store_instance
 
     if _store_instance is not None:
         return _store_instance
 
-    store_type = getattr(settings, "vector_store", "qdrant")
+    store_type = getattr(config, "vector_store", "qdrant")
 
     if store_type == "qdrant":
         from app.services.qdrant_store import QdrantStore
