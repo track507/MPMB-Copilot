@@ -6,8 +6,7 @@
     This script is intentionally small in scope. It only:
     1. Resolves source paths from environment variables or `.env`
     2. Clones or updates the required repositories
-    3. Downloads the official Acrobat JavaScript reference docs
-    4. Starts `scripts/chunk_mpmb.py`
+    3. Starts `scripts/chunk_mpmb.py`
 
     It does not build Docker, start services, or trigger indexing.
 
@@ -16,7 +15,6 @@
       MPMB_SOURCE_DIR
       MPMB_SOURCE_2024_DIR
       IMPORTS_SOURCE_DIR
-      ADOBE_DOCS_DIR
       CHUNKED_OUTPUT_DIR
 #>
 
@@ -263,64 +261,6 @@ function Enable-GitSafeDirectory {
 	}
 }
 
-function Sync-WebDocument {
-	param(
-		[string]$Name,
-		[string]$Url,
-		[string]$TargetPath
-	)
-
-	$parent = Split-Path -Parent $TargetPath
-	Ensure-Directory -Path $parent
-
-	Write-Log "Downloading $Name..." -Level INFO
-	if ($script:PSCmdlet.ShouldProcess($TargetPath, "Download $Name from $Url")) {
-		try {
-			Invoke-WebRequest -Uri $Url -OutFile $TargetPath
-			Write-Log "$Name saved to $TargetPath" -Level SUCCESS
-		}
-		catch {
-			Write-Log "Failed to download $Name" -Level WARNING
-			Write-Log $_.Exception.Message -Level WARNING
-		}
-	}
-}
-
-function Sync-AdobeDocs {
-	param([string]$AdobeDocsDirectory)
-
-	$docs = @(
-		@{
-			Name = "Acrobat SDK index"
-			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/index.html"
-			FileName = "acrobat_sdk_index.html"
-		},
-		@{
-			Name = "Acrobat JavaScript Developer Guide"
-			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/jsdevguide/index.html"
-			FileName = "acrobat_javascript_developer_guide.html"
-		},
-		@{
-			Name = "Acrobat JavaScript API Reference"
-			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/jsapiref/index.html"
-			FileName = "acrobat_javascript_api_reference.html"
-		},
-		@{
-			Name = "PDF 1.7 Reference"
-			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf"
-			FileName = "PDF32000_2008.pdf"
-		}
-	)
-
-	Ensure-Directory -Path $AdobeDocsDirectory
-
-	Write-Log "Syncing official Acrobat JavaScript docs..." -Level INFO
-	foreach ($doc in $docs) {
-		$targetPath = Join-Path $AdobeDocsDirectory $doc.FileName
-		Sync-WebDocument -Name $doc.Name -Url $doc.Url -TargetPath $targetPath
-	}
-}
-
 function Sync-GitRepository {
 	param(
 		[string]$Name,
@@ -491,7 +431,6 @@ $dataDir = Resolve-ProjectPath (Get-SettingValue -Name "DATA_DIR" -Default "./da
 $mpmbSourceDir = Resolve-ProjectPath (Get-SettingValue -Name "MPMB_SOURCE_DIR" -Default "./data/mpmb_source" -DotEnvValues $dotEnvValues)
 $mpmbSource2024Dir = Resolve-ProjectPath (Get-SettingValue -Name "MPMB_SOURCE_2024_DIR" -Default "./data/mpmb_source_2024" -DotEnvValues $dotEnvValues)
 $importsSourceDir = Resolve-ProjectPath (Get-SettingValue -Name "IMPORTS_SOURCE_DIR" -Default "./data/imports_source" -DotEnvValues $dotEnvValues)
-$adobeDocsDir = Resolve-ProjectPath (Get-SettingValue -Name "ADOBE_DOCS_DIR" -Default "./data/adobe_docs" -DotEnvValues $dotEnvValues)
 $chunkedOutputDir = Resolve-ProjectPath (Get-SettingValue -Name "CHUNKED_OUTPUT_DIR" -Default "./data/chunked_output" -DotEnvValues $dotEnvValues)
 
 $mpmbRepoUrl = Get-SettingValue -Name "MPMB_REPO_URL" -Default "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git" -DotEnvValues $dotEnvValues
@@ -503,12 +442,10 @@ Write-Log "Using source paths:" -Level INFO
 Write-Host "  2014 repo:  $mpmbSourceDir" -ForegroundColor Gray
 Write-Host "  2024 repo:  $mpmbSource2024Dir" -ForegroundColor Gray
 Write-Host "  Imports:    $importsSourceDir" -ForegroundColor Gray
-Write-Host "  Adobe docs: $adobeDocsDir" -ForegroundColor Gray
 Write-Host "  Chunks:     $chunkedOutputDir" -ForegroundColor Gray
 Write-Host ""
 
 Ensure-Directory -Path $dataDir
-Ensure-Directory -Path $adobeDocsDir
 Ensure-Directory -Path $chunkedOutputDir
 
 Sync-GitRepository `
@@ -528,8 +465,6 @@ Sync-GitRepository `
 	-RepositoryUrl $importsRepoUrl `
 	-TargetDirectory $importsSourceDir `
 	-Branch ""
-
-Sync-AdobeDocs -AdobeDocsDirectory $adobeDocsDir
 
 Write-Log "Starting chunker..." -Level INFO
 if ($script:PSCmdlet.ShouldProcess($ChunkScript, "Run the MPMB chunker")) {

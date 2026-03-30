@@ -21,7 +21,20 @@
 
 ## Project Overview
 
-**MPMB-Copilot** is a RAG-powered AI assistant for developing automation code for MorePurpleMoreBetter's D&D 5e Character Record Sheet using Adobe Acrobat JavaScript (ECMAScript 5).
+**MPMB-Copilot** is a RAG-powered AI assistant for developing automation code for MorePurpleMoreBetter's D&D 5e Character Record Sheet and related scripting workflows.
+
+## License
+
+This repository is licensed under **Apache License 2.0**. See [`LICENSE`](./LICENSE).
+
+## Content and Custom Document Policy (Important)
+
+- This repository distributes code only and does **not** bundle third-party documentation corpora for RAG.
+- Users who add custom reference files are responsible for ensuring they have legal rights to upload, index, and use that content.
+- Uploaded/custom content is intended for user-provided retrieval context and is not represented as relicensed by this project.
+- See:
+  - [`docs/CUSTOM_DOCS_POLICY.md`](./docs/CUSTOM_DOCS_POLICY.md)
+  - [`docs/TERMS_OF_USE.md`](./docs/TERMS_OF_USE.md)
 
 ### Key Technologies
 
