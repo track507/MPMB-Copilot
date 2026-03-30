@@ -1,0 +1,56 @@
+{
+	"name": "mpmb-copilot",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Tooling and quality gates for the MPMB-Copilot monorepo",
+	"packageManager": "npm@11.12.1",
+	"engines": {
+		"node": ">=24.0.0"
+	},
+	"scripts": {
+		"start": "npm run dev",
+		"dev": "uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000",
+		"docker:up": "docker compose up --build",
+		"chunk": "uv --cache-dir .uv-cache run --no-sync --project backend python scripts/chunk_mpmb.py",
+		"lint": "npm run lint:js && npm run lint:py && npm run lint:md",
+		"lint:js": "eslint .",
+		"lint:js:fix": "eslint . --fix",
+		"lint:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app tests scripts",
+		"lint:py:fix": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app tests scripts --fix",
+		"lint:md": "markdownlint-cli2 \"README.md\" \"docs/**/*.md\" \"data/README.md\" \".github/**/*.md\"",
+		"format": "npm run format:js && npm run format:py",
+		"format:js": "prettier . --write",
+		"format:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format backend/app tests scripts",
+		"format:check": "npm run format:check:js && npm run format:check:py",
+		"format:check:js": "prettier . --check",
+		"format:check:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format backend/app tests scripts --check",
+		"typecheck": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev mypy backend/app",
+		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest tests",
+		"check": "npm run lint && npm run format:check && npm run test",
+		"check:full": "npm run check && npm run typecheck",
+		"prepare": "husky"
+	},
+	"lint-staged": {
+		"*.{js,mjs,cjs,json,jsonc,yml,yaml,md}": [
+			"prettier --write"
+		],
+		"*.js": [
+			"eslint --fix"
+		],
+		"*.py": [
+			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check --fix",
+			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format"
+		]
+	},
+	"devDependencies": {
+		"@commitlint/cli": "^20.5.0",
+		"@commitlint/config-conventional": "^20.5.0",
+		"@commitlint/types": "^20.5.0",
+		"@eslint/js": "^9.39.1",
+		"eslint": "^9.39.1",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.4.0",
+		"markdownlint-cli2": "^0.22.0",
+		"prettier": "^3.8.1"
+	}
+}

@@ -11,23 +11,24 @@ os.environ["LOG_LEVEL"] = "WARNING"
 from app.main import app
 from app.config import settings
 
+
 @pytest.fixture
 def client():
-	"""FastAPI test client fixture"""
-	with TestClient(app) as test_client:
-		yield test_client
+    """FastAPI test client fixture"""
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture
 def test_settings():
-	"""Settings fixture for tests"""
-	return settings
+    """Settings fixture for tests"""
+    return settings
 
 
 @pytest.fixture
 def sample_code_chunk():
-	"""Sample code chunk for testing"""
-	return """
+    """Sample code chunk for testing"""
+    return """
 var SpellsList = {
 	"magic_missile": {
 		name: "Magic Missile",
@@ -47,11 +48,11 @@ var SpellsList = {
 
 @pytest.fixture
 def sample_query():
-	"""Sample user query for testing"""
-	return "How do I add a new spell to SpellsList?"
+    """Sample user query for testing"""
+    return "How do I add a new spell to SpellsList?"
 
 
 @pytest.fixture
 def sample_embedding():
-	"""Sample embedding vector for testing"""
-	return [0.1] * 384  # All-MiniLM-L6-v2 dimension
+    """Sample embedding vector for testing"""
+    return [0.1] * 384  # All-MiniLM-L6-v2 dimension

@@ -1,682 +1,539 @@
 <#
 .SYNOPSIS
-    MPMB Copilot - Complete Development Environment Startup
+    Clone or update the MPMB source repositories, then run the chunker.
 
 .DESCRIPTION
-    Comprehensive startup script that:
-    - Validates prerequisites (Docker, Git, Python, uv)
-    - Clones/updates MPMB source repository
-    - Runs code chunking pipeline
-    - Builds and starts Docker containers
-    - Indexes chunks into Qdrant
-    - Verifies complete system health
+    This script is intentionally small in scope. It only:
+    1. Resolves source paths from environment variables or `.env`
+    2. Clones or updates the required repositories
+    3. Downloads the official Acrobat JavaScript reference docs
+    4. Starts `scripts/chunk_mpmb.py`
 
-.PARAMETER FullRebuild
-    Force complete rebuild (clean volumes, rebuild images, re-chunk, re-index)
+    It does not build Docker, start services, or trigger indexing.
 
-.PARAMETER SkipChunking
-    Skip the chunking step (use existing chunks)
-
-.PARAMETER SkipIndexing
-    Skip the Qdrant indexing step
-
-.PARAMETER SkipDocker
-    Skip Docker operations (for testing data pipeline only)
-
-.EXAMPLE
-    .\scripts\startup.ps1
-    Standard startup - updates source, chunks, and starts services
-
-.EXAMPLE
-    .\scripts\startup.ps1 -FullRebuild
-    Complete clean rebuild of everything
-
-.EXAMPLE
-    .\scripts\startup.ps1 -SkipChunking -SkipIndexing
-    Just restart Docker without touching data pipeline
+    Supported `.env` / environment variable overrides:
+      DATA_DIR
+      MPMB_SOURCE_DIR
+      MPMB_SOURCE_2024_DIR
+      IMPORTS_SOURCE_DIR
+      ADOBE_DOCS_DIR
+      CHUNKED_OUTPUT_DIR
 #>
 
-param(
-    [switch]$FullRebuild,
-    [switch]$SkipChunking,
-    [switch]$SkipIndexing,
-    [switch]$SkipDocker
-)
-
-# ============================================================================
-# Configuration
-# ============================================================================
+[CmdletBinding(SupportsShouldProcess = $true)]
+param()
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$DataDir = Join-Path $ProjectRoot "data"
-$MPMBSourceDir = Join-Path $DataDir "mpmb_source"
-$ChunkedOutputDir = Join-Path $DataDir "chunked_output"
+$EnvFile = Join-Path $ProjectRoot ".env"
 $ChunkScript = Join-Path $ProjectRoot "scripts\chunk_mpmb.py"
-$ComposeFile = Join-Path $ProjectRoot "docker-compose.yml"
 
-$MPMBRepoUrl = "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git"
-$MaxHealthCheckAttempts = 30
-$HealthCheckInterval = 2
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-# Unified logging function with colors
 function Write-Log {
-    param(
-        [string]$Message,
-        [ValidateSet('INFO','SUCCESS','WARNING','ERROR')][string]$Level = 'INFO'
-    )
-    $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    $line = "[{0}] [{1}]: {2}" -f $ts, $Level, $Message
+	param(
+		[string]$Message,
+		[ValidateSet("INFO", "SUCCESS", "WARNING", "ERROR")][string]$Level = "INFO"
+	)
 
-    switch ($Level) {
-        "ERROR" { Write-Host $line -ForegroundColor Red }
-        "SUCCESS" { Write-Host $line -ForegroundColor Green }
-        "WARNING" { Write-Host $line -ForegroundColor Yellow }
-        default { Write-Host $line }
-    }
-}
+	$timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+	$line = "[{0}] [{1}] {2}" -f $timestamp, $Level, $Message
 
-function Write-Step {
-    param($Message)
-    Write-Host "`n━━━ $Message ━━━" -ForegroundColor Magenta
-}
-
-function Write-Section {
-    param($Message)
-    Write-Host "`n╔$('═' * 70)╗" -ForegroundColor Cyan
-    Write-Host "║ $($Message.PadRight(68)) ║" -ForegroundColor Cyan
-    Write-Host "╚$('═' * 70)╝" -ForegroundColor Cyan
+	switch ($Level) {
+		"SUCCESS" { Write-Host $line -ForegroundColor Green }
+		"WARNING" { Write-Host $line -ForegroundColor Yellow }
+		"ERROR" { Write-Host $line -ForegroundColor Red }
+		default { Write-Host $line }
+	}
 }
 
 function Test-CommandExists {
-    param($Command)
-    $null -ne (Get-Command $Command -ErrorAction SilentlyContinue)
+	param([string]$Command)
+	return $null -ne (Get-Command $Command -ErrorAction SilentlyContinue)
 }
 
-function Invoke-SafeCommand {
-    param(
-        [string]$Description,
-        [scriptblock]$Command,
-        [bool]$ContinueOnError = $false
-    )
+function Get-DotEnvValues {
+	param([string]$Path)
 
-    try {
-        Write-Log $Description -Level INFO
-        & $Command
-        if ($LASTEXITCODE -ne 0 -and -not $ContinueOnError) {
-            throw "Command failed with exit code $LASTEXITCODE"
-        }
-        return $true
-    } catch {
-        Write-Log "$Description failed: $_" -Level ERROR
-        if (-not $ContinueOnError) {
-            throw
-        }
-        return $false
-    }
+	$values = @{}
+	if (-not (Test-Path -LiteralPath $Path)) {
+		return $values
+	}
+
+	foreach ($line in Get-Content -LiteralPath $Path) {
+		$trimmed = $line.Trim()
+		if (-not $trimmed -or $trimmed.StartsWith("#")) {
+			continue
+		}
+
+		$separatorIndex = $trimmed.IndexOf("=")
+		if ($separatorIndex -lt 1) {
+			continue
+		}
+
+		$key = $trimmed.Substring(0, $separatorIndex).Trim()
+		$value = $trimmed.Substring($separatorIndex + 1).Trim()
+
+		if (
+			($value.StartsWith('"') -and $value.EndsWith('"')) -or
+			($value.StartsWith("'") -and $value.EndsWith("'"))
+		) {
+			$value = $value.Substring(1, $value.Length - 2)
+		}
+
+		$values[$key] = $value
+	}
+
+	return $values
 }
 
-# ============================================================================
-# Main Script
-# ============================================================================
+function Get-SettingValue {
+	param(
+		[string]$Name,
+		[string]$Default,
+		[hashtable]$DotEnvValues
+	)
+
+	$envValue = [System.Environment]::GetEnvironmentVariable($Name)
+	if (-not [string]::IsNullOrWhiteSpace($envValue)) {
+		return $envValue
+	}
+
+	if ($DotEnvValues.ContainsKey($Name) -and -not [string]::IsNullOrWhiteSpace($DotEnvValues[$Name])) {
+		return $DotEnvValues[$Name]
+	}
+
+	return $Default
+}
+
+function Resolve-ProjectPath {
+	param([string]$PathValue)
+
+	if ([string]::IsNullOrWhiteSpace($PathValue)) {
+		return $null
+	}
+
+	if ([System.IO.Path]::IsPathRooted($PathValue)) {
+		return [System.IO.Path]::GetFullPath($PathValue)
+	}
+
+	return [System.IO.Path]::GetFullPath((Join-Path $ProjectRoot $PathValue))
+}
+
+function Normalize-GitUrl {
+	param([string]$Url)
+
+	if ([string]::IsNullOrWhiteSpace($Url)) {
+		return ""
+	}
+
+	$normalized = $Url.Trim().TrimEnd("/")
+	if ($normalized.EndsWith(".git")) {
+		$normalized = $normalized.Substring(0, $normalized.Length - 4)
+	}
+
+	return $normalized.ToLowerInvariant()
+}
+
+function Invoke-ExternalCommand {
+	param(
+		[string]$FilePath,
+		[string[]]$Arguments,
+		[string]$WorkingDirectory = $ProjectRoot
+	)
+
+	Push-Location $WorkingDirectory
+	try {
+		$previousErrorActionPreference = $ErrorActionPreference
+		$ErrorActionPreference = "Continue"
+
+		$useNativeErrorPreference = $PSVersionTable.PSVersion.Major -ge 7
+		if ($useNativeErrorPreference) {
+			$previousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
+			$PSNativeCommandUseErrorActionPreference = $false
+		}
+
+		& $FilePath @Arguments
+		if ($LASTEXITCODE -ne 0) {
+			$argumentText = if ($Arguments) { $Arguments -join " " } else { "" }
+			throw "Command failed: $FilePath $argumentText"
+		}
+	}
+	catch {
+		throw
+	}
+ finally {
+		$ErrorActionPreference = $previousErrorActionPreference
+		if ($useNativeErrorPreference) {
+			$PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+		}
+		Pop-Location
+	}
+}
+
+function Get-GitOutput {
+	param(
+		[string]$RepositoryPath,
+		[string[]]$Arguments
+	)
+
+	$previousErrorActionPreference = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	$output = & git -C $RepositoryPath @Arguments 2>&1
+	$exitCode = $LASTEXITCODE
+	$ErrorActionPreference = $previousErrorActionPreference
+
+	if ($exitCode -ne 0) {
+		return $null
+	}
+
+	$cleanOutput = @(
+		$output |
+			ForEach-Object { $_.ToString().TrimEnd() } |
+			Where-Object { $_ -and $_ -notmatch '^warning:' }
+	)
+
+	return ($cleanOutput | Out-String).Trim()
+}
+
+function Get-GitStatusLines {
+	param([string]$RepositoryPath)
+
+	$previousErrorActionPreference = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	$output = & git -C $RepositoryPath status --short 2>&1
+	$exitCode = $LASTEXITCODE
+	$ErrorActionPreference = $previousErrorActionPreference
+
+	if ($exitCode -ne 0 -or $null -eq $output) {
+		return @()
+	}
+
+	return @(
+		$output |
+			ForEach-Object { $_.ToString().TrimEnd() } |
+			Where-Object { $_ -and $_ -notmatch '^warning:' }
+	)
+}
+
+function Ensure-Directory {
+	param([string]$Path)
+
+	if (-not (Test-Path -LiteralPath $Path)) {
+		if ($script:PSCmdlet.ShouldProcess($Path, "Create directory")) {
+			New-Item -ItemType Directory -Path $Path -Force | Out-Null
+		}
+	}
+}
+
+function Normalize-PathValue {
+	param([string]$PathValue)
+
+	if ([string]::IsNullOrWhiteSpace($PathValue)) {
+		return ""
+	}
+
+	return [System.IO.Path]::GetFullPath($PathValue).TrimEnd("\", "/").Replace("\", "/").ToLowerInvariant()
+}
+
+function Enable-GitSafeDirectory {
+	param([string]$RepositoryPath)
+
+	$resolvedPath = [System.IO.Path]::GetFullPath($RepositoryPath)
+	$normalizedResolvedPath = Normalize-PathValue -PathValue $resolvedPath
+
+	$previousErrorActionPreference = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	$configuredPaths = & git config --global --get-all safe.directory 2>&1
+	$exitCode = $LASTEXITCODE
+	$ErrorActionPreference = $previousErrorActionPreference
+
+	if ($exitCode -eq 0 -and $null -ne $configuredPaths) {
+		$matchesExisting = @(
+			$configuredPaths |
+				ForEach-Object { $_.ToString().Trim() } |
+				Where-Object { (Normalize-PathValue -PathValue $_) -eq $normalizedResolvedPath }
+		)
+		if ($matchesExisting.Count -gt 0) {
+			return
+		}
+	}
+
+	Write-Log "Adding Git safe.directory for $resolvedPath" -Level INFO
+	if ($script:PSCmdlet.ShouldProcess($resolvedPath, "Add Git safe.directory entry")) {
+		Invoke-ExternalCommand -FilePath "git" -Arguments @("config", "--global", "--add", "safe.directory", $resolvedPath)
+	}
+}
+
+function Sync-WebDocument {
+	param(
+		[string]$Name,
+		[string]$Url,
+		[string]$TargetPath
+	)
+
+	$parent = Split-Path -Parent $TargetPath
+	Ensure-Directory -Path $parent
+
+	Write-Log "Downloading $Name..." -Level INFO
+	if ($script:PSCmdlet.ShouldProcess($TargetPath, "Download $Name from $Url")) {
+		try {
+			Invoke-WebRequest -Uri $Url -OutFile $TargetPath
+			Write-Log "$Name saved to $TargetPath" -Level SUCCESS
+		}
+		catch {
+			Write-Log "Failed to download $Name" -Level WARNING
+			Write-Log $_.Exception.Message -Level WARNING
+		}
+	}
+}
+
+function Sync-AdobeDocs {
+	param([string]$AdobeDocsDirectory)
+
+	$docs = @(
+		@{
+			Name = "Acrobat SDK index"
+			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/index.html"
+			FileName = "acrobat_sdk_index.html"
+		},
+		@{
+			Name = "Acrobat JavaScript Developer Guide"
+			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/jsdevguide/index.html"
+			FileName = "acrobat_javascript_developer_guide.html"
+		},
+		@{
+			Name = "Acrobat JavaScript API Reference"
+			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/library/jsapiref/index.html"
+			FileName = "acrobat_javascript_api_reference.html"
+		},
+		@{
+			Name = "PDF 1.7 Reference"
+			Url = "https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf"
+			FileName = "PDF32000_2008.pdf"
+		}
+	)
+
+	Ensure-Directory -Path $AdobeDocsDirectory
+
+	Write-Log "Syncing official Acrobat JavaScript docs..." -Level INFO
+	foreach ($doc in $docs) {
+		$targetPath = Join-Path $AdobeDocsDirectory $doc.FileName
+		Sync-WebDocument -Name $doc.Name -Url $doc.Url -TargetPath $targetPath
+	}
+}
+
+function Sync-GitRepository {
+	param(
+		[string]$Name,
+		[string]$RepositoryUrl,
+		[string]$TargetDirectory,
+		[string]$Branch
+	)
+
+	$shouldClone = $false
+
+	if (Test-Path -LiteralPath $TargetDirectory) {
+		$gitDir = Join-Path $TargetDirectory ".git"
+		if (-not (Test-Path -LiteralPath $gitDir)) {
+			$existingItems = @(Get-ChildItem -LiteralPath $TargetDirectory -Force)
+			$allowedPlaceholderNames = @(".gitkeep", ".gitignore", "README.md")
+			$nonPlaceholderItems = @(
+				$existingItems |
+					Where-Object { $allowedPlaceholderNames -notcontains $_.Name }
+			)
+
+			if ($nonPlaceholderItems.Count -gt 0) {
+				$itemList = $nonPlaceholderItems | ForEach-Object { $_.Name } | Sort-Object
+				throw "$Name target exists but is not a git repository and contains non-placeholder files: $TargetDirectory (`"$($itemList -join '", "')`")"
+			}
+
+			if ($existingItems.Count -gt 0) {
+				Write-Log "$Name target only contains placeholder files; preparing it for clone." -Level INFO
+				foreach ($item in $existingItems) {
+					if ($script:PSCmdlet.ShouldProcess($item.FullName, "Remove placeholder before cloning $Name")) {
+						Remove-Item -LiteralPath $item.FullName -Force -Recurse
+					}
+				}
+			}
+
+			$shouldClone = $true
+		}
+	}
+
+	if ((-not $shouldClone) -and (Test-Path -LiteralPath (Join-Path $TargetDirectory ".git"))) {
+		Enable-GitSafeDirectory -RepositoryPath $TargetDirectory
+
+		$skipExistingRepoUpdate = $false
+		$originUrl = Get-GitOutput -RepositoryPath $TargetDirectory -Arguments @("remote", "get-url", "origin")
+		if (-not $originUrl) {
+			if ($WhatIfPreference) {
+				Write-Log "Unable to read origin URL for $Name during -WhatIf; skipping remote validation." -Level WARNING
+				$skipExistingRepoUpdate = $true
+			}
+			else {
+				throw "Unable to read origin URL for $Name at $TargetDirectory"
+			}
+		}
+
+		if ((-not $skipExistingRepoUpdate) -and ((Normalize-GitUrl $originUrl) -ne (Normalize-GitUrl $RepositoryUrl))) {
+			throw "$Name target points at a different repository: $originUrl"
+		}
+
+		$currentBranch = Get-GitOutput -RepositoryPath $TargetDirectory -Arguments @("rev-parse", "--abbrev-ref", "HEAD")
+		$statusLines = if ($skipExistingRepoUpdate) { @() } else { Get-GitStatusLines -RepositoryPath $TargetDirectory }
+
+		if ($skipExistingRepoUpdate) {
+			Write-Log "Continuing with the existing checkout for $Name." -Level INFO
+		}
+		elseif ($statusLines.Count -gt 0) {
+			Write-Log "$Name has local changes; skipping update to avoid overwriting them." -Level WARNING
+			if ($currentBranch) {
+				Write-Host "  Branch:  $currentBranch" -ForegroundColor DarkYellow
+			}
+			if ($statusLines.Count -le 5) {
+				Write-Host "  Changes:" -ForegroundColor DarkYellow
+				foreach ($line in $statusLines) {
+					Write-Host "    $line" -ForegroundColor DarkYellow
+				}
+			}
+			else {
+				Write-Host "  Changes: $($statusLines.Count) entries" -ForegroundColor DarkYellow
+			}
+			Write-Log "Continuing with the existing checkout for $Name." -Level INFO
+		}
+		else {
+			Write-Log "Updating $Name..." -Level INFO
+			try {
+				if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Fetch latest changes for $Name")) {
+					Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "fetch", "--all", "--prune")
+				}
+
+				if ($Branch) {
+					if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Checkout branch $Branch for $Name")) {
+						Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "checkout", $Branch)
+					}
+
+					if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Pull branch $Branch for $Name")) {
+						Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "pull", "--ff-only", "origin", $Branch)
+					}
+				}
+				else {
+					if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Pull latest changes for $Name")) {
+						Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "pull", "--ff-only")
+					}
+				}
+			}
+			catch {
+				Write-Log "Unable to update $Name cleanly; continuing with the existing checkout." -Level WARNING
+				Write-Log $_.Exception.Message -Level WARNING
+			}
+		}
+	}
+	elseif ($shouldClone -or (-not (Test-Path -LiteralPath $TargetDirectory))) {
+		$parent = Split-Path -Parent $TargetDirectory
+		Ensure-Directory -Path $parent
+
+		$cloneArgs = @("clone")
+		if ($Branch) {
+			$cloneArgs += @("--branch", $Branch, "--single-branch")
+		}
+		$cloneArgs += @($RepositoryUrl, $TargetDirectory)
+
+		Write-Log "Cloning $Name..." -Level INFO
+		if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Clone $Name")) {
+			Invoke-ExternalCommand -FilePath "git" -Arguments $cloneArgs
+		}
+	}
+
+	if (Test-Path -LiteralPath (Join-Path $TargetDirectory ".git")) {
+		Enable-GitSafeDirectory -RepositoryPath $TargetDirectory
+
+		$currentBranch = Get-GitOutput -RepositoryPath $TargetDirectory -Arguments @("rev-parse", "--abbrev-ref", "HEAD")
+		$currentCommit = Get-GitOutput -RepositoryPath $TargetDirectory -Arguments @("rev-parse", "--short", "HEAD")
+
+		if ($currentBranch -and $currentCommit) {
+			Write-Log "$Name ready at $currentBranch ($currentCommit)" -Level SUCCESS
+		}
+		else {
+			Write-Log "$Name ready at $TargetDirectory" -Level SUCCESS
+		}
+	}
+}
 
 Set-Location $ProjectRoot
 
-Write-Host @"
+Write-Host ""
+Write-Host "MPMB source setup" -ForegroundColor Cyan
+Write-Host "Project root: $ProjectRoot" -ForegroundColor DarkGray
+Write-Host ""
 
-╔════════════════════════════════════════════════════════════════════════╗
-║                                                                        ║
-║              MPMB Copilot - Development Environment Startup            ║
-║                                                                        ║
-║  This script will set up your complete development environment:        ║
-║    • Update MPMB source code repository                                ║
-║    • Generate code chunks for RAG indexing                             ║
-║    • Build and start Docker containers                                 ║
-║    • Index chunks into Qdrant vector database                          ║
-║    • Verify system health                                              ║
-║                                                                        ║
-╚════════════════════════════════════════════════════════════════════════╝
-
-"@ -ForegroundColor Cyan
-
-Start-Sleep -Seconds 1
-
-# ============================================================================
-# Phase 0: Prerequisites Check
-# ============================================================================
-
-Write-Section "Phase 0: Validating Prerequisites"
-
-# Check Git
-if (Test-CommandExists "git") {
-    $gitVersion = git --version
-    Write-Log "Git: $gitVersion" -Level SUCCESS
-} else {
-    Write-Log "Git is not installed" -Level ERROR
-    Write-Log "Install from: https://git-scm.com/download/win" -Level INFO
-    exit 1
+if (-not (Test-CommandExists "git")) {
+	Write-Log "Git is required but was not found in PATH." -Level ERROR
+	exit 1
 }
 
-# Check Python
+$pythonCommand = $null
+$pythonPrefixArgs = @()
 if (Test-CommandExists "python") {
-    $pythonVersion = python --version
-    Write-Log "Python: $pythonVersion" -Level SUCCESS
-} else {
-    Write-Log "Python is not installed" -Level ERROR
-    Write-Log "Install Python 3.11+ from: https://www.python.org/downloads/" -Level INFO
-    exit 1
+	$pythonCommand = "python"
+}
+elseif (Test-CommandExists "py") {
+	$pythonCommand = "py"
+	$pythonPrefixArgs = @("-3")
+}
+else {
+	Write-Log "Python is required to run scripts/chunk_mpmb.py." -Level ERROR
+	exit 1
 }
 
-# Check uv
-if (Test-CommandExists "uv") {
-    $uvVersion = uv --version
-    Write-Log "uv: $uvVersion" -Level SUCCESS
-} else {
-    Write-Log "uv is not installed" -Level ERROR
-    Write-Log "Install with: pip install uv" -Level INFO
-    exit 1
-}
-
-if (-not $SkipDocker) {
-    # Check Docker
-    if (Test-CommandExists "docker") {
-        try {
-            docker ps >$null 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                $dockerVersion = docker --version
-                Write-Log "Docker: $dockerVersion (daemon running)" -Level SUCCESS
-            } else {
-                Write-Log "Docker daemon is not running" -Level ERROR
-                Write-Log "Please start Docker Desktop" -Level INFO
-                exit 1
-            }
-        } catch {
-            Write-Log "Docker is installed but not accessible" -Level ERROR
-            exit 1
-        }
-    } else {
-        Write-Log "Docker is not installed" -Level ERROR
-        Write-Log "Install from: https://www.docker.com/products/docker-desktop" -Level INFO
-        exit 1
-    }
-
-    # Check docker-compose
-    if (Test-CommandExists "docker-compose") {
-        $composeVersion = docker-compose --version
-        Write-Log "Docker Compose: $composeVersion" -Level SUCCESS
-    } else {
-        Write-Log "Docker Compose is not available" -Level ERROR
-        exit 1
-    }
-}
-
-Write-Log "All prerequisites satisfied!" -Level SUCCESS
-
-# ============================================================================
-# Phase 1: MPMB Source Repository
-# ============================================================================
-
-Write-Section "Phase 1: MPMB Source Code Repository"
-
-# Ensure data directory exists
-if (-not (Test-Path $DataDir)) {
-    New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
-    Write-Log "Created data directory" -Level SUCCESS
-}
-
-# Handle MPMB repository
-if (Test-Path $MPMBSourceDir) {
-    Write-Log "MPMB source directory exists - updating repository..." -Level INFO
-
-    Push-Location $MPMBSourceDir
-    try {
-        # Check if it's a git repository
-        $isGitRepo = Test-Path ".git"
-
-        if ($isGitRepo) {
-            # Fix Git safe.directory issue (common on Windows)
-            $gitConfigResult = git config --get safe.directory $MPMBSourceDir 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Log "Adding repository to Git safe.directory list..." -Level INFO
-                git config --global --add safe.directory $MPMBSourceDir
-                Write-Log "Git safe.directory configured" -Level SUCCESS
-            }
-
-            # Fetch latest changes
-            Write-Log "Fetching latest changes from remote..." -Level INFO
-            git fetch origin 2>&1 | Out-Null
-
-            if ($LASTEXITCODE -eq 0) {
-                # Check if we're behind
-                $localCommit = git rev-parse HEAD 2>$null
-                $remoteCommit = git rev-parse origin/master 2>$null
-                if (-not $remoteCommit) {
-                    $remoteCommit = git rev-parse origin/main 2>$null
-                }
-
-                if ($localCommit -eq $remoteCommit) {
-                    Write-Log "Already up to date (commit: $($localCommit.Substring(0,7)))" -Level SUCCESS
-                } else {
-                    Write-Log "Pulling latest changes..." -Level INFO
-                    $branch = git rev-parse --abbrev-ref HEAD
-                    git pull origin $branch 2>&1 | Out-Null
-
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Log "Updated to latest version (commit: $($remoteCommit.Substring(0,7)))" -Level SUCCESS
-                    } else {
-                        Write-Log "Git pull encountered issues - repository may need manual attention" -Level WARNING
-                    }
-                }
-
-                # Show recent commits (if fetch was successful)
-                Write-Host "`nRecent commits:" -ForegroundColor Yellow
-                git log --oneline --graph --decorate -5 2>$null
-
-            } else {
-                Write-Log "Git fetch failed - continuing with existing repository state" -Level WARNING
-            }
-
-        } else {
-            Write-Log "Directory exists but is not a git repository" -Level WARNING
-            Write-Log "Consider removing it and re-running this script" -Level WARNING
-        }
-
-    } catch {
-        Write-Log "Failed to update repository: $_" -Level ERROR
-        Write-Log "Continuing with existing repository state" -Level INFO
-    } finally {
-        Pop-Location
-    }
-
-} else {
-    Write-Log "MPMB source directory not found - cloning repository..." -Level INFO
-    Write-Log "Repository: $MPMBRepoUrl" -Level INFO
-
-    try {
-        git clone $MPMBRepoUrl $MPMBSourceDir 2>&1 | Out-Null
-
-        if ($LASTEXITCODE -eq 0) {
-            Write-Log "Successfully cloned MPMB repository" -Level SUCCESS
-
-            # Add to safe.directory immediately after cloning
-            git config --global --add safe.directory $MPMBSourceDir 2>$null
-
-            # Show repository info
-            Push-Location $MPMBSourceDir
-            $commit = git rev-parse --short HEAD 2>$null
-            $commitDate = git log -1 --format=%cd --date=short 2>$null
-            Write-Log "Cloned commit: $commit (dated: $commitDate)" -Level INFO
-            Pop-Location
-        } else {
-            throw "Git clone failed"
-        }
-
-    } catch {
-        Write-Log "Failed to clone repository: $_" -Level ERROR
-        Write-Log "Check your internet connection and try again" -Level INFO
-        exit 1
-    }
-}
-
-# Count files for verification
-$jsFiles = Get-ChildItem -Path $MPMBSourceDir -Filter "*.js" -Recurse -File -ErrorAction SilentlyContinue
-if ($jsFiles) {
-    Write-Log "Repository contains $($jsFiles.Count) JavaScript files" -Level SUCCESS
-} else {
-    Write-Log "Warning: No JavaScript files found in repository" -Level WARNING
-}
-
-# Count files for verification
-$jsFiles = Get-ChildItem -Path $MPMBSourceDir -Filter "*.js" -Recurse -File
-Write-Log "Repository contains $($jsFiles.Count) JavaScript files" -Level SUCCESS
-
-# ============================================================================
-# Phase 2: Code Chunking
-# ============================================================================
-
-if (-not $SkipChunking) {
-    Write-Section "Phase 2: Code Chunking Pipeline"
-
-    # Check if chunks already exist
-    $existingChunks = $false
-    if (Test-Path $ChunkedOutputDir) {
-        $chunkFiles = Get-ChildItem -Path $ChunkedOutputDir -Filter "*.json"
-        if ($chunkFiles.Count -gt 0) {
-            $existingChunks = $true
-            Write-Log "Found $($chunkFiles.Count) existing chunk files" -Level INFO
-
-            if (-not $FullRebuild) {
-                $response = Read-Host "Re-chunk source code? (y/N)"
-                if ($response -ne 'y' -and $response -ne 'Y') {
-                    Write-Log "Skipping chunking - using existing chunks" -Level INFO
-                    $SkipChunking = $true
-                }
-            }
-        }
-    }
-
-    if (-not $SkipChunking -or $FullRebuild) {
-        # Ensure output directory exists
-        if (-not (Test-Path $ChunkedOutputDir)) {
-            New-Item -ItemType Directory -Path $ChunkedOutputDir -Force | Out-Null
-        }
-
-        Write-Log "Running chunking script: $ChunkScript" -Level INFO
-        Write-Log "This may take 1-2 minutes..." -Level INFO
-
-        try {
-            # Run chunking script
-            python $ChunkScript
-
-            if ($LASTEXITCODE -eq 0) {
-                # Count generated chunks
-                $chunkFiles = Get-ChildItem -Path $ChunkedOutputDir -Filter "*.json"
-                $totalChunks = 0
-
-                foreach ($file in $chunkFiles) {
-                    $content = Get-Content $file.FullName -Raw | ConvertFrom-Json
-                    $totalChunks += $content.Count
-                }
-
-                Write-Log "Chunking complete!" -Level SUCCESS
-                Write-Log "Generated $($chunkFiles.Count) chunk files containing $totalChunks total chunks" -Level INFO
-
-                # Display chunk breakdown
-                Write-Host "`nChunk breakdown:" -ForegroundColor Yellow
-                foreach ($file in $chunkFiles) {
-                    $content = Get-Content $file.FullName -Raw | ConvertFrom-Json
-                    Write-Host "  $($file.Name): $($content.Count) chunks" -ForegroundColor Gray
-                }
-
-            } else {
-                throw "Chunking script failed with exit code $LASTEXITCODE"
-            }
-
-        } catch {
-            Write-Log "Code chunking failed: $_" -Level ERROR
-            Write-Log "Check the chunking script output above for details" -Level INFO
-            exit 1
-        }
-    }
-
-} else {
-    Write-Section "Phase 2: Code Chunking (Skipped)"
-    Write-Log "Using existing chunks from previous run" -Level INFO
-}
-
-# ============================================================================
-# Phase 3: Docker Environment
-# ============================================================================
-
-if (-not $SkipDocker) {
-    Write-Section "Phase 3: Docker Environment Setup"
-
-    # Stop existing containers
-    Write-Log "Stopping existing containers..." -Level INFO
-    docker-compose down 2>&1 | Out-Null
-
-    if ($FullRebuild) {
-        Write-Log "Full rebuild requested - removing volumes..." -Level WARNING
-        docker-compose down -v 2>&1 | Out-Null
-        Write-Log "Volumes removed" -Level SUCCESS
-    }
-
-    # Build images
-    Write-Log "Building Docker images (this may take several minutes)..." -Level INFO
-    $buildArgs = if ($FullRebuild) { @("build", "--no-cache") } else { @("build") }
-
-    docker-compose $buildArgs
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "Docker build failed" -Level ERROR
-        exit 1
-    }
-    Write-Log "Docker images built successfully" -Level SUCCESS
-
-    # Start containers
-    Write-Log "Starting Docker containers..." -Level INFO
-    docker-compose up -d
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log "Failed to start containers" -Level ERROR
-        exit 1
-    }
-    Write-Log "Containers started" -Level SUCCESS
-
-    # Wait for health checks
-    Write-Log "Waiting for services to be ready..." -Level INFO
-
-    $services = @(
-        @{Name="PostgreSQL"; Container="mpmb-postgres"},
-        @{Name="Qdrant"; Container="mpmb-qdrant"},
-        @{Name="Backend"; Container="mpmb-backend"}
-    )
-
-    function Test-ServiceHealth {
-        param($Container)
-
-        $health = docker inspect --format='{{.State.Health.Status}}' $Container 2>$null
-        if ($health -eq "healthy") { return $true }
-
-        $running = docker inspect --format='{{.State.Running}}' $Container 2>$null
-        if ($running -eq "true") { return $true }
-
-        return $false
-    }
-
-    $allHealthy = $false
-    $attempt = 0
-
-    while (-not $allHealthy -and $attempt -lt $MaxHealthCheckAttempts) {
-        $attempt++
-
-        $healthyServices = @()
-        foreach ($service in $services) {
-            if (Test-ServiceHealth -Container $service.Container) {
-                $healthyServices += $service.Name
-            }
-        }
-
-        Write-Host "`r[$attempt/$MaxHealthCheckAttempts] Healthy: $($healthyServices -join ', ')".PadRight(80) -NoNewline
-
-        if ($healthyServices.Count -eq $services.Count) {
-            $allHealthy = $true
-        } else {
-            Start-Sleep -Seconds $HealthCheckInterval
-        }
-    }
-
-    Write-Host ""  # New line
-
-    if ($allHealthy) {
-        Write-Log "All services are healthy!" -Level SUCCESS
-    } else {
-        Write-Log "Some services may not be fully ready" -Level WARNING
-        docker-compose ps
-    }
-
-    # Verify connectivity
-    Write-Log "Verifying service connectivity..." -Level INFO
-    Start-Sleep -Seconds 10
-
-    try {
-        $healthCheck = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 10
-        Write-Log "Backend API is responding" -Level SUCCESS
-        Write-Log "Status: $($healthCheck.status) | Environment: $($healthCheck.environment)" -Level INFO
-    } catch {
-        Write-Log "Backend API not ready yet (may need a few more seconds)" -Level WARNING
-    }
-
-} else {
-    Write-Section "Phase 3: Docker Environment (Skipped)"
-}
-
-# ============================================================================
-# Phase 4: Vector Database Indexing
-# ============================================================================
-
-if (-not $SkipIndexing -and -not $SkipDocker) {
-    Write-Section "Phase 4: Qdrant Vector Database Indexing"
-
-    # Check if Qdrant is ready
-    $qdrantReady = $false
-    for ($i = 0; $i -lt 10; $i++) {
-        try {
-            $qdrantHealth = Invoke-WebRequest -Uri "http://127.0.0.1:6333/healthz" -TimeoutSec 3 -UseBasicParsing
-            if ($qdrantHealth.StatusCode -eq 200) {
-                $qdrantReady = $true
-                break
-            }
-        } catch {
-            Start-Sleep -Seconds 2
-        }
-    }
-
-    if (-not $qdrantReady) {
-        Write-Log "Qdrant is not ready - skipping indexing" -Level WARNING
-        Write-Log "You can index later with: curl -X POST http://127.0.0.1:8000/api/index" -Level INFO
-    } else {
-        Write-Log "Qdrant is ready - checking index status..." -Level INFO
-
-        try {
-            $indexStatus = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/index/status" -TimeoutSec 10
-
-            if ($indexStatus.total_vectors -eq 0 -or $FullRebuild) {
-                Write-Log "Starting indexing process..." -Level INFO
-                Write-Log "This will generate embeddings and upload to Qdrant (may take 2-5 minutes)" -Level INFO
-
-                $indexRequest = @{
-                    force_reindex = [bool]$FullRebuild
-                } | ConvertTo-Json
-
-                $indexResponse = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/index" `
-                    -Method Post `
-                    -Body $indexRequest `
-                    -ContentType "application/json" `
-                    -TimeoutSec 300
-
-                Write-Log "Indexing complete!" -Level SUCCESS
-                Write-Log "Files processed: $($indexResponse.files_processed)" -Level INFO
-                Write-Log "Chunks created: $($indexResponse.chunks_created)" -Level INFO
-                Write-Log "Vectors uploaded: $($indexResponse.vectors_uploaded)" -Level INFO
-
-            } else {
-                Write-Log "Index already populated with $($indexStatus.total_vectors) vectors" -Level SUCCESS
-                Write-Log "Use -FullRebuild to force re-indexing" -Level INFO
-            }
-
-        } catch {
-            Write-Log "Indexing API not ready or failed: $_" -Level WARNING
-            Write-Log "You can index manually later with:" -Level INFO
-            Write-Log "  curl: curl -X POST http://127.0.0.1:8000/api/index -H `"Content-Type: application/json`" -d '{\"force_reindex\": false}'" -Level INFO
-            Write-Log "  pwsh: Invoke-RestMethod -Uri http://127.0.0.1:8000/api/index -Method Post -Body '{\"force_reindex\": false}' -ContentType 'application/json'" -Level INFO
-        }
-    }
-
-} else {
-    Write-Section "Phase 4: Vector Database Indexing (Skipped)"
-}
-
-# ============================================================================
-# Phase 5: System Health Verification
-# ============================================================================
-
-if (-not $SkipDocker) {
-    Write-Section "Phase 5: System Health Verification"
-
-    Start-Sleep -Seconds 2
-
-    try {
-        $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/health" -TimeoutSec 10
-
-        Write-Host "`nSystem Status:" -ForegroundColor Cyan
-        Write-Host "  Overall: " -NoNewline
-
-        switch ($health.status) {
-            "healthy" { Write-Host "HEALTHY ✓" -ForegroundColor Green }
-            "degraded" { Write-Host "DEGRADED !" -ForegroundColor Yellow }
-            "unhealthy" { Write-Host "UNHEALTHY ✗" -ForegroundColor Red }
-            default { Write-Host $health.status -ForegroundColor White }
-        }
-
-        Write-Host "  Environment: $($health.environment)"
-        Write-Host "  Version: $($health.version)"
-        Write-Host "  Timestamp: $($health.timestamp)"
-
-        Write-Host "`nService Health:" -ForegroundColor Cyan
-        foreach ($service in $health.services.PSObject.Properties) {
-            $status = $service.Value.status
-            $message = $service.Value.message
-
-            $color = switch ($status) {
-                "healthy" { "Green" }
-                "configured" { "Green" }
-                "ready" { "Green" }
-                default { "Yellow" }
-            }
-
-            $icon = if ($status -in @("healthy", "configured", "ready")) { "✓" } else { "!" }
-
-            Write-Host "  $($service.Name): " -NoNewline
-            Write-Host "$icon $status" -ForegroundColor $color
-            if ($message) {
-                Write-Host "    → $message" -ForegroundColor Gray
-            }
-        }
-
-    } catch {
-        Write-Log "Unable to get full health status" -Level WARNING
-    }
-}
-
-# ============================================================================
-# Final Summary
-# ============================================================================
-
-Write-Host @"
-
-╔════════════════════════════════════════════════════════════════════════╗
-║                                                                        ║
-║                         STARTUP COMPLETE!                              ║
-║                                                                        ║
-╚════════════════════════════════════════════════════════════════════════╝
-
-"@ -ForegroundColor Green
-
-Write-Log "Your MPMB Copilot development environment is fully initialized!" -Level SUCCESS
+$dotEnvValues = Get-DotEnvValues -Path $EnvFile
+
+$dataDir = Resolve-ProjectPath (Get-SettingValue -Name "DATA_DIR" -Default "./data" -DotEnvValues $dotEnvValues)
+$mpmbSourceDir = Resolve-ProjectPath (Get-SettingValue -Name "MPMB_SOURCE_DIR" -Default "./data/mpmb_source" -DotEnvValues $dotEnvValues)
+$mpmbSource2024Dir = Resolve-ProjectPath (Get-SettingValue -Name "MPMB_SOURCE_2024_DIR" -Default "./data/mpmb_source_2024" -DotEnvValues $dotEnvValues)
+$importsSourceDir = Resolve-ProjectPath (Get-SettingValue -Name "IMPORTS_SOURCE_DIR" -Default "./data/imports_source" -DotEnvValues $dotEnvValues)
+$adobeDocsDir = Resolve-ProjectPath (Get-SettingValue -Name "ADOBE_DOCS_DIR" -Default "./data/adobe_docs" -DotEnvValues $dotEnvValues)
+$chunkedOutputDir = Resolve-ProjectPath (Get-SettingValue -Name "CHUNKED_OUTPUT_DIR" -Default "./data/chunked_output" -DotEnvValues $dotEnvValues)
+
+$mpmbRepoUrl = Get-SettingValue -Name "MPMB_REPO_URL" -Default "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git" -DotEnvValues $dotEnvValues
+$mpmbRepoBranch2014 = Get-SettingValue -Name "MPMB_REPO_BRANCH_2014" -Default "master" -DotEnvValues $dotEnvValues
+$mpmbRepoBranch2024 = Get-SettingValue -Name "MPMB_REPO_BRANCH_2024" -Default "dnd2024" -DotEnvValues $dotEnvValues
+$importsRepoUrl = Get-SettingValue -Name "IMPORTS_REPO_URL" -Default "https://github.com/safety-orange/Imports-for-MPMB-s-Character-Sheet.git" -DotEnvValues $dotEnvValues
+
+Write-Log "Using source paths:" -Level INFO
+Write-Host "  2014 repo:  $mpmbSourceDir" -ForegroundColor Gray
+Write-Host "  2024 repo:  $mpmbSource2024Dir" -ForegroundColor Gray
+Write-Host "  Imports:    $importsSourceDir" -ForegroundColor Gray
+Write-Host "  Adobe docs: $adobeDocsDir" -ForegroundColor Gray
+Write-Host "  Chunks:     $chunkedOutputDir" -ForegroundColor Gray
 Write-Host ""
 
-Write-Host "📍 Service URLs:" -ForegroundColor Yellow
-Write-Host "   Backend API:       " -NoNewline; Write-Host "http://127.0.0.1:8000" -ForegroundColor Cyan
-Write-Host "   API Documentation: " -NoNewline; Write-Host "http://127.0.0.1:8000/api/docs" -ForegroundColor Cyan
-Write-Host "   Health Check:      " -NoNewline; Write-Host "http://127.0.0.1:8000/api/health" -ForegroundColor Cyan
-Write-Host "   Qdrant Dashboard:  " -NoNewline; Write-Host "http://127.0.0.1:6333/dashboard" -ForegroundColor Cyan
-Write-Host ""
+Ensure-Directory -Path $dataDir
+Ensure-Directory -Path $adobeDocsDir
+Ensure-Directory -Path $chunkedOutputDir
 
-Write-Host "🔧 Quick Commands:" -ForegroundColor Yellow
-Write-Host "   View logs:         " -NoNewline; Write-Host "docker-compose logs -f backend" -ForegroundColor Cyan
-Write-Host "   Run tests:         " -NoNewline; Write-Host "cd backend && uv run pytest -v" -ForegroundColor Cyan
-Write-Host "   Stop services:     " -NoNewline; Write-Host "docker-compose down" -ForegroundColor Cyan
-Write-Host "   Restart:           " -NoNewline; Write-Host ".\scripts\startup.ps1" -ForegroundColor Cyan
-Write-Host ""
+Sync-GitRepository `
+	-Name "MPMB main repo (2014)" `
+	-RepositoryUrl $mpmbRepoUrl `
+	-TargetDirectory $mpmbSourceDir `
+	-Branch $mpmbRepoBranch2014
 
-Write-Host "📊 System Stats:" -ForegroundColor Yellow
-if (Test-Path $MPMBSourceDir) {
-    $jsCount = (Get-ChildItem -Path $MPMBSourceDir -Filter "*.js" -Recurse).Count
-    Write-Host "   MPMB JS Files:     " -NoNewline; Write-Host "$jsCount files" -ForegroundColor Cyan
+Sync-GitRepository `
+	-Name "MPMB main repo (2024)" `
+	-RepositoryUrl $mpmbRepoUrl `
+	-TargetDirectory $mpmbSource2024Dir `
+	-Branch $mpmbRepoBranch2024
+
+Sync-GitRepository `
+	-Name "Imports repo" `
+	-RepositoryUrl $importsRepoUrl `
+	-TargetDirectory $importsSourceDir `
+	-Branch ""
+
+Sync-AdobeDocs -AdobeDocsDirectory $adobeDocsDir
+
+Write-Log "Starting chunker..." -Level INFO
+if ($script:PSCmdlet.ShouldProcess($ChunkScript, "Run the MPMB chunker")) {
+	Invoke-ExternalCommand -FilePath $pythonCommand -Arguments ($pythonPrefixArgs + @($ChunkScript))
 }
-if (Test-Path $ChunkedOutputDir) {
-    $chunkFiles = Get-ChildItem -Path $ChunkedOutputDir -Filter "*.json"
-    Write-Host "   Chunk Files:       " -NoNewline; Write-Host "$($chunkFiles.Count) files" -ForegroundColor Cyan
-}
 
-try {
-    $indexStatus = Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/index/status" -TimeoutSec 5 -ErrorAction SilentlyContinue
-    Write-Host "   Indexed Vectors:   " -NoNewline; Write-Host "$($indexStatus.total_vectors) vectors" -ForegroundColor Cyan
-} catch {}
-
-Write-Host ""
-Write-Log "Happy coding! 🎉" -Level SUCCESS
-Write-Host ""
+Write-Log "Setup complete." -Level SUCCESS

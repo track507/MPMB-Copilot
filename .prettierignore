@@ -1,0 +1,11 @@
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+data/
+logs/
+node_modules/
+.ruff_cache/
+.uv-cache/
+coverage/
+htmlcov/
+*.md

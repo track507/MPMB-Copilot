@@ -1,0 +1,14 @@
+backend/.venv/**
+backend/.pytest_cache/**
+backend/.ruff_cache/**
+data/adobe_docs/**
+data/chunked_output/**
+data/imports_source/**
+data/index_cache/**
+data/mpmb_source/**
+data/mpmb_source_2024/**
+data/uploads/**
+node_modules/**
+.uv-cache/**
+coverage/**
+htmlcov/**

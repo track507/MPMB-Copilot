@@ -1,142 +1,205 @@
-"""Indexing service for uploading chunks to Qdrant (Non-blocking version)"""
-import logging
+"""Indexing service: chunk files -> embeddings -> vector store.
+
+Reads JSON chunk files from the chunked output directory, generates
+dense embeddings, and upserts everything to the configured vector store
+(which handles BM25 sparse vectors internally).
+
+Designed for background execution via TaskManager - all methods accept
+an optional task_id for progress reporting.
+
+Usage:
+    # From API endpoint (non-blocking):
+    task_id = await task_manager.submit_task(
+        "index_all", indexing_service.index_all_chunks
+    )
+
+    # Direct call:
+    result = indexing_service.index_all_chunks()
+"""
+
 import json
+import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
-from uuid import uuid4
-from qdrant_client.models import PointStruct
-from app.services.qdrant import qdrant_service
-from app.services.embeddings import embedding_service
+from typing import Any, Dict, Optional
+
 from app.config import settings
+from app.services.embeddings import embedding_service
 
 logger = logging.getLogger(__name__)
 
+# Batch size for embedding generation + upsert
+EMBED_BATCH_SIZE = 128
+
 
 class IndexingService:
-	"""Index code chunks into Qdrant
+    """Indexes code chunks into the vector store.
 
-	Note: These methods are designed to run in thread pool via TaskManager,
-	so they use blocking I/O and synchronous operations.
-	"""
+    Methods are BLOCKING (use via TaskManager for async execution).
+    The store is resolved lazily on first use so the service can be
+    instantiated before the store is connected.
+    """
 
-	def index_chunks_from_json(
-		self,
-		json_path: Path,
-		task_id: Optional[str] = None
-	) -> Dict[str, Any]:
-		"""Load chunks from JSON and index them
+    def __init__(self):
+        self._store = None
 
-		This is a BLOCKING operation - use via TaskManager for async execution.
-		"""
-		# Import here to avoid circular dependency
-		from app.services.task_manager import task_manager
+    def _get_store(self):
+        """Lazy-load the vector store (must be connected already)."""
+        if self._store is None:
+            from app.services.vector_store import get_vector_store
 
-		# Load chunks
-		with open(json_path, 'r', encoding='utf-8') as f:
-			chunks = json.load(f)
+            self._store = get_vector_store()
+        return self._store
 
-		logger.info(f"Loaded {len(chunks)} chunks from {json_path.name}")
+    def _update_progress(self, task_id: Optional[str], progress: float, message: str):
+        """Update task progress if running in background."""
+        if task_id:
+            from app.services.task_manager import task_manager
 
-		if task_id:
-			task_manager.update_progress(task_id, 0.2, f"Loaded {len(chunks)} chunks from {json_path.name}")
+            task_manager.update_progress(task_id, progress, message)
 
-		# Generate embeddings (BLOCKING - runs in thread pool)
-		texts = [chunk['content'] for chunk in chunks]
-		embeddings = embedding_service.embed_texts(texts)
+    # =================================================================
+    # Single file indexing
+    # =================================================================
 
-		logger.info(f"Generated {len(embeddings)} embeddings")
+    def index_file(
+        self,
+        json_path: Path,
+        task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Load chunks from one JSON file and index them.
 
-		if task_id:
-			task_manager.update_progress(task_id, 0.6, f"Generated {len(embeddings)} embeddings")
+        BLOCKING - run via TaskManager for async execution.
 
-		# Create points for Qdrant
-		points = []
-		for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-			point = PointStruct(
-				id=str(uuid4()),
-				vector=embedding,
-				payload={
-					"content": chunk['content'],
-					"source_file": chunk['source_file'],
-					"chunk_index": chunk['chunk_index'],
-					"start_line": chunk['start_line'],
-					"end_line": chunk['end_line'],
-					"chunk_type": chunk['chunk_type'],
-					"metadata": chunk['metadata']
-				}
-			)
-			points.append(point)
+        Args:
+                json_path: Path to a chunk JSON file.
+                task_id: Optional background task ID for progress.
 
-		# Upload to Qdrant (BLOCKING)
-		qdrant_service.client.upsert(
-			collection_name=settings.qdrant_collection,
-			points=points
-		)
+        Returns:
+                Dict with counts: chunks_loaded, embeddings_generated, points_uploaded.
+        """
+        import asyncio
 
-		logger.info(f"Uploaded {len(points)} points to Qdrant")
+        store = self._get_store()
 
-		if task_id:
-			task_manager.update_progress(task_id, 0.9, f"Uploaded {len(points)} vectors")
+        # Load chunks
+        with open(json_path, "r", encoding="utf-8") as f:
+            chunks = json.load(f)
 
-		return {
-			"chunks_loaded": len(chunks),
-			"embeddings_generated": len(embeddings),
-			"points_uploaded": len(points),
-			"source_file": json_path.name
-		}
+        logger.info(f"Loaded {len(chunks)} chunks from {json_path.name}")
+        self._update_progress(task_id, 0.1, f"Loaded {len(chunks)} chunks from {json_path.name}")
 
-	def index_all_chunks(self, task_id: Optional[str] = None) -> Dict[str, Any]:
-		"""Index all chunk files in the output directory
+        if not chunks:
+            return {
+                "chunks_loaded": 0,
+                "embeddings_generated": 0,
+                "points_uploaded": 0,
+                "source_file": json_path.name,
+            }
 
-		This is a BLOCKING operation - use via TaskManager for async execution.
-		"""
-		# Import here to avoid circular dependency
-		from app.services.task_manager import task_manager
+        # Generate dense embeddings in batches
+        texts = [chunk["content"] for chunk in chunks]
+        all_embeddings = []
 
-		output_dir = Path(settings.data_dir) / "chunked_output"
+        for batch_start in range(0, len(texts), EMBED_BATCH_SIZE):
+            batch_end = min(batch_start + EMBED_BATCH_SIZE, len(texts))
+            batch_texts = texts[batch_start:batch_end]
 
-		if not output_dir.exists():
-			raise FileNotFoundError(f"Chunked output directory not found: {output_dir}")
+            batch_embeddings = embedding_service.embed_texts(batch_texts)
+            all_embeddings.extend(batch_embeddings)
 
-		json_files = list(output_dir.glob("*.json"))
+            progress = 0.1 + 0.5 * (batch_end / len(texts))
+            self._update_progress(task_id, progress, f"Embedded {batch_end}/{len(texts)} chunks from {json_path.name}")
 
-		if not json_files:
-			raise FileNotFoundError(f"No JSON chunk files found in {output_dir}")
+        logger.info(f"Generated {len(all_embeddings)} embeddings for {json_path.name}")
 
-		logger.info(f"Found {len(json_files)} chunk files to index")
+        # Upsert to vector store (store generates sparse vectors internally)
+        loop = asyncio.new_event_loop()
+        try:
+            if not loop.run_until_complete(store.health_check()):
+                connected = loop.run_until_complete(store.connect())
+                if not connected:
+                    raise RuntimeError("Vector store is not available")
 
-		if task_id:
-			task_manager.update_progress(task_id, 0.1, f"Found {len(json_files)} files")
+            points_uploaded = loop.run_until_complete(store.upsert_chunks(chunks, all_embeddings))
+        finally:
+            loop.close()
 
-		results = []
-		total_files = len(json_files)
+        logger.info(f"Uploaded {points_uploaded} points from {json_path.name}")
+        self._update_progress(task_id, 0.9, f"Uploaded {points_uploaded} vectors from {json_path.name}")
 
-		for i, json_file in enumerate(json_files, 1):
-			logger.info(f"Processing file {i}/{total_files}: {json_file.name}")
+        return {
+            "chunks_loaded": len(chunks),
+            "embeddings_generated": len(all_embeddings),
+            "points_uploaded": points_uploaded,
+            "source_file": json_path.name,
+        }
 
-			result = self.index_chunks_from_json(json_file, task_id=task_id)
-			results.append(result)
+    # =================================================================
+    # Full corpus indexing
+    # =================================================================
 
-			# Update overall progress
-			if task_id:
-				progress = 0.1 + (0.8 * i / total_files)
-				task_manager.update_progress(
-					task_id,
-					progress,
-					f"Indexed {i}/{total_files} files ({result['points_uploaded']} vectors)"
-				)
+    def index_all_chunks(self, task_id: Optional[str] = None) -> Dict[str, Any]:
+        """Index all chunk files from the chunked output directory.
 
-		total_uploaded = sum(r['points_uploaded'] for r in results)
+        BLOCKING - run via TaskManager for async execution.
 
-		if task_id:
-			task_manager.update_progress(task_id, 1.0, f"Complete - {total_uploaded} vectors indexed")
+        Reads all .json files from settings.chunked_output_path and
+        indexes them in sequence.
 
-		return {
-			"status": "completed",
-			"files_processed": len(results),
-			"total_points_uploaded": total_uploaded,
-			"details": results
-		}
+        Args:
+                task_id: Optional background task ID for progress.
+
+        Returns:
+                Dict with total stats and per-file details.
+        """
+        output_dir = settings.chunked_output_path
+
+        if not output_dir.exists():
+            raise FileNotFoundError(
+                f"Chunked output directory not found: {output_dir}. Run the chunker first: python scripts/chunk_mpmb.py"
+            )
+
+        json_files = sorted(output_dir.glob("*.json"))
+
+        if not json_files:
+            raise FileNotFoundError(
+                f"No JSON chunk files found in {output_dir}. Run the chunker first: python scripts/chunk_mpmb.py"
+            )
+
+        logger.info(f"Found {len(json_files)} chunk files to index")
+        self._update_progress(task_id, 0.05, f"Found {len(json_files)} files to index")
+
+        results = []
+        total_files = len(json_files)
+
+        for i, json_file in enumerate(json_files, 1):
+            logger.info(f"Indexing file {i}/{total_files}: {json_file.name}")
+
+            result = self.index_file(json_file, task_id=None)  # Don't double-report
+            results.append(result)
+
+            # Update overall progress
+            progress = 0.05 + 0.90 * (i / total_files)
+            self._update_progress(
+                task_id,
+                progress,
+                f"Indexed {i}/{total_files} files ({result['points_uploaded']} vectors from {json_file.name})",
+            )
+
+        total_chunks = sum(r["chunks_loaded"] for r in results)
+        total_uploaded = sum(r["points_uploaded"] for r in results)
+
+        self._update_progress(task_id, 1.0, f"Complete - {total_uploaded} vectors from {len(results)} files")
+
+        logger.info(f"Indexing complete: {total_uploaded} vectors from {len(results)} files ({total_chunks} chunks)")
+
+        return {
+            "status": "completed",
+            "files_processed": len(results),
+            "total_chunks_loaded": total_chunks,
+            "total_points_uploaded": total_uploaded,
+            "details": results,
+        }
 
 
 # Global instance

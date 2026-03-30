@@ -5,7 +5,7 @@ import js from "@eslint/js";
 export default [
 	// Global ignores
 	{
-		ignores: ["**/.git/**", "**/*.min.js"],
+		ignores: ["**/.git/**", "**/*.min.js", "backend/.venv/**", "backend/.ruff_cache/**", "data/**", "logs/**", "node_modules/**"],
 	},
 
 	// Base recommended rules
@@ -236,8 +236,7 @@ export default [
 				},
 				{
 					selector: "ForOfStatement",
-					message:
-						"for...of loops are not available in ES5. Use for loops or Array.prototype.forEach instead.",
+					message: "for...of loops are not available in ES5. Use for loops or Array.prototype.forEach instead.",
 				},
 				{
 					selector: "SpreadElement",

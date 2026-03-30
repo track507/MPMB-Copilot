@@ -19,7 +19,8 @@ dependencies = [
 	"psycopg2-binary>=2.9.9",
 
 	# RAG & Embeddings
-	"qdrant-client>=1.7.0",
+	"qdrant-client>=1.14.0",
+	"fastembed>=0.7.4",
 	"sentence-transformers>=2.3.0",
 	"langchain>=0.1.0",
 	"langchain-community>=0.0.13",
@@ -39,26 +40,6 @@ dependencies = [
 	"uuid-utils>=0.12.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-	"pytest>=8.0.0",
-	"pytest-asyncio>=0.23.0",
-	"pytest-cov>=4.1.0",
-	"black>=24.1.0",
-	"ruff>=0.2.0",
-	"mypy>=1.8.0",
-	"httpx-ws>=0.5.0",
-]
-openai = [
-    "openai>=2.14.0",
-]
-anthropic = [
-    "anthropic>=0.75.0",
-]
-fastembed = [
-    "fastembed>=0.7.4",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -69,23 +50,26 @@ packages = ["app"]
 [tool.hatch.build.targets.sdist]
 include = ["/app", "/tests"]
 
-[tool.black]
-line-length = 120
-target-version = ["py313"]
-
 [tool.ruff]
 line-length = 120
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
+select = ["E", "F", "I", "N"]
 ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.mypy]
 python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["structlog", "structlog.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -94,7 +78,6 @@ pythonpath = ["."]
 
 [dependency-groups]
 dev = [
-	"black>=25.12.0",
 	"httpx-ws>=0.8.2",
 	"mypy>=1.19.1",
 	"pytest>=9.0.2",

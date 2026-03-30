@@ -6,10 +6,10 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Project Overview](#project-overview)
-- [Architecture](#architecture)
+- [Architecture](#architecture-pattern)
 - [Completed Work](#completed-work)
 - [In Progress](#in-progress)
 - [Known Issues](#known-issues)
@@ -19,7 +19,7 @@
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 **MPMB-Copilot** is a RAG-powered AI assistant for developing automation code for MorePurpleMoreBetter's D&D 5e Character Record Sheet using Adobe Acrobat JavaScript (ECMAScript 5).
 
@@ -42,7 +42,7 @@ User Query → FastAPI → RAG Engine → Vector Search (Qdrant) → LLM → Res
 
 ---
 
-## ✅ Completed Work
+## Completed Work
 
 ### 1. Project Infrastructure ✓
 
@@ -188,7 +188,7 @@ User Query → FastAPI → RAG Engine → Vector Search (Qdrant) → LLM → Res
 
 ---
 
-## 🚧 In Progress
+## In Progress
 
 ### Current Focus: Qdrant Vector Database Setup
 
@@ -209,7 +209,7 @@ User Query → FastAPI → RAG Engine → Vector Search (Qdrant) → LLM → Res
 
 ---
 
-## ⚠️ Known Issues
+## Known Issues
 
 ### 1. Qdrant Data Mounting (PRIORITY)
 
@@ -228,9 +228,8 @@ User Query → FastAPI → RAG Engine → Vector Search (Qdrant) → LLM → Res
 **Current Configuration:**
 
 ```yaml
-volumes:
-  qdrant_storage:/qdrant/storage
-  qdrant_snapshots:/qdrant/snapshots
+volumes: qdrant_storage:/qdrant/storage
+    qdrant_snapshots:/qdrant/snapshots
 ```
 
 **Next Steps:**
@@ -277,68 +276,68 @@ python scripts/chunk_mpmb.py
 
 ---
 
-## 🎯 Next Steps
+## Next Steps
 
 ### Immediate (This Session)
 
 1. **Fix Qdrant Volume Mounting**
-   - [ ] Verify current volume configuration
-   - [ ] Test write permissions
-   - [ ] Test data persistence
-   - [ ] Document working setup
+    - [ ] Verify current volume configuration
+    - [ ] Test write permissions
+    - [ ] Test data persistence
+    - [ ] Document working setup
 
 2. **Verify MPMB Data Pipeline**
-   - [ ] Clone MPMB repository to `data/mpmb_source/`
-   - [ ] Run chunking script: `python scripts/chunk_mpmb.py`
-   - [ ] Verify chunked JSON files created
-   - [ ] Verify chunk quality
+    - [ ] Clone MPMB repository to `data/mpmb_source/`
+    - [ ] Run chunking script: `python scripts/chunk_mpmb.py`
+    - [ ] Verify chunked JSON files created
+    - [ ] Verify chunk quality
 
 3. **Test Full Indexing Flow**
-   - [ ] Start all containers: `docker-compose up -d`
-   - [ ] Call `POST /api/index` endpoint
-   - [ ] Verify vectors uploaded to Qdrant
-   - [ ] Verify collection has correct vector count
-   - [ ] Test persistence across container restart
+    - [ ] Start all containers: `docker-compose up -d`
+    - [ ] Call `POST /api/index` endpoint
+    - [ ] Verify vectors uploaded to Qdrant
+    - [ ] Verify collection has correct vector count
+    - [ ] Test persistence across container restart
 
 ### Short Term (Next 1-2 Days)
 
 1. **Implement RAG Retrieval**
-   - [ ] Create `app/core/retriever.py`
-   - [ ] Implement vector search
-   - [ ] Implement context assembly
-   - [ ] Add similarity threshold filtering
+    - [ ] Create `app/core/retriever.py`
+    - [ ] Implement vector search
+    - [ ] Implement context assembly
+    - [ ] Add similarity threshold filtering
 
 2. **Implement LLM Integration**
-   - [ ] Create `app/services/llm_client.py`
-   - [ ] Implement Anthropic Claude client
-   - [ ] Implement OpenAI client
-   - [ ] Implement Ollama client (optional)
-   - [ ] Add provider switching logic
+    - [ ] Create `app/services/llm_client.py`
+    - [ ] Implement Anthropic Claude client
+    - [ ] Implement OpenAI client
+    - [ ] Implement Ollama client (optional)
+    - [ ] Add provider switching logic
 
 3. **Complete Chat Endpoint**
-   - [ ] Replace placeholder in `app/api/chat.py`
-   - [ ] Integrate RAG retrieval
-   - [ ] Integrate LLM generation
-   - [ ] Add streaming support
-   - [ ] Track tokens and metadata
+    - [ ] Replace placeholder in `app/api/chat.py`
+    - [ ] Integrate RAG retrieval
+    - [ ] Integrate LLM generation
+    - [ ] Add streaming support
+    - [ ] Track tokens and metadata
 
 ### Medium Term (Next Week)
 
 1. **Session Persistence**
-   - [ ] Create `app/services/db_session.py`
-   - [ ] Implement session CRUD
-   - [ ] Implement message CRUD
-   - [ ] Link RAG retrievals to messages
+    - [ ] Create `app/services/db_session.py`
+    - [ ] Implement session CRUD
+    - [ ] Implement message CRUD
+    - [ ] Link RAG retrievals to messages
 
 2. **Testing & Documentation**
-   - [ ] Write integration tests
-   - [ ] Test end-to-end flow
-   - [ ] Document API endpoints
-   - [ ] Create usage examples
+    - [ ] Write integration tests
+    - [ ] Test end-to-end flow
+    - [ ] Document API endpoints
+    - [ ] Create usage examples
 
 ---
 
-## 📅 Development Roadmap
+## Development Roadmap
 
 ### Phase 0: Setup ✅ COMPLETE
 
@@ -393,7 +392,7 @@ python scripts/chunk_mpmb.py
 
 ---
 
-## 📖 Quick Reference
+## Quick Reference
 
 ### Directory Structure
 
@@ -534,7 +533,7 @@ open http://localhost:6333/dashboard
 
 ---
 
-## 🔍 Current State Summary
+## Current State Summary
 
 ### What Works ✅
 
@@ -564,7 +563,7 @@ open http://localhost:6333/dashboard
 
 ---
 
-## 💡 Context for Future AI Conversations
+## Context for Future AI Conversations
 
 ### Project State
 
@@ -598,7 +597,7 @@ This is an **active development project** in the early stages (Phase 2). The arc
 
 ---
 
-## 📞 Getting Help
+## Getting Help
 
 When asking for AI assistance, provide:
 

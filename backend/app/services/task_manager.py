@@ -3,20 +3,22 @@
 Provides async task execution for long-running operations like indexing,
 preventing the FastAPI event loop from blocking.
 """
+
 import asyncio
 import logging
-from typing import Dict, Any, Callable, Optional
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any, Callable, Dict, Optional
 from uuid import uuid4
-from dataclasses import dataclass, asdict
-from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
 
 class TaskStatus(str, Enum):
     """Task execution status"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -27,6 +29,7 @@ class TaskStatus(str, Enum):
 @dataclass
 class TaskInfo:
     """Information about a background task"""
+
     id: str
     name: str
     status: TaskStatus
@@ -42,10 +45,10 @@ class TaskInfo:
         """Convert to dictionary for JSON serialization"""
         data = asdict(self)
         # Convert datetimes to ISO format
-        for field in ['created_at', 'started_at', 'completed_at']:
+        for field in ["created_at", "started_at", "completed_at"]:
             if data[field]:
                 data[field] = data[field].isoformat()
-        data['status'] = self.status.value
+        data["status"] = self.status.value
         return data
 
 
@@ -65,13 +68,7 @@ class TaskManager:
         self.active_tasks: Dict[str, asyncio.Task] = {}
         logger.info(f"TaskManager initialized with {max_workers} workers")
 
-    async def submit_task(
-        self,
-        name: str,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> str:
+    async def submit_task(self, name: str, func: Callable, *args, **kwargs) -> str:
         """Submit a background task for execution
 
         Args:
@@ -92,30 +89,17 @@ class TaskManager:
         task_id = str(uuid4())
 
         # Create task info
-        task_info = TaskInfo(
-            id=task_id,
-            name=name,
-            status=TaskStatus.PENDING,
-            created_at=datetime.now(timezone.utc)
-        )
+        task_info = TaskInfo(id=task_id, name=name, status=TaskStatus.PENDING, created_at=datetime.now(timezone.utc))
         self.tasks[task_id] = task_info
 
         # Create and start async task
-        task = asyncio.create_task(
-            self._run_task(task_id, func, *args, **kwargs)
-        )
+        task = asyncio.create_task(self._run_task(task_id, func, *args, **kwargs))
         self.active_tasks[task_id] = task
 
         logger.info(f"Task submitted: {name} (id: {task_id})")
         return task_id
 
-    async def _run_task(
-        self,
-        task_id: str,
-        func: Callable,
-        *args,
-        **kwargs
-    ):
+    async def _run_task(self, task_id: str, func: Callable, *args, **kwargs):
         """Internal: Execute task in thread pool"""
         task_info = self.tasks[task_id]
 
@@ -127,13 +111,7 @@ class TaskManager:
 
             # Run blocking function in thread pool
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                self.executor,
-                func,
-                task_id,
-                *args,
-                **kwargs
-            )
+            result = await loop.run_in_executor(self.executor, func, task_id, *args, **kwargs)
 
             # Task completed successfully
             task_info.status = TaskStatus.COMPLETED
@@ -181,19 +159,10 @@ class TaskManager:
         Returns:
             List of TaskInfo objects sorted by creation time
         """
-        sorted_tasks = sorted(
-            self.tasks.values(),
-            key=lambda t: t.created_at,
-            reverse=True
-        )
+        sorted_tasks = sorted(self.tasks.values(), key=lambda t: t.created_at, reverse=True)
         return sorted_tasks[:limit]
 
-    def update_progress(
-        self,
-        task_id: str,
-        progress: float,
-        message: str = ""
-    ):
+    def update_progress(self, task_id: str, progress: float, message: str = ""):
         """Update task progress (call from within task function)
 
         Args:
@@ -235,7 +204,8 @@ class TaskManager:
         cutoff = datetime.now(timezone.utc).timestamp() - (max_age_hours * 3600)
 
         to_remove = [
-            task_id for task_id, info in self.tasks.items()
+            task_id
+            for task_id, info in self.tasks.items()
             if info.created_at.timestamp() < cutoff
             and info.status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
         ]

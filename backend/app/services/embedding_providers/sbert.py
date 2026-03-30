@@ -1,5 +1,6 @@
 from typing import List
 
+
 class SBERTProvider:
     def __init__(self, model: str):
         self.model_name = model

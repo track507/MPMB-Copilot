@@ -1,5 +1,7 @@
 # Data Directory - Exclude all generated/downloaded content
 data/mpmb_source/
+data/mpmb_source_2024/
+data/imports_source/
 data/chunked_output/
 data/adobe_docs/
 data/index_cache/
@@ -508,6 +510,7 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+.uv-cache/
 
 # PyPI configuration file
 .pypirc
