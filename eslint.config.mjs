@@ -5,7 +5,18 @@ import js from "@eslint/js";
 export default [
 	// Global ignores
 	{
-		ignores: ["**/.git/**", "**/*.min.js", "backend/.venv/**", "backend/.ruff_cache/**", "data/**", "logs/**", "node_modules/**"],
+		ignores: [
+			"**/.git/**",
+			"**/*.min.js",
+			".uv-cache/**",
+			"backend/.venv/**",
+			"backend/.ruff_cache/**",
+			"coverage/**",
+			"data/**",
+			"htmlcov/**",
+			"logs/**",
+			"node_modules/**",
+		],
 	},
 
 	// Base recommended rules
