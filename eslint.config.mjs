@@ -1,6 +1,7 @@
 // ESLint Flat Config for Adobe Acrobat JavaScript (ECMAScript 5)
 // Adobe PDF scripting uses ES5 with proprietary extensions
 import js from "@eslint/js";
+import globals from "globals";
 
 export default [
 	// Global ignores
@@ -266,6 +267,18 @@ export default [
 					message: "Object property shorthand is not available in ES5. Use full property syntax.",
 				},
 			],
+		},
+	},
+
+	// Ignore the index script.
+	{
+		files: ["**/*.mjs"],
+		languageOptions: {
+			ecmaVersion: "latest",
+			sourceType: "module",
+			globals: {
+				...globals.node,
+			},
 		},
 	},
 ];
