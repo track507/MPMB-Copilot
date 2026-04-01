@@ -464,7 +464,7 @@ Your existing PowerShell scripts are thorough. Add:
 
 **6b. Simplified Docker Compose**
 
-- All services start with `docker-compose up -d`
+- All services start with `docker compose up -d`
 - Backend auto-indexes on first startup if Qdrant is empty
 - Frontend auto-connects to backend
 - No manual steps required after initial setup

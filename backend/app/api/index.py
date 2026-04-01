@@ -1,13 +1,15 @@
 """Indexing API endpoints (Non-blocking version)"""
 
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.config import config
 from app.model.index import IndexRequest, IndexResponse, IndexStatus
+from app.services.index_status_store import index_status_store
 from app.services.indexer import indexing_service
-from app.services.task_manager import task_manager
+from app.services.task_manager import TaskStatus, task_manager
 from app.services.vector_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,26 @@ async def _get_ready_store():
     if await store.connect():
         return store
     return None
+
+
+def _parse_last_updated(value: object) -> datetime | None:
+    """Parse a persisted ISO timestamp into a datetime object."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        logger.warning(f"Invalid last_updated timestamp in index metadata: {value}")
+        return None
+
+
+def _has_active_index_task() -> bool:
+    """Return True if a background indexing task is currently pending or running."""
+    return any(
+        task.name == "index_all_chunks" and task.status in {TaskStatus.PENDING, TaskStatus.RUNNING}
+        for task in task_manager.tasks.values()
+    )
 
 
 @router.get(
@@ -61,13 +83,20 @@ async def get_index_status():
             )
 
         points_count = collection_info.get("points_count", 0)
-        index_status = "ready" if points_count > 0 else "empty"
+        metadata = index_status_store.load()
+        if not metadata and points_count > 0:
+            metadata = index_status_store.rebuild_from_chunked_output(total_vectors=points_count, status="ready")
+
+        if _has_active_index_task():
+            index_status = "indexing"
+        else:
+            index_status = "ready" if points_count > 0 else "empty"
 
         return IndexStatus(
             collection_name=config.qdrant_collection,
             total_vectors=points_count,
-            indexed_files=0,  # TODO: track in database
-            last_updated=None,  # TODO: track in database
+            indexed_files=int(metadata.get("indexed_files", 0)),
+            last_updated=_parse_last_updated(metadata.get("last_updated")),
             status=index_status,
         )
 
@@ -176,6 +205,7 @@ async def clear_index():
             )
 
         logger.info(f"Collection '{config.qdrant_collection}' cleared")
+        index_status_store.clear()
 
         return {
             "status": "success",

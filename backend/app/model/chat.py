@@ -34,6 +34,7 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature for generation")
     max_tokens: Optional[int] = Field(None, gt=0, le=8000, description="Maximum tokens to generate")
     include_source: bool = Field(True, description="Include source code references")
+    edition: Optional[str] = Field(None, description="D&D edition (2014/2024)")
 
 
 class ChatResponse(BaseModel):

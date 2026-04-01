@@ -4,11 +4,12 @@ Single source of truth for all application configuration.
 Import `config` from this module anywhere in the app.
 """
 
+import json
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Config(BaseSettings):
@@ -29,7 +30,7 @@ class Config(BaseSettings):
 
     # API Settings
     api_prefix: str = "/api"
-    allowed_origins: list[str] = Field(
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:3000",
             "http://localhost:5000",
@@ -116,6 +117,31 @@ class Config(BaseSettings):
                 return True
             if normalized in {"release", "prod", "production"}:
                 return False
+        return value
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def normalize_allowed_origins(cls, value: object) -> object:
+        """Accept ALLOWED_ORIGINS as either JSON or comma-separated text."""
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return []
+
+            if normalized.startswith("["):
+                try:
+                    decoded = json.loads(normalized)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(decoded, list):
+                        return [str(item).strip() for item in decoded if str(item).strip()]
+
+            return [origin.strip() for origin in normalized.split(",") if origin.strip()]
+
+        if isinstance(value, (list, tuple, set)):
+            return [str(item).strip() for item in value if str(item).strip()]
+
         return value
 
     @property

@@ -2,8 +2,8 @@ services:
     # PostgreSQL Database for Session Persistence
     postgres:
         build:
-            context: ./scripts
-            dockerfile: Dockerfile.postgres
+            context: ./docker/postgres
+            dockerfile: Dockerfile
         container_name: mpmb-postgres
         ports:
             - "5432:5432"
@@ -49,7 +49,7 @@ services:
     backend:
         build:
             context: .
-            dockerfile: ./backend/Dockerfile
+            dockerfile: ./docker/backend/Dockerfile
             args:
                 PYTHON_VERSION: "3.13"
         container_name: mpmb-backend

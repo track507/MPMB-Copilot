@@ -88,17 +88,33 @@ class Settings:
         default_factory=lambda: dict(_DEFAULT_TIER_BUDGETS),
     )
 
-    # Extended thinking + tools
+    # Tool use (Phase 2 - defaults to off)
     enable_tool_use: bool = False
+    """Allow the LLM to call search tools for additional context."""
+
     max_tool_calls: int = 5
+    """Safety cap on tool calls per query."""
+
+    tool_search_limit: int = 5
+    """Max chunks returned per tool call."""
+
+    # Extended thinking (Anthropic only)
     enable_extended_thinking: bool = False
+    """Enable deeper reasoning (uses more tokens, better for complex queries)."""
+
     thinking_budget_tokens: int = 4000
+    """Max tokens the model can use for internal reasoning."""
+
+    # System prompt
+    system_prompt: Optional[str] = None
+    """Custom system prompt override.  When set, replaces the built-in
+    default in prompts.py.  Editable from the frontend settings screen."""
 
     # Internal bookkeeping (not serialized)
     _file_path: Optional[Path] = field(default=None, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    # * Lifecycle
+    # Lifecycle
     @classmethod
     def from_config(cls, config_module: Any = None) -> "Settings":
         """Create a Settings instance using config.py defaults.
@@ -121,6 +137,8 @@ class Settings:
             max_tool_calls=getattr(config_module, "max_tool_calls", cls.max_tool_calls),
             enable_extended_thinking=getattr(config_module, "enable_extended_thinking", cls.enable_extended_thinking),
             thinking_budget_tokens=getattr(config_module, "thinking_budget_tokens", cls.thinking_budget_tokens),
+            tool_search_limit=getattr(config_module, "tool_search_limit", cls.tool_search_limit),
+            system_prompt=getattr(config_module, "system_prompt", cls.system_prompt),
         )
 
         # Resolve JSON file path

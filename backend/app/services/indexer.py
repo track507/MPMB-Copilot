@@ -19,11 +19,13 @@ Usage:
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.config import config
 from app.services.embeddings import embedding_service
+from app.services.index_status_store import index_status_store
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,27 @@ class IndexingService:
 
             task_manager.update_progress(task_id, progress, message)
 
+    def _collect_source_keys(self, chunks: list[dict[str, Any]]) -> set[str]:
+        """Build stable identifiers for unique source files represented by chunks."""
+        source_keys: set[str] = set()
+
+        for chunk in chunks:
+            source_file = str(chunk.get("source_file", "")).strip()
+            if not source_file:
+                continue
+
+            source_keys.add(
+                "::".join(
+                    [
+                        str(chunk.get("source_repo", "")).strip(),
+                        str(chunk.get("edition", "")).strip(),
+                        source_file,
+                    ]
+                )
+            )
+
+        return source_keys
+
     # =================================================================
     # Single file indexing
     # =================================================================
@@ -87,6 +110,7 @@ class IndexingService:
 
         logger.info(f"Loaded {len(chunks)} chunks from {json_path.name}")
         self._update_progress(task_id, 0.1, f"Loaded {len(chunks)} chunks from {json_path.name}")
+        source_keys = self._collect_source_keys(chunks)
 
         if not chunks:
             return {
@@ -94,6 +118,7 @@ class IndexingService:
                 "embeddings_generated": 0,
                 "points_uploaded": 0,
                 "source_file": json_path.name,
+                "_source_keys": [],
             }
 
         # Generate dense embeddings in batches
@@ -132,6 +157,7 @@ class IndexingService:
             "embeddings_generated": len(all_embeddings),
             "points_uploaded": points_uploaded,
             "source_file": json_path.name,
+            "_source_keys": sorted(source_keys),
         }
 
     # =================================================================
@@ -167,15 +193,17 @@ class IndexingService:
             )
 
         logger.info(f"Found {len(json_files)} chunk files to index")
-        self._update_progress(task_id, 0.05, f"Found {len(json_files)} files to index")
+        self._update_progress(task_id, 0.05, f"Found {len(json_files)} chunk files to index")
 
         results = []
         total_files = len(json_files)
+        indexed_source_keys: set[str] = set()
 
         for i, json_file in enumerate(json_files, 1):
             logger.info(f"Indexing file {i}/{total_files}: {json_file.name}")
 
             result = self.index_file(json_file, task_id=None)  # Don't double-report
+            indexed_source_keys.update(result.pop("_source_keys", []))
             results.append(result)
 
             # Update overall progress
@@ -183,21 +211,31 @@ class IndexingService:
             self._update_progress(
                 task_id,
                 progress,
-                f"Indexed {i}/{total_files} files ({result['points_uploaded']} vectors from {json_file.name})",
+                f"Indexed {i}/{total_files} chunk files ({result['points_uploaded']} vectors from {json_file.name})",
             )
 
         total_chunks = sum(r["chunks_loaded"] for r in results)
         total_uploaded = sum(r["points_uploaded"] for r in results)
+        indexed_files = len(indexed_source_keys)
+        completed_at = datetime.now(timezone.utc).isoformat()
 
-        self._update_progress(task_id, 1.0, f"Complete - {total_uploaded} vectors from {len(results)} files")
+        index_status_store.save(
+            indexed_files=indexed_files,
+            total_vectors=total_uploaded,
+            status="ready",
+            last_updated=completed_at,
+        )
+
+        self._update_progress(task_id, 1.0, f"Complete - {total_uploaded} vectors from {len(results)} chunk files")
 
         logger.info(f"Indexing complete: {total_uploaded} vectors from {len(results)} files ({total_chunks} chunks)")
 
         return {
             "status": "completed",
-            "files_processed": len(results),
+            "files_processed": indexed_files,
             "total_chunks_loaded": total_chunks,
             "total_points_uploaded": total_uploaded,
+            "last_updated": completed_at,
             "details": results,
         }
 
