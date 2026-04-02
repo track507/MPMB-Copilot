@@ -74,6 +74,7 @@ Thumbs.db
 **/Thumbs.db
 
 # Data directories that are large or generated at runtime
+# All runtime data is provided via volume mounts in docker-compose.yml
 data/mpmb_source
 data/mpmb_source/
 data/adobe_docs
@@ -82,6 +83,8 @@ data/index_cache
 data/index_cache/
 data/uploads
 data/uploads/
+data/chunked_output
+data/chunked_output/
 
 # Scripts directory (except what's needed for postgres init)
 scripts/chunk_mpmb.py

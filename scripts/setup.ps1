@@ -447,6 +447,8 @@ Write-Host ""
 
 Ensure-Directory -Path $dataDir
 Ensure-Directory -Path $chunkedOutputDir
+Ensure-Directory -Path (Join-Path $dataDir "index_cache")
+Ensure-Directory -Path (Join-Path $dataDir "uploads")
 
 Sync-GitRepository `
 	-Name "MPMB main repo (2014)" `

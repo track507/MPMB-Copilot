@@ -46,6 +46,14 @@ def _has_active_index_task() -> bool:
     )
 
 
+def _get_active_index_task():
+    """Return the active indexing task, if any."""
+    for task in task_manager.tasks.values():
+        if task.name == "index_all_chunks" and task.status in {TaskStatus.PENDING, TaskStatus.RUNNING}:
+            return task
+    return None
+
+
 @router.get(
     "/index/status",
     response_model=IndexStatus,
@@ -131,11 +139,23 @@ async def trigger_indexing(request: IndexRequest = IndexRequest()):
         if store is None:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Vector store is not available")
 
+        active_task = _get_active_index_task()
+        if active_task is not None:
+            logger.info(f"Indexing already in progress: {active_task.id}")
+            return IndexResponse(
+                status="in_progress",
+                message=f"Indexing is already in progress. Poll GET /api/tasks/{active_task.id} for status.",
+                files_processed=0,
+                chunks_created=0,
+                vectors_uploaded=0,
+                task_id=active_task.id,
+            )
+
+        collection_info = await store.collection_info()
+        points_count = collection_info.get("points_count", 0)
+
         # Check if indexing already exists and force_reindex is False
         if not request.force_reindex:
-            collection_info = await store.collection_info()
-            points_count = collection_info.get("points_count", 0)
-
             if points_count > 0:
                 return IndexResponse(
                     status="completed",
@@ -145,6 +165,15 @@ async def trigger_indexing(request: IndexRequest = IndexRequest()):
                     vectors_uploaded=points_count,
                     task_id=None,
                 )
+        else:
+            logger.info(f"Force reindex requested; clearing collection '{config.qdrant_collection}' first")
+            cleared = await store.delete_collection()
+            if not cleared:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to clear vector collection before force reindex",
+                )
+            index_status_store.clear()
 
         # Submit indexing task to background task manager
         task_id = await task_manager.submit_task(name="index_all_chunks", func=indexing_service.index_all_chunks)

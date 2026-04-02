@@ -59,9 +59,6 @@ The repo is no longer blocked in setup.
 - **Tool use and extended thinking are scaffolded, not implemented**
   - the settings exist in `backend/app/settings.py`, but provider calls do not yet use them
 
-- **The backend image snapshots chunked output at build time**
-  - if you regenerate chunks and want the Dockerized backend to use them, rebuild the backend image or rerun `npm run setup:docker`
-
 - **Docker health and app health may disagree**
   - on Windows, Docker may occasionally show Qdrant as unhealthy even while `/api/health` reports Qdrant as healthy and queries succeed
 
@@ -113,6 +110,24 @@ Docs are available at:
 http://localhost:8000/api/docs
 ```
 
+### Updating Content After Setup
+
+If you change source repositories or want to refresh the index:
+
+1. Re-run the chunker:
+
+```bash
+npm run chunk
+```
+
+1. Reindex (backend must be running):
+
+```bash
+npm run index
+```
+
+No Docker rebuild is needed. The backend reads chunk files from a volume mount.
+
 ## Local Backend Development
 
 If you want to run the backend outside Docker:
@@ -129,32 +144,28 @@ Useful note:
 ## Common Commands
 
 ```bash
-# clone/update repos + run the chunker
-npm run setup
+# First-time setup
+npm run setup              # clone/update repos + run the chunker
+npm run setup:docker       # build and start containers
+npm run setup:index        # wait for backend health, then index
+npm run setup:all          # all three in sequence
 
-# build and start containers
-npm run setup:docker
+# Day-to-day content updates
+npm run chunk              # re-run the chunker (no rebuild needed)
+npm run index              # reindex against the running backend
+npm run index:if-empty     # index only if Qdrant has no vectors
 
-# wait for backend health and trigger indexing
-npm run setup:index
-
-# full setup flow
-npm run setup:all
-
-# rerun the chunker only
-npm run chunk
-
-# local FastAPI dev server
-npm run dev
+# Local development
+npm run dev                # local FastAPI dev server (outside Docker)
 
 # Docker lifecycle
-npm run docker:up
-npm run docker:down
-npm run docker:logs
+npm run docker:up          # start containers (no rebuild)
+npm run docker:down        # stop containers
+npm run docker:logs        # tail backend logs
 
-# quality gates
-npm run check
-npm run check:full
+# Quality gates
+npm run check              # lint + format check + tests
+npm run check:full         # above + mypy type checking
 ```
 
 ## API Surface
@@ -205,29 +216,30 @@ Initial Setup
 
 ```txt
 mpmb-copilot/
-├── backend/
-│   ├── app/
-│   │   ├── api/                 # health, chat, index, task endpoints
-│   │   ├── core/                # query analysis, intent, prompts, retriever, rag engine
-│   │   ├── model/               # Pydantic request/response models
-│   │   ├── services/            # embeddings, indexing, LLM client, vector store, task manager
-│   │   ├── config.py            # environment-backed app config
-│   │   └── settings.py          # hot-reloadable behavioral settings
-│   ├── pyproject.toml
-│   └── uv.lock
-├── data/                        # gitignored runtime data and chunk output
-├── docker/
-│   ├── backend/
-│   │   └── Dockerfile
-│   └── postgres/
-│       ├── Dockerfile
-│       └── init.sql
-├── scripts/
-│   ├── chunk_mpmb.py
-│   ├── setup.ps1
-│   └── wait-and-index.mjs
-├── docker-compose.yml
-└── package.json
+├backend/
+│   ├app/
+│   │   ├api/                 # health, chat, index, task endpoints
+│   │   ├core/                # query analysis, intent, prompts, retriever, rag engine
+│   │   ├model/               # Pydantic request/response models
+│   │   ├services/            # embeddings, indexing, LLM client, vector store, task manager
+│   │   ├config.py            # environment-backed app config
+│   │   └settings.py          # hot-reloadable behavioral settings
+│   ├pyproject.toml
+│   └uv.lock
+├data/                        # gitignored runtime data and chunk output
+├docker/
+│   ├backend/
+│   │   └Dockerfile
+│   └postgres/
+│       ├Dockerfile
+│       └init.sql
+├scripts/
+│   ├chunk_mpmb.py
+│   ├index.mjs
+│   ├setup.ps1
+│   └wait-and-index.mjs
+├docker-compose.yml
+└package.json
 ```
 
 ## Roadmap
@@ -241,12 +253,15 @@ mpmb-copilot/
 - initial RAG engine
 - streaming chat endpoint
 - multi-provider LLM client
+- volume-mounted chunk data (no image rebuild needed for content updates)
+- standalone reindex command (`npm run index`)
 
 ### Next Priorities
 
 - wire session persistence into the chat flow
 - return richer per-source citations in chat responses
 - connect tool use and extended thinking settings to provider calls
+- add source tracking and deterministic vector IDs
 - add more tests and end-to-end verification
 - continue frontend and persistence work
 

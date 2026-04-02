@@ -18,6 +18,8 @@
 		"docker:down": "docker compose down",
 		"docker:logs": "docker compose logs -f backend",
 		"chunk": "uv --cache-dir .uv-cache run --no-sync --project backend python scripts/chunk_mpmb.py",
+		"index": "node ./scripts/index.mjs --force",
+		"index:if-empty": "node ./scripts/index.mjs",
 		"lint": "npm run lint:js && npm run lint:py && npm run lint:md",
 		"lint:js": "eslint .",
 		"lint:js:fix": "eslint . --fix",

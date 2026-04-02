@@ -1,3 +1,5 @@
+import { syncChunksToDocker } from "./docker-sync.mjs";
+
 const BASE_URL = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/+$/, "");
 const HEALTH_URL = `${BASE_URL}/api/health`;
 const INDEX_URL = `${BASE_URL}/api/index`;
@@ -74,6 +76,13 @@ async function waitForTask(taskId, maxAttempts = 240, delayMs = 3000) {
 }
 
 async function triggerIndex() {
+	const syncResult = syncChunksToDocker();
+	if (syncResult.skipped) {
+		console.log(`Skipping Docker chunk sync: ${syncResult.reason}.`);
+	} else {
+		console.log(`Synced ${syncResult.fileCount} chunk files into ${syncResult.containerName}.`);
+	}
+
 	console.log(`Triggering index at ${INDEX_URL}...`);
 
 	const result = await fetchJson(INDEX_URL, {

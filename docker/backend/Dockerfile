@@ -39,13 +39,14 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 
 # Create logs directory
-RUN mkdir -p /app/logs /app/data
+RUN mkdir -p /app/logs /app/data/chunked_output /app/data/index_cache /app/data/uploads
 
 # Copy application code (from backend/ subdirectory)
 COPY backend/app /app/app
 
-# Copy data directory with chunked output (from project root)
-COPY data/chunked_output /app/data/chunked_output
+# Seed small runtime data files that the app expects to exist.
+COPY data/intent_examples.json /app/data/intent_examples.json
+COPY data/settings.json /app/data/settings.json
 
 EXPOSE 8000
 

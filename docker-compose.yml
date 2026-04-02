@@ -57,6 +57,8 @@ services:
             - "8000:8000"
         volumes:
             - backend_logs:/app/logs
+            - backend_index_cache:/app/data/index_cache
+            - backend_uploads:/app/data/uploads
         environment:
             # Application
             - ENVIRONMENT=development
@@ -91,52 +93,6 @@ services:
         networks:
             - mpmb-network
 
-    # C# SignalR Hub (.NET 10)
-    # hub:
-    #   build:
-    #     context: ./hub
-    #     dockerfile: Dockerfile
-    #     args:
-    #       DOTNET_VERSION: "10.0"
-    #   container_name: mpmb-hub
-    #   ports:
-    #     - "5000:5000"
-    #   volumes:
-    #     - hub_logs:/app/logs
-    #   environment:
-    #     - ASPNETCORE_ENVIRONMENT=Development
-    #     - ASPNETCORE_URLS=http://+:5000
-    #     - PythonBackend__BaseUrl=http://backend:8000
-    #     - PostgreSQL__ConnectionString=Host=postgres;Port=5432;Database=${POSTGRES_DB:-mpmb_copilot};Username=${POSTGRES_USER:-mpmb_user};Password=${POSTGRES_PASSWORD:-mpmb_password}
-    #     - AllowedOrigins__0=http://localhost:3000
-    #     - AllowedOrigins__1=http://localhost:5001
-    #   depends_on:
-    #     - backend
-    #     - postgres
-    #   restart: unless-stopped
-    #   networks:
-    #     - mpmb-network
-
-    # Blazor WebAssembly Frontend (.NET 10)
-    # frontend:
-    #   build:
-    #     context: ./frontend
-    #     dockerfile: Dockerfile
-    #     args:
-    #       DOTNET_VERSION: "10.0"
-    #   container_name: mpmb-frontend
-    #   ports:
-    #     - "3000:80"
-    #   environment:
-    #     - ASPNETCORE_ENVIRONMENT=Development
-    #     - HubUrl=http://localhost:5000/chathub
-    #     - ApiUrl=http://localhost:8000/api
-    #   depends_on:
-    #     - hub
-    #   restart: unless-stopped
-    #   networks:
-    #     - mpmb-network
-
 networks:
     mpmb-network:
         driver: bridge
@@ -161,6 +117,14 @@ volumes:
     backend_logs:
         driver: local
         name: mpmb_backend_logs
+
+    backend_index_cache:
+        driver: local
+        name: mpmb_backend_index_cache
+
+    backend_uploads:
+        driver: local
+        name: mpmb_backend_uploads
 
     hub_logs:
         driver: local
