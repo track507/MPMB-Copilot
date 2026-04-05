@@ -1,6 +1,5 @@
 """FastAPI application entry point"""
 
-import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -8,45 +7,53 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import chat, health, index, tasks
+from app.api import chat, health, index, sessions, tasks
 from app.config import config
+from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
+from app.services.db import db
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, config.log_level),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
+# Initialize structured logging before anything else
+configure_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events"""
     # Startup
-    logger.info(f"Starting {config.app_name} v{app.version}")
-    logger.info(f"Environment: {config.environment}")
-    logger.info(f"LLM Provider: {config.default_llm_provider}")
-    logger.info(f"Default Model: {config.default_model}")
-    logger.info(f"Vector Store: {config.vector_store}")
-    logger.info(f"Qdrant: {config.qdrant_host}:{config.qdrant_port}")
+    logger.info(
+        "app_starting",
+        app=config.app_name,
+        version=app.version,
+        environment=config.environment,
+        llm_provider=config.default_llm_provider,
+        model=config.default_model,
+        vector_store=config.vector_store,
+        qdrant=f"{config.qdrant_host}:{config.qdrant_port}",
+    )
 
+    # Connect to PostgreSQL
+    try:
+        await db.connect(config.resolved_database_url, echo=config.is_development)
+        logger.info("postgres_connected")
+    except Exception as e:
+        logger.warning("postgres_unavailable", error=str(e))
+
+    # Connect to Qdrant
     store = get_vector_store()
     store_connected = await store.connect()
     if not store_connected:
-        logger.warning("Failed to connect to Qdrant - vector search will not work")
+        logger.warning("qdrant_unavailable")
     else:
-        # Show collection info
         collection_info = await store.collection_info()
-        logger.info(f"Qdrant collection info: {collection_info}")
-    # TODO: Load embedding model
-    # TODO: Verify MPMB source files exist
+        logger.info("qdrant_connected", collection_info=collection_info)
 
     yield
 
     # Shutdown
-    logger.info(f"Shutting down {config.app_name}")
+    logger.info("app_shutting_down", app=config.app_name)
+    await db.disconnect()
     await task_manager.shutdown()
 
 
@@ -61,7 +68,7 @@ app = FastAPI(
     openapi_url=f"{config.api_prefix}/openapi.json",
 )
 
-# CORS Middleware
+# Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins,
@@ -69,13 +76,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception):
     """Handle uncaught exceptions"""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.error("unhandled_exception", error=str(exc), error_type=type(exc).__name__)
     return JSONResponse(
         status_code=500,
         content={
@@ -90,6 +98,7 @@ async def global_exception_handler(request, exc: Exception):
 app.include_router(health.router, prefix=config.api_prefix, tags=["Health"])
 app.include_router(chat.router, prefix=config.api_prefix, tags=["Chat"])
 app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"])
+app.include_router(sessions.router, prefix=config.api_prefix, tags=["Sessions"])
 app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"])
 
 

@@ -10,7 +10,7 @@ The client reads provider selection and behavioral params from
 (infrastructure, restart-required).
 
 Usage:
-    from app.services.llm_client import llm_client
+    from app.services.llm import llm_client
 
     # Non-streaming
     response = await llm_client.generate(messages)
@@ -27,7 +27,6 @@ Usage:
     )
 """
 
-import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
 
@@ -36,9 +35,10 @@ from langchain_core.messages import HumanMessage as LCHumanMessage
 from langchain_core.messages import SystemMessage as LCSystemMessage
 
 from app.config import config
+from app.logger import get_logger
 from app.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # * Response types

@@ -1,14 +1,14 @@
 """Persistent metadata for vector index status."""
 
 import json
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from app.config import config
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 _AUTO_LAST_UPDATED = object()
 
 

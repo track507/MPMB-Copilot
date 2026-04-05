@@ -29,18 +29,18 @@ Usage:
     )
 """
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core.intent import IntentResult, intent_classifier
 from app.core.query_analysis import QueryAnalysis, analyze_query
-from app.services.embeddings import embedding_service
-from app.services.vector_store import get_vector_store
+from app.logger import get_logger
+from app.services.embedding import embedding_service
+from app.services.vector import get_vector_store
 from app.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # * Result types

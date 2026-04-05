@@ -1,10 +1,10 @@
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Protocol
 
 from app.config import config
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EmbeddingProvider(Protocol):
@@ -22,23 +22,23 @@ class EmbeddingService:
         model = config.embedding_model
 
         if backend == "openai":
-            from app.services.embedding_providers.openai import OpenAIEmbeddingProvider
+            from app.services.embedding.providers.openai import OpenAIEmbeddingProvider
 
             return OpenAIEmbeddingProvider(model=model, api_key=config.openai_api_key)
 
         if backend == "ollama":
-            from app.services.embedding_providers.ollama import OllamaEmbeddingProvider
+            from app.services.embedding.providers.ollama import OllamaEmbeddingProvider
 
             return OllamaEmbeddingProvider(model=model, base_url=config.ollama_host)
 
         if backend == "fastembed":
-            from app.services.embedding_providers.fastembed import FastEmbedProvider
+            from app.services.embedding.providers.fastembed import FastEmbedProvider
 
             return FastEmbedProvider(model=model)
 
         if backend == "sbert":
             # Optional/legacy: only install sentence-transformers if you actually use it
-            from app.services.embedding_providers.sbert import SBERTProvider
+            from app.services.embedding.providers.sbert import SBERTProvider
 
             return SBERTProvider(model=model)
 

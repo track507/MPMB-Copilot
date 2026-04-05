@@ -29,17 +29,17 @@ Usage:
         print(event.content, end="", flush=True)
 """
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
 
 from app.core.prompts import prompt_builder
 from app.core.retriever import retriever
-from app.services.llm_client import llm_client
+from app.logger import get_logger
+from app.services.llm import llm_client
 from app.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # * Response types

@@ -5,7 +5,6 @@ preventing the FastAPI event loop from blocking.
 """
 
 import asyncio
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -13,7 +12,9 @@ from enum import Enum
 from typing import Any, Callable, Dict, Optional
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class TaskStatus(str, Enum):

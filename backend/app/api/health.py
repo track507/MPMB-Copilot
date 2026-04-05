@@ -1,15 +1,16 @@
 """Health check endpoint"""
 
-import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, status
 
 from app.config import config
-from app.model.health import HealthResponse, ServiceStatus
-from app.services.vector_store import get_vector_store
+from app.logger import get_logger
+from app.model.schemas.health import HealthResponse, ServiceStatus
+from app.services.db import db
+from app.services.vector import get_vector_store
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -83,9 +84,18 @@ async def health_check():
     llm_status = await check_llm_provider()
     embedding_status = await check_embedding_model()
 
+    # Check PostgreSQL
+    db_healthy = await db.health_check()
+    db_status = ServiceStatus(
+        status="healthy" if db_healthy else "unavailable",
+        message=f"{config.postgres_host}:{config.postgres_port}/{config.postgres_db}"
+        if db_healthy
+        else "Cannot connect",
+    )
+
     # Determine overall status
     overall_status = "healthy"
-    if any(s.status in ["unavailable", "error"] for s in [qdrant_status, llm_status, embedding_status]):
+    if any(s.status in ["unavailable", "error"] for s in [qdrant_status, llm_status, embedding_status, db_status]):
         overall_status = "degraded"
 
     return HealthResponse(
@@ -94,6 +104,7 @@ async def health_check():
         version="0.1.0",
         timestamp=datetime.now(timezone.utc),
         services={
+            "database": {"status": db_status.status, "message": db_status.message or ""},
             "qdrant": {"status": qdrant_status.status, "message": qdrant_status.message or ""},
             "llm_provider": {"status": llm_status.status, "message": llm_status.message or ""},
             "embedding_model": {"status": embedding_status.status, "message": embedding_status.message or ""},

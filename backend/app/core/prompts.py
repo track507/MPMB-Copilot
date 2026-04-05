@@ -27,13 +27,13 @@ Usage:
     # -> list of message dicts ready for LLM client
 """
 
-import logging
 from typing import Optional
 
 from app.core.retriever import RetrievalResult
+from app.logger import get_logger
 from app.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # * Default static system prompt
 DEFAULT_SYSTEM_PROMPT = """\

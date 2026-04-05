@@ -18,16 +18,16 @@ Usage:
 """
 
 import json
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.config import config
-from app.services.embeddings import embedding_service
-from app.services.index_status_store import index_status_store
+from app.logger import get_logger
+from app.services.embedding.service import embedding_service
+from app.services.indexing.status_store import index_status_store
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # * Batch size for embedding generation + upsert
 EMBED_BATCH_SIZE = 128
@@ -47,7 +47,7 @@ class IndexingService:
     def _get_store(self):
         """Lazy-load the vector store (must be connected already)."""
         if self._store is None:
-            from app.services.vector_store import get_vector_store
+            from app.services.vector.store import get_vector_store
 
             self._store = get_vector_store()
         return self._store

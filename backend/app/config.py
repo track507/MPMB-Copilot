@@ -53,6 +53,24 @@ class Config(BaseSettings):
     openai_api_key: Optional[str] = None
     ollama_host: str = "http://localhost:11434"
 
+    # Database
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_user: str = "mpmb_user"
+    postgres_password: str = "mpmb_password"
+    postgres_db: str = "mpmb_copilot"
+    database_url: Optional[str] = None
+
+    @property
+    def resolved_database_url(self) -> str:
+        """Return DATABASE_URL if set, otherwise build from parts."""
+        if self.database_url:
+            return self.database_url
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
     # Vector Store
     # Which store implementation to use: "qdrant" (default), future: "weaviate", "pgvector"
     vector_store: Literal["qdrant"] = "qdrant"

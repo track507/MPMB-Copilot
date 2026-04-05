@@ -1,10 +1,11 @@
-"""Pydantic models and database models"""
+"""Pydantic models and database models.
 
-# API Models
-from app.model.chat import ChatRequest, ChatResponse, ChatStreamChunk
+Re-exports all public symbols so existing ``from app.model import X``
+statements continue to work after the directory reorganization.
+"""
 
-# Database Models
-from app.model.database import (
+# Database ORM Models
+from app.model.orm import (
     Base,
     DocumentChunk,
     File,
@@ -12,67 +13,51 @@ from app.model.database import (
     MessageRetrieval,
     Session,
 )
-from app.model.health import HealthResponse, ServiceStatus
-from app.model.index import IndexRequest, IndexResponse, IndexStatus
 
-# LLM Models
-from app.model.llm import (
-    LLMMessage,
-    LLMProvider,
-    LLMRequest,
-    LLMResponse,
-    LLMStreamChunk,
+# API Schemas
+from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
+from app.model.schemas.health import HealthResponse, ServiceStatus
+from app.model.schemas.index import IndexRequest, IndexResponse, IndexStatus
+from app.model.schemas.session import (
+    MessageOut,
+    SessionCreate,
+    SessionDetailOut,
+    SessionListOut,
+    SessionOut,
+    SessionUpdate,
 )
-
-# RAG Models
-from app.model.rag import (
-    CodeChunk,
-    EmbeddingRequest,
-    EmbeddingResponse,
-    RAGContext,
-    RetrievalMetadata,
-    VectorSearchResult,
-)
-
-# Task Models
-from app.model.task import (
+from app.model.schemas.task import (
     TaskListResponse,
     TaskStatusResponse,
 )
 
 __all__ = [
-    # Health models
-    "HealthResponse",
-    "ServiceStatus",
-    # Chat models
-    "ChatRequest",
-    "ChatResponse",
-    "ChatStreamChunk",
-    # Index models
-    "IndexStatus",
-    "IndexRequest",
-    "IndexResponse",
-    # RAG models
-    "CodeChunk",
-    "EmbeddingRequest",
-    "EmbeddingResponse",
-    "VectorSearchResult",
-    "RAGContext",
-    "RetrievalMetadata",
-    # LLM models
-    "LLMProvider",
-    "LLMMessage",
-    "LLMRequest",
-    "LLMResponse",
-    "LLMStreamChunk",
-    # Database models
+    # ORM models
     "Base",
     "Session",
     "Message",
     "File",
     "DocumentChunk",
     "MessageRetrieval",
-    # Task models
+    # Health
+    "HealthResponse",
+    "ServiceStatus",
+    # Chat
+    "ChatRequest",
+    "ChatResponse",
+    "ChatStreamChunk",
+    # Index
+    "IndexStatus",
+    "IndexRequest",
+    "IndexResponse",
+    # Session
+    "SessionCreate",
+    "SessionUpdate",
+    "SessionOut",
+    "SessionDetailOut",
+    "SessionListOut",
+    "MessageOut",
+    # Task
     "TaskListResponse",
     "TaskStatusResponse",
 ]

@@ -9,19 +9,19 @@ concrete store. Switching stores is a one-line .env change:
     VECTOR_STORE=pgvector   # future
 
 Usage:
-    from app.services.vector_store import get_vector_store
+    from app.services.vector import get_vector_store
     store = get_vector_store()       # returns the configured implementation
     await store.connect()
     await store.upsert_chunks(chunks, embeddings)
     results = await store.hybrid_search(query_text, query_embedding, filters)
 """
 
-import logging
 from typing import Optional, Protocol, runtime_checkable
 
 from app.config import config
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 _store_instance: Optional["VectorStore"] = None
 
 
@@ -132,7 +132,7 @@ def get_vector_store() -> VectorStore:
     store_type = getattr(config, "vector_store", "qdrant")
 
     if store_type == "qdrant":
-        from app.services.qdrant_store import QdrantStore
+        from app.services.vector.qdrant import QdrantStore
 
         _store_instance = QdrantStore()
         return _store_instance

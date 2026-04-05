@@ -28,7 +28,8 @@ class ChatRequest(BaseModel):
     """
 
     message: str = Field(..., min_length=1, max_length=10000, description="User message")
-    conversation_id: Optional[str] = Field(None, description="Conversation ID for context")
+    session_id: Optional[str] = Field(None, description="Session UUID for conversation persistence")
+    conversation_id: Optional[str] = Field(None, description="Deprecated: use session_id instead")
     provider: Optional[str] = Field(None, description="LLM provider (anthropic/openai/ollama)")
     model: Optional[str] = Field(None, description="Specific model to use")
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature for generation")

@@ -15,7 +15,6 @@ Collection schema:
                 source_tier, start_line, end_line, chunk_index, metadata.*
 """
 
-import logging
 from typing import Optional
 from uuid import uuid4
 
@@ -38,8 +37,9 @@ from qdrant_client.models import (
 )
 
 from app.config import config
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Payload fields we create keyword indexes on for fast filtering
 INDEXED_PAYLOAD_FIELDS = {

@@ -29,15 +29,15 @@ Usage with overrides (CLI or testing):
 """
 
 import json
-import logging
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.config import config
+from app.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Constants - lookup tables, not config

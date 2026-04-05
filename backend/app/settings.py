@@ -28,13 +28,14 @@ Usage:
 """
 
 import json
-import logging
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-logger = logging.getLogger(__name__)
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Default tier budgets per intent.
 # Keys are intent names, values set how many chunks to fetch from each tier.

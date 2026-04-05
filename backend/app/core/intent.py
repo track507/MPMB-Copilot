@@ -29,7 +29,6 @@ Usage:
 """
 
 import json
-import logging
 import math
 import re
 from dataclasses import dataclass
@@ -37,9 +36,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from app.logger import get_logger
 from app.settings import settings as dynamic_settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # * Intent enum
@@ -207,7 +207,7 @@ class _CentroidStore:
 
     def _compute_centroids(self) -> dict[QueryIntent, list[float]]:
         """Load examples, embed them, average per intent."""
-        from app.services.embeddings import embedding_service
+        from app.services.embedding import embedding_service
 
         path = self._resolve_path()
         raw = json.loads(path.read_text(encoding="utf-8"))

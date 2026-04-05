@@ -1,18 +1,17 @@
 """Indexing API endpoints (Non-blocking version)"""
 
-import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 
 from app.config import config
-from app.model.index import IndexRequest, IndexResponse, IndexStatus
-from app.services.index_status_store import index_status_store
-from app.services.indexer import indexing_service
+from app.logger import get_logger
+from app.model.schemas.index import IndexRequest, IndexResponse, IndexStatus
+from app.services.indexing import index_status_store, indexing_service
 from app.services.task_manager import TaskStatus, task_manager
-from app.services.vector_store import get_vector_store
+from app.services.vector import get_vector_store
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter()
 
 

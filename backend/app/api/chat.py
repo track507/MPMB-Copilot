@@ -1,63 +1,143 @@
 """Chat endpoint for RAG-powered conversations.
 
-Replaces the placeholder implementation with the full pipeline:
-    request -> rag_engine -> retriever -> prompts -> LLM -> response
+Full pipeline:
+    request -> session load -> rag_engine -> retriever -> prompts -> LLM -> session save -> response
 
 Supports both complete responses (POST /chat) and streaming via
 Server-Sent Events (POST /chat/stream).
 
-Session persistence (loading/saving conversation history from
-PostgreSQL) is stubbed here and will be implemented in the session
-service phase.  For now, each request is stateless - the frontend
-can pass conversation_history in a future request body extension,
-or we wire sessions when the DB layer is ready.
+Session persistence:
+    - If session_id is provided, loads conversation history from PostgreSQL
+    - If session_id is omitted, creates a new session automatically
+    - User and assistant messages are saved after each exchange
+    - Falls back to stateless mode if the database is unavailable
 """
 
-import logging
-from uuid import uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.config import config
 from app.core.rag_engine import rag_engine
-from app.model.chat import ChatRequest, ChatResponse, ChatStreamChunk
+from app.logger import get_logger
+from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
+from app.services.db import db, session_service
 from app.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = APIRouter()
 
 
 # * Helpers
-def _build_source_list(retrieval_info: dict, retrieval_result=None) -> list[dict]:
-    """Build source citations from retrieval metadata.
+def _resolve_session_id(request: ChatRequest) -> str | None:
+    """Get the session ID from request, supporting both old and new field names."""
+    return request.session_id or request.conversation_id
 
-    Returns a compact list of source references for the frontend to
-    display as expandable citations.
+
+async def _load_history(session_id_str: str | None) -> tuple[UUID | None, list[dict]]:
+    """Load conversation history from the session store.
+
+    Returns (resolved_session_uuid, history_list).
+    If DB is unavailable or session_id is None, returns (None, []).
     """
+    if not session_id_str or not db.is_connected:
+        return None, []
+
+    try:
+        session_uuid = UUID(session_id_str)
+        history = await session_service.get_conversation_history(session_uuid)
+        return session_uuid, history
+    except (ValueError, Exception) as e:
+        logger.warning(f"Failed to load session history: {e}")
+        return None, []
+
+
+async def _ensure_session(session_uuid: UUID | None, edition: str | None) -> UUID | None:
+    """Ensure a session exists. Creates one if needed and DB is available."""
+    if not db.is_connected:
+        return None
+
+    if session_uuid:
+        return session_uuid
+
+    try:
+        session = await session_service.create_session(
+            title="New Conversation",
+            edition=edition,
+        )
+        return session.id
+    except Exception as e:
+        logger.warning(f"Failed to create session: {e}")
+        return None
+
+
+async def _save_messages(
+    session_uuid: UUID | None,
+    user_message: str,
+    assistant_content: str,
+    rag_response=None,
+) -> None:
+    """Save user and assistant messages to the session."""
+    if not session_uuid or not db.is_connected:
+        return
+
+    try:
+        # Save user message
+        await session_service.add_message(
+            session_id=session_uuid,
+            role="user",
+            content={"text": user_message},
+        )
+
+        # Save assistant message with LLM metadata
+        kwargs = {}
+        if rag_response:
+            kwargs.update(
+                provider=rag_response.provider,
+                model=rag_response.model,
+                prompt_tokens=rag_response.usage.get("prompt_tokens", 0),
+                completion_tokens=rag_response.usage.get("completion_tokens", 0),
+                total_tokens=rag_response.usage.get("total_tokens", 0),
+                latency_ms=int(rag_response.timing.get("total_ms", 0)),
+                stop_reason=rag_response.stop_reason,
+                meta_data={
+                    "retrieval": rag_response.retrieval_info,
+                    "timing": rag_response.timing,
+                },
+            )
+
+        await session_service.add_message(
+            session_id=session_uuid,
+            role="assistant",
+            content={"text": assistant_content},
+            **kwargs,
+        )
+    except Exception as e:
+        logger.error(f"Failed to save messages: {e}")
+
+
+def _build_sources_from_rag(rag_response) -> list[dict]:
+    """Extract source citations from a RAG response."""
     sources = []
+    retrieval = rag_response.retrieval_info or {}
 
-    # We need the actual chunk data, not just the summary.
-    # The rag_engine returns retrieval_info (summary dict), but we need
-    # the full chunks for source attribution.  For now, we reconstruct
-    # from what's available.  Once session persistence lands, we'll
-    # store and retrieve these properly.
+    auth_count = retrieval.get("authoritative_count", 0)
+    ex_count = retrieval.get("examples_count", 0)
+
+    if auth_count or ex_count:
+        sources.append(
+            {
+                "type": "retrieval_summary",
+                "authoritative_chunks": auth_count,
+                "example_chunks": ex_count,
+                "intent": retrieval.get("intent"),
+                "edition": retrieval.get("edition"),
+                "object_type": retrieval.get("object_type"),
+            }
+        )
+
     return sources
-
-
-async def _load_conversation_history(conversation_id: str | None) -> list[dict]:
-    """Load conversation history from session storage.
-
-    TODO: Implement with session service (Phase 5).
-    For now returns empty - each request is stateless.
-    """
-    if not conversation_id:
-        return []
-
-    # Placeholder: when session service exists, this becomes:
-    # session = await session_service.get_session(conversation_id)
-    # return [{"role": m.role, "content": m.content} for m in session.messages]
-    return []
 
 
 # * POST /chat - complete response
@@ -69,23 +149,16 @@ async def _load_conversation_history(conversation_id: str | None) -> list[dict]:
     description="Send a message and receive AI-generated MPMB code assistance",
 )
 async def chat(request: ChatRequest):
-    """Generate a complete RAG-powered response.
-
-    Pipeline:
-    1. Load conversation history (from session, if provided)
-    2. Retrieve relevant MPMB code chunks (tier-aware)
-    3. Build prompt with static instructions + RAG context
-    4. Generate LLM response (with prompt caching for Anthropic)
-    5. Return response with metadata and source citations
-    """
+    """Generate a complete RAG-powered response with session persistence."""
     try:
-        logger.info(
-            f"Chat request: conversation_id={request.conversation_id} "
-            f"provider={request.provider} edition={request.edition}"
-        )
+        session_id_str = _resolve_session_id(request)
+        logger.info(f"Chat request: session_id={session_id_str} provider={request.provider} edition={request.edition}")
 
         # Load conversation history
-        history = await _load_conversation_history(request.conversation_id)
+        session_uuid, history = await _load_history(session_id_str)
+
+        # Ensure session exists
+        session_uuid = await _ensure_session(session_uuid, request.edition)
 
         # Run full RAG pipeline
         rag_response = await rag_engine.generate(
@@ -98,10 +171,12 @@ async def chat(request: ChatRequest):
             max_tokens=request.max_tokens,
         )
 
-        # Build response
-        conversation_id = request.conversation_id or str(uuid4())
+        # Persist messages
+        await _save_messages(session_uuid, request.message, rag_response.content, rag_response)
 
-        # Source citations (when include_source is True)
+        # Build response
+        conversation_id = str(session_uuid) if session_uuid else (session_id_str or "")
+
         sources = None
         if request.include_source and rag_response.retrieval_info:
             sources = _build_sources_from_rag(rag_response)
@@ -123,7 +198,6 @@ async def chat(request: ChatRequest):
         )
 
     except ValueError as e:
-        # Config errors (missing API key, unknown provider)
         logger.error(f"Configuration error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,29 +221,26 @@ async def chat(request: ChatRequest):
     description="Stream AI-generated responses via Server-Sent Events (SSE)",
 )
 async def chat_stream(request: ChatRequest):
-    """Stream a RAG-powered response via SSE.
-
-    Retrieval happens before streaming starts (the LLM needs context
-    to generate).  Then LLM output streams token-by-token as SSE events.
-
-    Event format:
-        data: {"chunk": "partial text", "done": false}
-        data: {"chunk": "", "done": true, "metadata": {...}}
-        data: [DONE]
-    """
+    """Stream a RAG-powered response via SSE with session persistence."""
     try:
+        session_id_str = _resolve_session_id(request)
         logger.info(
-            f"Streaming chat request: conversation_id={request.conversation_id} "
-            f"provider={request.provider} edition={request.edition}"
+            f"Streaming chat request: session_id={session_id_str} provider={request.provider} edition={request.edition}"
         )
 
         # Load conversation history
-        history = await _load_conversation_history(request.conversation_id)
+        session_uuid, history = await _load_history(session_id_str)
 
-        conversation_id = request.conversation_id or str(uuid4())
+        # Ensure session exists
+        session_uuid = await _ensure_session(session_uuid, request.edition)
+
+        conversation_id = str(session_uuid) if session_uuid else (session_id_str or "")
 
         async def event_generator():
             """Generate SSE events from the RAG stream."""
+            full_content = []
+            final_event = None
+
             try:
                 async for event in rag_engine.stream(
                     query=request.message,
@@ -181,7 +252,7 @@ async def chat_stream(request: ChatRequest):
                     max_tokens=request.max_tokens,
                 ):
                     if event.done:
-                        # Final event with metadata
+                        final_event = event
                         final_chunk = ChatStreamChunk(
                             chunk="",
                             done=True,
@@ -195,11 +266,16 @@ async def chat_stream(request: ChatRequest):
                         yield f"data: {final_chunk.model_dump_json()}\n\n"
                         yield "data: [DONE]\n\n"
                     else:
+                        full_content.append(event.content)
                         chunk = ChatStreamChunk(
                             chunk=event.content,
                             done=False,
                         )
                         yield f"data: {chunk.model_dump_json()}\n\n"
+
+                # Save messages after stream completes
+                assistant_text = "".join(full_content)
+                await _save_messages(session_uuid, request.message, assistant_text, final_event)
 
             except Exception as e:
                 logger.error(f"Stream error: {e}", exc_info=True)
@@ -234,36 +310,3 @@ async def chat_stream(request: ChatRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start streaming: {str(e)}" if config.is_development else "An error occurred.",
         )
-
-
-# * Source formatting
-def _build_sources_from_rag(rag_response) -> list[dict]:
-    """Extract source citations from a RAG response.
-
-    Pulls file paths, line numbers, and relevance scores from the
-    retrieval info for frontend display.
-    """
-    sources = []
-    retrieval = rag_response.retrieval_info or {}
-
-    # The retrieval_info from rag_engine is a summary dict.
-    # For detailed source tracking, we'll add the actual chunk references
-    # once session persistence stores them per-message.
-    # For now, return summary counts so the frontend knows retrieval happened.
-
-    auth_count = retrieval.get("authoritative_count", 0)
-    ex_count = retrieval.get("examples_count", 0)
-
-    if auth_count or ex_count:
-        sources.append(
-            {
-                "type": "retrieval_summary",
-                "authoritative_chunks": auth_count,
-                "example_chunks": ex_count,
-                "intent": retrieval.get("intent"),
-                "edition": retrieval.get("edition"),
-                "object_type": retrieval.get("object_type"),
-            }
-        )
-
-    return sources
