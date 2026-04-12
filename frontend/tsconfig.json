@@ -1,0 +1,41 @@
+{
+	"compilerOptions": {
+		/* Language and environment */
+		"target": "ES2025",
+		"lib": ["ES2025", "DOM"],
+		"jsx": "react-jsx",
+		/* Modules */
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"resolveJsonModule": true,
+		"paths": {
+			"@/*": ["./src/*"]
+		},
+		/* Emit */
+		"noEmit": true,
+		"sourceMap": true,
+		/* Interop */
+		"forceConsistentCasingInFileNames": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		/* Type checking - maximum strictness (strict: true is now default in TS 6.0) */
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"exactOptionalPropertyTypes": true,
+		"strictNullChecks": true,
+		"allowUnusedLabels": false,
+		"allowUnreachableCode": false,
+		/* Types - explicit empty array (TS 6.0 default) */
+		"types": [],
+		/* Completeness */
+		"skipLibCheck": true,
+		"noErrorTruncation": true
+	},
+	"include": ["src/**/*", "test"],
+	"exclude": ["node_modules", "dist"]
+}
