@@ -33,6 +33,13 @@ from typing import Any, AsyncIterator, Optional
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.messages import HumanMessage as LCHumanMessage
 from langchain_core.messages import SystemMessage as LCSystemMessage
+from pydantic_ai import Agent
+from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
 from app.config import config
 from app.logger import get_logger
@@ -166,6 +173,76 @@ def _build_chat_model(
             temperature=temperature,
             num_predict=max_tokens,
         )
+
+    else:
+        raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, ollama")
+
+
+# * PydanticAI Agent factory
+def _build_agent(
+    instructions: str,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> Agent:
+    """Instantiate a PydanticAI ``Agent`` for the given provider.
+
+    The static system instructions are passed as ``instructions=`` so they
+    can be cached by Anthropic via ``anthropic_cache_instructions``.  Per-turn
+    RAG context belongs in the user prompt, not here, so the cache stays warm.
+
+    Cache settings are applied only on the anthropic branch.  OpenAI and
+    Ollama get plain ``ModelSettings``.
+    """
+    provider = provider or settings.default_llm_provider
+    model = model or settings.default_model
+    temperature = temperature if temperature is not None else settings.temperature
+    max_tokens = max_tokens or settings.max_tokens
+
+    if provider == "anthropic":
+        api_key = config.anthropic_api_key
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY not set. Add it to .env or set the environment variable.")
+
+        anthropic_model = AnthropicModel(
+            model_name=model,
+            provider=AnthropicProvider(api_key=api_key),
+        )
+        model_settings = AnthropicModelSettings(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            anthropic_cache_instructions=settings.anthropic_cache_instructions,
+            anthropic_cache_messages=settings.anthropic_cache_messages,
+        )
+        return Agent(anthropic_model, instructions=instructions, model_settings=model_settings)
+
+    elif provider == "openai":
+        api_key = config.openai_api_key
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not set. Add it to .env or set the environment variable.")
+
+        openai_model = OpenAIResponsesModel(
+            model_name=model,
+            provider=OpenAIProvider(api_key=api_key),
+        )
+        model_settings = ModelSettings(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return Agent(openai_model, instructions=instructions, model_settings=model_settings)
+
+    elif provider == "ollama":
+        # Ollama exposes a Chat Completions-compatible API, not Responses.
+        ollama_model = OpenAIChatModel(
+            model_name=model,
+            provider=OllamaProvider(base_url=config.ollama_host),
+        )
+        model_settings = ModelSettings(
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return Agent(ollama_model, instructions=instructions, model_settings=model_settings)
 
     else:
         raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, ollama")

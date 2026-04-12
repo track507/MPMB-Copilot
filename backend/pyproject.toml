@@ -30,6 +30,7 @@ dependencies = [
 	"langchain-anthropic>=1.4.0",
 	"langchain-openai>=1.1.12",
 	"langchain-ollama>=1.0.1",
+	"pydantic-ai-slim[anthropic,openai]>=1.80.0",
 
 	# Logging
 	"structlog>=24.0.0",

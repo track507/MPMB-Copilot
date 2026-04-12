@@ -99,6 +99,13 @@ class Settings:
     tool_search_limit: int = 5
     """Max chunks returned per tool call."""
 
+    # Anthropic prompt caching (Anthropic only)
+    anthropic_cache_instructions: bool = True
+    """Cache the static system instructions block (5m TTL)."""
+
+    anthropic_cache_messages: bool = True
+    """Cache the latest message in conversation history."""
+
     # Extended thinking (Anthropic only)
     enable_extended_thinking: bool = False
     """Enable deeper reasoning (uses more tokens, better for complex queries)."""
