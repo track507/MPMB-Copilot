@@ -93,17 +93,19 @@ async def _save_messages(
         # Save assistant message with LLM metadata
         kwargs = {}
         if rag_response:
+            usage = rag_response.usage if isinstance(rag_response.usage, dict) else {}
+            timing = rag_response.timing if hasattr(rag_response, "timing") else {}
             kwargs.update(
-                provider=rag_response.provider,
-                model=rag_response.model,
-                prompt_tokens=rag_response.usage.get("prompt_tokens", 0),
-                completion_tokens=rag_response.usage.get("completion_tokens", 0),
-                total_tokens=rag_response.usage.get("total_tokens", 0),
-                latency_ms=int(rag_response.timing.get("total_ms", 0)),
-                stop_reason=rag_response.stop_reason,
+                provider=getattr(rag_response, "provider", None),
+                model=getattr(rag_response, "model", None),
+                prompt_tokens=usage.get("input_tokens", 0),
+                completion_tokens=usage.get("output_tokens", 0),
+                total_tokens=usage.get("total_tokens", 0),
+                latency_ms=int(timing.get("total_ms", 0)) if isinstance(timing, dict) else 0,
+                stop_reason=getattr(rag_response, "stop_reason", None),
                 meta_data={
-                    "retrieval": rag_response.retrieval_info,
-                    "timing": rag_response.timing,
+                    "retrieval": getattr(rag_response, "retrieval_info", None),
+                    "timing": timing,
                 },
             )
 
@@ -115,6 +117,29 @@ async def _save_messages(
         )
     except Exception as e:
         logger.error(f"Failed to save messages: {e}")
+
+
+def _build_metadata(
+    conversation_id: str = "",
+    provider: str = "",
+    model: str = "",
+    usage: dict | None = None,
+    retrieval_info: dict | None = None,
+    timing: dict | None = None,
+) -> dict:
+    """Build nested metadata matching the frontend `ChatMetadata` type.
+
+    Groups are passed through as-is so Phase B can add `tool_events`
+    without another metadata refactor.
+    """
+    return {
+        "conversation_id": conversation_id,
+        "provider": provider,
+        "model": model,
+        "usage": usage or {},
+        "retrieval": retrieval_info or {},
+        "timing": timing or {},
+    }
 
 
 def _build_sources_from_rag(rag_response) -> list[dict]:
@@ -181,14 +206,14 @@ async def chat(request: ChatRequest):
         if request.include_source and rag_response.retrieval_info:
             sources = _build_sources_from_rag(rag_response)
 
-        metadata = {
-            "provider": rag_response.provider,
-            "model": rag_response.model,
-            "usage": rag_response.usage,
-            "stop_reason": rag_response.stop_reason,
-            "retrieval": rag_response.retrieval_info,
-            "timing": rag_response.timing,
-        }
+        metadata = _build_metadata(
+            conversation_id=conversation_id,
+            provider=rag_response.provider,
+            model=rag_response.model,
+            usage=rag_response.usage,
+            retrieval_info=rag_response.retrieval_info,
+            timing=rag_response.timing,
+        )
 
         return ChatResponse(
             response=rag_response.content,
@@ -256,12 +281,14 @@ async def chat_stream(request: ChatRequest):
                         final_chunk = ChatStreamChunk(
                             chunk="",
                             done=True,
-                            metadata={
-                                "conversation_id": conversation_id,
-                                "usage": event.usage,
-                                "retrieval": event.retrieval_info,
-                                "timing": event.timing,
-                            },
+                            metadata=_build_metadata(
+                                conversation_id=conversation_id,
+                                provider=event.provider or "",
+                                model=event.model or "",
+                                usage=event.usage,
+                                retrieval_info=event.retrieval_info,
+                                timing=event.timing,
+                            ),
                         )
                         yield f"data: {final_chunk.model_dump_json()}\n\n"
                         yield "data: [DONE]\n\n"

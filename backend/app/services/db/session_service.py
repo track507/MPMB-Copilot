@@ -1,7 +1,7 @@
 """Session persistence service.
 
 Handles CRUD for sessions and messages, plus retrieval tracking.
-All operations use the async database pool from ``database.py``.
+All operations use the async database pool from `database.py`.
 
 Usage:
     from app.services.db import session_service
@@ -238,7 +238,7 @@ class SessionService:
     ) -> list[MessageRetrieval]:
         """Record which document chunks were used for a message.
 
-        Each dict in ``chunks`` should have:
+        Each dict in `chunks` should have:
             - document_chunk_id: UUID
             - rank: int
             - score: float

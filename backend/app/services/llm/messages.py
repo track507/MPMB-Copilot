@@ -1,10 +1,10 @@
 """Conversion between stored conversation history and PydanticAI messages.
 
 The session DB stores conversation history as a list of plain dicts
-``[{"role": "user"|"assistant", "content": str}, ...]`` (see
-``session_service.get_conversation_history``).  PydanticAI's ``Agent.run``
-expects ``message_history: list[ModelMessage]`` where each entry is a
-``ModelRequest`` (user side) or ``ModelResponse`` (assistant side) wrapping
+`[{"role": "user"|"assistant", "content": str}, ...]` (see
+`session_service.get_conversation_history`).  PydanticAI's `Agent.run`
+expects `message_history: list[ModelMessage]` where each entry is a
+`ModelRequest` (user side) or `ModelResponse` (assistant side) wrapping
 typed parts.
 
 This module is the single boundary between the framework-agnostic stored
@@ -12,7 +12,7 @@ shape and PydanticAI's typed messages.  Keep it isolated from the LLM
 client so that swapping frameworks again only touches this file.
 
 System messages are NOT handled here - the static system prompt and
-per-turn RAG context are passed via ``Agent(instructions=...)`` and the
+per-turn RAG context are passed via `Agent(instructions=...)` and the
 user-prompt argument, not via message history.
 """
 
@@ -34,10 +34,10 @@ def to_pydantic_messages(history: list[dict]) -> list[ModelMessage]:
 
     Args:
         history: Stored history shape - list of dicts each with
-            ``role`` (``"user"`` or ``"assistant"``) and ``content`` (str).
+            `role` (`"user"` or `"assistant"`) and `content` (str).
 
     Returns:
-        List of ``ModelMessage`` ready for ``Agent.run(message_history=...)``.
+        List of `ModelMessage` ready for `Agent.run(message_history=...)`.
         Unknown roles are skipped with a warning.
     """
     messages: list[ModelMessage] = []

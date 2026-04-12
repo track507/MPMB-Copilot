@@ -1,7 +1,7 @@
 """Async database connection pool using SQLAlchemy + asyncpg.
 
 Provides a managed async session factory for PostgreSQL. The pool is
-initialized during app startup via ``lifespan`` and torn down on
+initialized during app startup via `lifespan` and torn down on
 shutdown.
 
 Usage:
@@ -54,8 +54,8 @@ class Database:
     ) -> None:
         """Create the async engine and session factory.
 
-        Call once during application startup. The ``database_url`` must
-        use the ``postgresql+asyncpg://`` scheme.
+        Call once during application startup. The `database_url` must
+        use the `postgresql+asyncpg://` scheme.
         """
         if self._engine is not None:
             logger.warning("Database already connected - skipping")

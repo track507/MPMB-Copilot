@@ -201,6 +201,29 @@ class PromptBuilder:
 
         return "\n\n".join(sections)
 
+    def build_user_prompt(
+        self,
+        query: str,
+        retrieval_result: Optional[RetrievalResult] = None,
+        edition: Optional[str] = None,
+    ) -> str:
+        """Build a single user-prompt string with RAG context prepended.
+
+        Used by the PydanticAI code path where the static system prompt
+        goes to `Agent(instructions=...)` and the per-turn RAG context
+        is injected into the user prompt so it doesn't bust the
+        instruction cache.
+
+        Returns:
+            The query as-is when there's no RAG context, or the RAG
+            context followed by a separator and the user question.
+        """
+        rag_context = self.format_rag_context(retrieval_result, edition)
+        if rag_context:
+            return f"{rag_context}\n\n---\n\nUser question: {query}"
+        return query
+
+    # DEPRECATED: will be removed after Phase A migration completes.
     def build_messages(
         self,
         query: str,
@@ -254,6 +277,7 @@ class PromptBuilder:
 
         return messages
 
+    # DEPRECATED: will be removed after Phase A migration completes.
     def _build_system_content(
         self,
         static_text: str,

@@ -1,6 +1,6 @@
 """Pydantic models and database models.
 
-Re-exports all public symbols so existing ``from app.model import X``
+Re-exports all public symbols so existing `from app.model import X`
 statements continue to work after the directory reorganization.
 """
 

@@ -24,15 +24,36 @@ export interface ChatStreamChunk {
 	readonly metadata?: ChatMetadata | undefined;
 }
 
+export interface ChatUsage {
+	readonly input_tokens?: number | undefined;
+	readonly output_tokens?: number | undefined;
+	readonly total_tokens?: number | undefined;
+	readonly cache_read_tokens?: number | undefined;
+	readonly cache_creation_tokens?: number | undefined;
+}
+
+export interface ChatTiming {
+	readonly total_ms?: number | undefined;
+	readonly retrieval_ms?: number | undefined;
+	readonly generation_ms?: number | undefined;
+}
+
+export interface ChatRetrieval {
+	readonly total_chunks?: number | undefined;
+	readonly intent?: string | undefined;
+	readonly edition?: string | undefined;
+	readonly object_type?: string | undefined;
+	readonly authoritative_count?: number | undefined;
+	readonly examples_count?: number | undefined;
+}
+
 export interface ChatMetadata {
+	readonly conversation_id?: string | undefined;
 	readonly provider?: string | undefined;
 	readonly model?: string | undefined;
-	readonly prompt_tokens?: number | undefined;
-	readonly completion_tokens?: number | undefined;
-	readonly total_tokens?: number | undefined;
-	readonly latency_ms?: number | undefined;
-	readonly retrieval_time_ms?: number | undefined;
-	readonly chunks_retrieved?: number | undefined;
+	readonly usage?: ChatUsage | undefined;
+	readonly timing?: ChatTiming | undefined;
+	readonly retrieval?: ChatRetrieval | undefined;
 }
 
 export interface SourceReference {
