@@ -21,12 +21,14 @@ Usage:
 
 import contextvars
 import logging
+import logging.handlers
 import os
 import secrets
 import sys
 import time
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import structlog  # type: ignore[import-not-found]
@@ -46,6 +48,9 @@ def _get_config() -> dict[str, Any]:
         "format": os.getenv("LOG_FORMAT", "json"),  # "json" or "console"
         "show_locals": os.getenv("LOG_SHOW_LOCALS", "false").lower() == "true",
         "slow_query_threshold_ms": int(os.getenv("LOG_SLOW_QUERY_MS", "3000")),
+        "log_dir": os.getenv("LOG_DIR", "./logs"),
+        "log_retention_days": int(os.getenv("LOG_RETENTION_DAYS", "30")),
+        "log_error_retention_days": int(os.getenv("LOG_ERROR_RETENTION_DAYS", "90")),
     }
 
 
@@ -117,10 +122,13 @@ def configure_logging() -> None:
 
     if config["format"] == "console":
         # Human-readable colored output for local dev
-        renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty())
+        console_renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty())
     else:
         # JSON for Docker / log aggregation
-        renderer = structlog.processors.JSONRenderer()
+        console_renderer = structlog.processors.JSONRenderer()
+
+    # File logs are always JSON (machine-parseable, grep-friendly)
+    file_renderer = structlog.processors.JSONRenderer()
 
     structlog.configure(
         processors=[
@@ -132,20 +140,64 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
 
-    # Route stdlib logging (uvicorn, httpx, sqlalchemy, etc.) through structlog
-    formatter = structlog.stdlib.ProcessorFormatter(
+    # Formatters
+    console_formatter = structlog.stdlib.ProcessorFormatter(
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
-            renderer,
+            console_renderer,
         ],
         foreign_pre_chain=shared_processors,
     )
 
+    file_formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            file_renderer,
+        ],
+        foreign_pre_chain=[*shared_processors, structlog.processors.format_exc_info],
+    )
+
     root = logging.getLogger()
     root.handlers.clear()
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(formatter)
-    root.addHandler(handler)
+
+    # 1. Console handler (stderr) - same as before
+    console_handler = logging.StreamHandler(sys.stderr)
+    console_handler.setFormatter(console_formatter)
+    console_handler.setLevel(level)
+    root.addHandler(console_handler)
+
+    # 2. File handlers - daily rotation
+    log_dir = Path(config["log_dir"])
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # app.log - all messages at INFO+, rotates daily, keeps N days
+    app_handler = logging.handlers.TimedRotatingFileHandler(
+        filename=log_dir / "app.log",
+        when="midnight",
+        interval=1,
+        backupCount=config["log_retention_days"],
+        encoding="utf-8",
+        utc=True,
+    )
+    app_handler.setLevel(logging.INFO)
+    app_handler.setFormatter(file_formatter)
+    app_handler.suffix = "%Y-%m-%d"
+    root.addHandler(app_handler)
+
+    # error.log - ERROR+ only, rotates daily, keeps longer
+    error_handler = logging.handlers.TimedRotatingFileHandler(
+        filename=log_dir / "error.log",
+        when="midnight",
+        interval=1,
+        backupCount=config["log_error_retention_days"],
+        encoding="utf-8",
+        utc=True,
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(file_formatter)
+    error_handler.suffix = "%Y-%m-%d"
+    root.addHandler(error_handler)
+
     root.setLevel(level)
 
     # Quiet noisy libraries
