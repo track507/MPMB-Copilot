@@ -18,7 +18,7 @@ export default defineConfig(
 			globals: { ...globals.node },
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ["vite.config.ts", "vitest.config.ts"],
+					allowDefaultProject: ["**/vite.config.ts", "**/vitest.config.ts"],
 				},
 				tsconfigRootDir: import.meta.dirname,
 			},
