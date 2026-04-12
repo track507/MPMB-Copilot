@@ -457,9 +457,21 @@ class FunctionCallExtractor:
 
 
 class FunctionDefinitionExtractor:
-    """Extracts standalone function definitions from engine files."""
+    """Extracts standalone function definitions from engine files.
+
+    Small functions (<= WINDOW_THRESHOLD chars) produce a single chunk.
+    Larger functions are split into overlapping windows so each chunk
+    is competitive in hybrid search against the smaller syntax-template
+    chunks.  Every window carries the function signature as a header so
+    it is independently grounded (function name, parameters, JSDoc).
+    """
 
     PATTERN = re.compile(r"^function\s+(\w+)\s*\([^)]*\)\s*\{", re.MULTILINE)
+
+    # Windowing parameters
+    WINDOW_THRESHOLD = 1500  # Functions larger than this get windowed
+    WINDOW_SIZE = 800  # Target body chars per window
+    WINDOW_OVERLAP = 150  # Overlap chars between consecutive windows
 
     def extract(
         self,
@@ -469,7 +481,6 @@ class FunctionDefinitionExtractor:
         source_tier: str,
         source_repo: str,
         file_context: FileContext,
-        max_chunk_size: int = 4000,
     ) -> List[CodeChunk]:
         chunks = []
 
@@ -488,42 +499,134 @@ class FunctionDefinitionExtractor:
             if jsdoc_match:
                 func_start = func_start - len(preceding) + jsdoc_match.start()
 
-            chunk_content = content[func_start:end_pos]
+            full_content = content[func_start:end_pos]
+            full_start_line = content[:func_start].count("\n") + 1
+            full_end_line = content[:end_pos].count("\n") + 1
+            full_size = end_pos - func_start
+            full_lines = full_end_line - full_start_line + 1
 
-            if len(chunk_content) > max_chunk_size * 2:
-                chunk_content = (
-                    chunk_content[:max_chunk_size]
-                    + "\n// ... (truncated, full function is "
-                    + str(len(content[func_start:end_pos]))
-                    + " chars)"
+            base_metadata = {
+                "function_name": func_name,
+                "category": "engine_function",
+                "has_jsdoc": bool(jsdoc_match),
+                "size_chars": full_size,
+                "size_lines": full_lines,
+                "file_context": file_context.filename or file_path,
+            }
+
+            if len(full_content) <= self.WINDOW_THRESHOLD:
+                # Small function - single chunk
+                chunks.append(
+                    CodeChunk(
+                        content=full_content,
+                        source_file=file_path,
+                        source_repo=source_repo,
+                        chunk_index=len(chunks),
+                        start_line=full_start_line,
+                        end_line=full_end_line,
+                        chunk_type="function_definition",
+                        edition=edition,
+                        source_tier=source_tier,
+                        metadata={**base_metadata, "window_index": 0, "total_windows": 1},
+                    )
                 )
-
-            start_line = content[:func_start].count("\n") + 1
-            end_line = content[:end_pos].count("\n") + 1
-
-            chunks.append(
-                CodeChunk(
-                    content=chunk_content,
-                    source_file=file_path,
-                    source_repo=source_repo,
-                    chunk_index=len(chunks),
-                    start_line=start_line,
-                    end_line=end_line,
-                    chunk_type="function_definition",
-                    edition=edition,
-                    source_tier=source_tier,
-                    metadata={
-                        "function_name": func_name,
-                        "category": "engine_function",
-                        "has_jsdoc": bool(jsdoc_match),
-                        "size_chars": end_pos - func_start,
-                        "size_lines": end_line - start_line + 1,
-                        "file_context": file_context.filename or file_path,
-                    },
-                )
-            )
+            else:
+                # Large function - split into overlapping windows
+                windows = self._split_into_windows(full_content)
+                for win in windows:
+                    chunks.append(
+                        CodeChunk(
+                            content=win["content"],
+                            source_file=file_path,
+                            source_repo=source_repo,
+                            chunk_index=len(chunks),
+                            start_line=full_start_line + win["body_start_line"],
+                            end_line=full_start_line + win["body_end_line"],
+                            chunk_type="function_definition",
+                            edition=edition,
+                            source_tier=source_tier,
+                            metadata={
+                                **base_metadata,
+                                "window_index": win["index"],
+                                "total_windows": win["total"],
+                            },
+                        )
+                    )
 
         return chunks
+
+    def _split_into_windows(self, full_content: str) -> List[Dict[str, Any]]:
+        """Split a function into overlapping windows by lines.
+
+        Each window gets the function signature (including JSDoc)
+        prepended so it is independently searchable and grounded.
+
+        Returns a list of dicts with keys:
+            content, index, total, body_start_line, body_end_line
+        """
+        lines = full_content.split("\n")
+
+        # Extract signature: everything up to and including the opening brace
+        sig_end = 0
+        for i, line in enumerate(lines):
+            if "{" in line:
+                sig_end = i + 1
+                break
+        signature = "\n".join(lines[:sig_end])
+        body_lines = lines[sig_end:]
+
+        if not body_lines:
+            return [
+                {"content": full_content, "index": 0, "total": 1, "body_start_line": 0, "body_end_line": len(lines) - 1}
+            ]
+
+        # Build windows over body_lines
+        raw_windows: List[tuple[int, int]] = []  # (start_idx, end_idx) into body_lines
+        start = 0
+
+        while start < len(body_lines):
+            total_chars = 0
+            end = start
+            while end < len(body_lines) and total_chars < self.WINDOW_SIZE:
+                total_chars += len(body_lines[end]) + 1
+                end += 1
+
+            raw_windows.append((start, end))
+
+            if end >= len(body_lines):
+                break
+
+            # Step forward, leaving overlap
+            overlap_chars = 0
+            next_start = end
+            while next_start > start + 1 and overlap_chars < self.WINDOW_OVERLAP:
+                next_start -= 1
+                overlap_chars += len(body_lines[next_start]) + 1
+
+            start = next_start
+
+        # Build final window contents
+        total_windows = len(raw_windows)
+        windows = []
+        for idx, (w_start, w_end) in enumerate(raw_windows):
+            body_text = "\n".join(body_lines[w_start:w_end])
+
+            if idx == 0:
+                window_content = signature + "\n" + body_text
+            else:
+                window_content = signature + "\n\t// ... (continued)\n" + body_text
+
+            windows.append(
+                {
+                    "content": window_content,
+                    "index": idx,
+                    "total": total_windows,
+                    "body_start_line": sig_end + w_start,
+                    "body_end_line": sig_end + w_end - 1,
+                }
+            )
+
+        return windows
 
 
 class SyntaxTemplateExtractor:

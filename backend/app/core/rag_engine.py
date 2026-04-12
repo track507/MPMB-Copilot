@@ -79,6 +79,15 @@ class RAGStreamEvent:
     done: bool = False
     """True when the stream is complete."""
 
+    provider: str = ""
+    """LLM provider used - final event only."""
+
+    model: str = ""
+    """LLM model used - final event only."""
+
+    stop_reason: Optional[str] = None
+    """Why generation stopped - final event only."""
+
     usage: Optional[dict[str, Any]] = None
     """Token usage - final event only."""
 
@@ -245,6 +254,9 @@ class RAGEngine:
                 yield RAGStreamEvent(
                     content="",
                     done=True,
+                    provider=resolved_provider,
+                    model=model or settings.default_model,
+                    stop_reason=event.stop_reason,
                     usage=event.usage,
                     retrieval_info=retrieval_result.to_dict(),
                     timing={

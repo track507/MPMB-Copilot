@@ -274,6 +274,10 @@ class Retriever:
 
         Only includes filters when we have high-confidence signals.
         Over-filtering on wrong metadata is worse than no filtering.
+
+        Note: function_name is intentionally NOT filtered here.
+        Engine function chunks are now properly windowed so BM25
+        lexical matching surfaces them without needing a hard filter.
         """
         filters: dict = {}
 
@@ -282,9 +286,6 @@ class Retriever:
 
         if analysis.object_type:
             filters["object_type"] = analysis.object_type
-
-        if analysis.function_name:
-            filters["function_name"] = analysis.function_name
 
         return filters
 

@@ -6,7 +6,9 @@ services:
             dockerfile: Dockerfile
         container_name: mpmb-postgres
         ports:
-            - "5432:5432"
+            # Use a non-default host port by default so local PostgreSQL installs
+            # don't intercept development traffic intended for the Docker service.
+            - "${POSTGRES_HOST_PORT:-5433}:5432"
         volumes:
             - postgres_data:/var/lib/postgresql/data
         environment:

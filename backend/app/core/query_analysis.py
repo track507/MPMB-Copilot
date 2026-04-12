@@ -4,13 +4,16 @@ Infers MPMB object type and D&D edition from query text to drive
 metadata filters before vector search.  Both use language-agnostic
 signals (code identifiers and numbers), so they work across languages.
 
+Function names are NOT extracted here - the retriever relies on
+BM25 lexical matching against properly-sized chunks to surface
+engine functions.  This avoids brittle hardcoded lists.
+
 Usage:
     from app.core.query_analysis import analyze_query
 
     analysis = analyze_query("How do I add a 2024 spell?")
     analysis.object_type   # "SpellsList"
     analysis.edition       # "2024"
-    analysis.function_name # None
 """
 
 import re
@@ -28,9 +31,6 @@ class QueryAnalysis:
 
     edition: Optional[str]
     """Detected edition ('2014' or '2024') or None (search both)."""
-
-    function_name: Optional[str]
-    """Detected MPMB function name (e.g. 'AddSubClass') or None."""
 
 
 # * Object type inference
@@ -53,6 +53,8 @@ _OBJECT_TYPE_KEYWORDS: dict[str, str] = {
     "eldritch invocations": "AddWarlockInvocation",
     "racial variant": "AddRacialVariant",
     "racial variants": "AddRacialVariant",
+    "source list": "SourceList",
+    "source book": "SourceList",
     # Single-word (checked after multi-word)
     "spell": "SpellsList",
     "spells": "SpellsList",
@@ -77,11 +79,13 @@ _OBJECT_TYPE_KEYWORDS: dict[str, str] = {
     "creatures": "CreatureList",
     "companion": "CompanionList",
     "companions": "CompanionList",
-    "source": "SourceList",
     "ammo": "AmmoList",
     "ammunition": "AmmoList",
     "gear": "GearList",
     "pack": "PacksList",
+    # Note: bare "source" is intentionally NOT mapped to SourceList - it
+    # collides with English ("source code", "source file"). The literal
+    # identifier SourceList still matches via the code-identifier check.
 }
 
 # * Sorted by length descending so multi-word phrases match first
@@ -132,32 +136,6 @@ def _infer_object_type(query: str) -> Optional[str]:
     return None
 
 
-# * Function name inference
-
-# * MPMB function names - these are code identifiers, language-independent
-_FUNCTION_NAMES = [
-    "AddSubClass",
-    "AddFeatureChoice",
-    "AddRacialVariant",
-    "AddBackgroundVariant",
-    "AddWarlockInvocation",
-    "AddFightingStyle",
-    "AddWarlockPactBoon",
-    "RequiredSheetVersion",
-]
-
-
-def _infer_function_name(query: str) -> Optional[str]:
-    """Detect MPMB function name from query text.
-
-    Only matches literal code identifiers (case-sensitive).
-    """
-    for func_name in _FUNCTION_NAMES:
-        if func_name in query:
-            return func_name
-    return None
-
-
 # * Edition inference
 
 _EDITION_2024_PATTERN = re.compile(
@@ -197,9 +175,12 @@ def _infer_edition(query: str) -> Optional[str]:
 def analyze_query(query: str) -> QueryAnalysis:
     """Analyze a query for MPMB-specific metadata signals.
 
-    Extracts object type, edition, and function name from the query text.
+    Extracts object type and edition from the query text.
     All detection is based on code identifiers and numbers, making it
     language-agnostic.
+
+    Function names are NOT extracted - the retriever relies on BM25
+    lexical matching to surface engine function chunks directly.
 
     Args:
         query: Raw user query text.
@@ -210,5 +191,4 @@ def analyze_query(query: str) -> QueryAnalysis:
     return QueryAnalysis(
         object_type=_infer_object_type(query),
         edition=_infer_edition(query),
-        function_name=_infer_function_name(query),
     )

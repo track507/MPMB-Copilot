@@ -36,7 +36,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Connect to PostgreSQL
     try:
         await db.connect(config.resolved_database_url, echo=config.is_development)
-        logger.info("postgres_connected")
+        if await db.health_check():
+            logger.info("postgres_connected")
+        else:
+            await db.disconnect()
+            logger.warning("postgres_unavailable", error="Initial database health check failed")
     except Exception as e:
         logger.warning("postgres_unavailable", error=str(e))
 
