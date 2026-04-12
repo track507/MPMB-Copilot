@@ -14,6 +14,7 @@ export default [
 			"backend/.ruff_cache/**",
 			"coverage/**",
 			"data/**",
+			"frontend/**",
 			"htmlcov/**",
 			"logs/**",
 			"node_modules/**",

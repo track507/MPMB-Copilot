@@ -380,66 +380,187 @@ GET    /api/sessions/{id}/messages — Get messages (paginated)
 
 ---
 
-### Phase 5: Frontend (Simple React SPA)
+### Phase 5: Frontend (React SPA from Template)
 
 **Priority: MEDIUM | Estimated effort: 1-2 sessions**
 
-A clean, functional chat interface. Nothing fancy — focus on usability.
+A clean, functional chat interface built from the **Strict-React-App** template (`E:\WORK\FFB\Strict-React-App`). The template provides a production-grade foundation with strict TypeScript, modern tooling, and a polished component system. We strip auth (Azure AD/MSAL) and telemetry (App Insights) since this is a local-only tool.
 
-**5a. Tech stack**
+**5a. Tech stack (from template)**
 
-- React 18 (Vite for dev/build)
-- Tailwind CSS for styling
-- Served as static files from a lightweight container (nginx or the backend itself)
-- No authentication needed (local tool)
+| Tool | Version | Purpose |
+|------|---------|---------|
+| React | 19 | UI framework |
+| Vite | 8 | Dev server + bundler |
+| TypeScript | 5.9+ | Strict mode, all safety checks enabled |
+| Tailwind CSS | 4 (CSS-first) | Utility-first styling via `@import "tailwindcss"` |
+| shadcn/ui | v4 (radix-nova) | Component library (installed on demand via `npx shadcn add`) |
+| TanStack Query | 5 | Server state, caching, SSE streaming |
+| React Router | 7 | Client-side routing |
+| React Hook Form + Zod | Latest | Form validation (settings panel) |
+| Lucide React | Latest | Icons |
+| Sonner | Latest | Toast notifications |
+| Vitest + Testing Library | Latest | Unit/component testing |
+| ESLint | 9 (flat config) | Strict linting with `typescript-eslint` strict + stylistic |
+| Prettier | 3 | Code formatting |
+| Husky + lint-staged | Latest | Pre-commit hooks |
 
-**5b. Core components**
+**No authentication.** No Azure AD, no MSAL, no token providers. The app is a local tool accessed via `localhost`.
+
+**5b. What to keep from template**
+
+- `vite.config.ts` — Tailwind v4 plugin, `@` path alias, proxy config (change target to backend `http://localhost:8000`)
+- `tsconfig.json` — Maximum strict TypeScript settings
+- `eslint.config.mjs` — Strict + stylistic TypeScript-ESLint rules for `.ts` and `.tsx`
+- `vitest.config.ts` — jsdom environment, coverage thresholds, `@` alias
+- `components.json` — shadcn v4 config (radix-nova style, neutral base, lucide icons)
+- `src/index.css` — Tailwind v4 imports, CSS custom properties for light/dark themes, Geist font
+- `src/lib/utils.ts` — `cn()` helper (clsx + tailwind-merge)
+- `src/lib/api-client.ts` — Simplified (strip token provider, keep typed fetch wrapper with `apiClient.get/post/put/patch/delete` and `ApiError`)
+- `src/components/layout/` — Root layout with sidebar + top bar + `<Outlet />` + Sonner toaster
+- `src/pages/not-found.tsx` — 404 page
+- `index.html` — Simplified CSP (remove Azure/Microsoft connect-src)
+- `commitlint.config.ts` — Conventional commit enforcement
+
+**5c. What to strip from template**
+
+- `src/auth/` — Entire directory (auth-config, auth-provider, use-auth)
+- `src/lib/app-insights.ts` — Azure Application Insights telemetry
+- `@azure/msal-browser`, `@azure/msal-react` — Auth dependencies
+- `@microsoft/applicationinsights-*` — Telemetry dependencies
+- `AuthProvider` wrapper in `main.tsx` → just `<StrictMode><App /></StrictMode>`
+- `AuthGate` in `App.tsx` → Routes render directly
+- `useAuth()` calls in layout components → Remove user info / logout button from sidebar
+- `setTokenProvider()` call in root layout → Remove
+- `VITE_DISABLE_AUTH`, `VITE_AZURE_*`, `VITE_APPINSIGHTS_*` env vars → Remove
+- Azure/Microsoft CSP directives in `index.html` → Remove
+
+**5d. Project structure**
 
 ```
 frontend/
 ├── src/
 │   ├── components/
-│   │   ├── ChatWindow.jsx       — Main chat interface
-│   │   ├── MessageBubble.jsx    — Individual message with code highlighting
-│   │   ├── CodeBlock.jsx        — Syntax-highlighted ES5 code with copy button
-│   │   ├── SessionSidebar.jsx   — Session list and management
-│   │   ├── SettingsPanel.jsx    — Edition, provider, model selection
-│   │   ├── SourceCitation.jsx   — Expandable source references
-│   │   └── StatusBar.jsx        — Connection status, index health
+│   │   ├── layout/
+│   │   │   ├── root-layout.tsx     — Sidebar + TopBar + <Outlet /> + Toaster
+│   │   │   ├── sidebar-nav.tsx     — Session list + new chat button + edition toggle
+│   │   │   └── top-bar.tsx         — Model/provider selector + index status
+│   │   ├── chat/
+│   │   │   ├── chat-window.tsx     — Main chat interface (message list + input)
+│   │   │   ├── message-bubble.tsx  — Individual message with role-based styling
+│   │   │   ├── code-block.tsx      — Syntax-highlighted JS code + copy button
+│   │   │   └── source-citation.tsx — Expandable RAG source references
+│   │   ├── settings/
+│   │   │   └── settings-panel.tsx  — Edition, provider, model, temperature controls
+│   │   ├── shared/
+│   │   │   └── (reusable components)
+│   │   └── ui/                     — shadcn components (added via `npx shadcn add`)
 │   ├── hooks/
-│   │   ├── useChat.js           — Chat API + SSE streaming
-│   │   ├── useSessions.js       — Session CRUD
-│   │   └── useSettings.js       — User preferences
-│   ├── App.jsx
-│   └── main.jsx
-├── Dockerfile                   — Multi-stage: build + nginx
-├── package.json
-└── vite.config.js
+│   │   ├── use-chat.ts             — Chat API + SSE streaming via TanStack Query
+│   │   ├── use-sessions.ts         — Session CRUD via TanStack Query
+│   │   └── use-settings.ts         — Settings API + local state
+│   ├── lib/
+│   │   ├── api-client.ts           — Typed fetch wrapper (no auth tokens)
+│   │   └── utils.ts                — cn() helper
+│   ├── types/
+│   │   ├── chat.ts                 — ChatRequest, ChatResponse, ChatStreamChunk
+│   │   └── session.ts              — Session, Message types
+│   ├── pages/
+│   │   ├── home.tsx                — Chat page (default route)
+│   │   ├── settings.tsx            — Settings page
+│   │   └── not-found.tsx           — 404 page
+│   ├── App.tsx                     — QueryClientProvider + BrowserRouter + Routes
+│   ├── main.tsx                    — StrictMode + createRoot
+│   ├── index.css                   — Tailwind v4 + shadcn theme + dark mode
+│   └── vite-env.d.ts               — Vite type declarations
+├── test/
+│   └── setup.ts                    — Vitest setup (jest-dom matchers)
+├── Dockerfile                      — Multi-stage: node build + nginx serve
+├── components.json                 — shadcn v4 configuration
+├── eslint.config.mjs               — Strict TypeScript-ESLint flat config
+├── index.html                      — Minimal CSP, Geist font
+├── package.json                    — Dependencies (no auth/telemetry packages)
+├── tsconfig.json                   — Maximum strict TypeScript
+├── tsconfig.node.json              — Node config for vite/vitest configs
+├── vite.config.ts                  — React + Tailwind v4 + API proxy
+└── vitest.config.ts                — jsdom + coverage thresholds
 ```
 
-**5c. Key features**
+**5e. Key features**
 
-- **Streaming responses** via SSE — text appears as it generates
-- **Code syntax highlighting** — Prism.js or highlight.js with JavaScript support
-- **Copy code button** — one click to copy generated code
-- **Edition toggle** — switch between 2014/2024 context
-- **Provider selection** — dropdown to switch LLM provider/model
-- **Session management** — sidebar with conversation history
-- **Source citations** — expandable panels showing which MPMB files were referenced
-- **Index status** — indicator showing if vectors are loaded and healthy
-- **Dark mode** — because developers
+- **Streaming responses** via SSE — TanStack Query + EventSource, text renders incrementally
+- **Code syntax highlighting** — Use a lightweight highlighter (Shiki or highlight.js) for JavaScript/ES5
+- **Copy code button** — One click to copy generated code blocks
+- **Edition toggle** — Sidebar control to switch between 2014/2024 D&D editions
+- **Provider/model selection** — Top bar dropdown to switch LLM provider and model
+- **Session management** — Sidebar lists past conversations (from session API), create/rename/delete
+- **Source citations** — Expandable panels showing which MPMB source files were retrieved
+- **Index status** — Health indicator showing if Qdrant vectors are loaded
+- **Dark mode** — CSS custom properties already set up in template (toggle via class on `<html>`)
+- **Toast notifications** — Sonner for error/success feedback
+- **Form validation** — React Hook Form + Zod for settings panel
 
-**5d. Docker integration**
+**5f. API proxy configuration**
 
-- Add `frontend` service to `docker-compose.yml`
-- Nginx serves built React app
-- Reverse proxy API requests to backend
+Vite dev server proxies `/api` to the FastAPI backend:
+
+```ts
+// vite.config.ts
+server: {
+    host: true,
+    proxy: {
+        "/api": {
+            target: "http://localhost:8000",
+            changeOrigin: true,
+        },
+    },
+},
+```
+
+The API client base URL defaults to empty string (same-origin), so requests like `apiClient.get("/api/sessions")` hit the proxy in dev and the nginx reverse proxy in production.
+
+**5g. Docker integration**
+
+```dockerfile
+# frontend/Dockerfile
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 3000
+```
+
+Nginx config reverse-proxies `/api` to the backend container.
+
+Add `frontend` service to `docker-compose.yml`:
+
+```yaml
+frontend:
+    build:
+        context: ./frontend
+        dockerfile: Dockerfile
+    container_name: mpmb-frontend
+    ports:
+        - "3000:3000"
+    depends_on:
+        - backend
+    networks:
+        - mpmb-network
+```
 
 **Deliverables:**
 
-- `frontend/` directory with complete React app
-- Dockerfile for frontend
+- `frontend/` directory scaffolded from Strict-React-App template (auth/telemetry stripped)
+- Chat UI with streaming, code highlighting, session management
+- Dockerfile for frontend (multi-stage node build + nginx)
 - Updated `docker-compose.yml` with frontend service
+- Vite proxy + nginx reverse proxy for API routing
 
 ---
 
@@ -606,15 +727,26 @@ mpmb-copilot/
 │   ├── Dockerfile               # Done
 │   └── pyproject.toml           # Done (may need new deps)
 │
-├── frontend/                    # NEW: React SPA
+├── frontend/                    # NEW: React SPA (from Strict-React-App template)
 │   ├── src/
 │   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── Dockerfile
+│   │   │   ├── layout/          # Root layout, sidebar, top bar
+│   │   │   ├── chat/            # Chat window, messages, code blocks
+│   │   │   ├── settings/        # Settings panel
+│   │   │   └── ui/              # shadcn components
+│   │   ├── hooks/               # use-chat, use-sessions, use-settings
+│   │   ├── lib/                 # api-client, utils
+│   │   ├── types/               # TypeScript type definitions
+│   │   ├── pages/               # Route pages
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── Dockerfile               # Multi-stage: node build + nginx
+│   ├── components.json          # shadcn v4 config
+│   ├── eslint.config.mjs        # Strict TypeScript-ESLint
 │   ├── package.json
-│   └── vite.config.js
+│   ├── tsconfig.json            # Maximum strict TypeScript
+│   ├── vite.config.ts           # React + Tailwind v4 + API proxy
+│   └── vitest.config.ts         # Testing config
 │
 ├── scripts/
 │   ├── acquire_sources.py       # NEW: Multi-repo clone/update
@@ -639,7 +771,7 @@ mpmb-copilot/
 | 2     | **Phase 2** | Embedding + Qdrant fix     | Can't retrieve without indexed vectors     |
 | 3     | **Phase 3** | LLM client + RAG retrieval | Core intelligence — makes it actually work |
 | 4     | **Phase 4** | Session persistence        | Needed for conversation context in RAG     |
-| 5     | **Phase 5** | Frontend                   | Usable product                             |
+| 5     | **Phase 5** | Frontend (from template)   | Usable product                             |
 | 6     | **Phase 6** | One-command setup          | Polish for distribution                    |
 
 Phases 1-3 get you a **working API-level MVP** you can test with curl.

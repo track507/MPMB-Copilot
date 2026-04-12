@@ -15,8 +15,10 @@
 	"[json]": {
 		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	},
-	"javascript.validate.enable": true,
-	"javascript.suggestionActions.enabled": true,
+	"js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
+	"js/ts.tsdk.promptToUseWorkspaceVersion": true,
+	"js/ts.validate.enabled": true,
+	"js/ts.suggestionActions.enabled": true,
 	"terminal.integrated.scrollback": 10000,
 	"terminal.integrated.fontSize": 13,
 	"workbench.colorCustomizations": {
@@ -26,7 +28,7 @@
 		"terminal.ansiBlue": "#0000ff",
 		"terminal.ansiCyan": "#00ffff"
 	},
-	"eslint.validate": [
-		"javascript"
-	]
+	"eslint.validate": ["javascript", "typescript", "typescriptreact"],
+	"eslint.workingDirectories": [{ "directory": "frontend", "changeProcessCWD": true }],
+	"eslint.trace.server": "messages"
 }

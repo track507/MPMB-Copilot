@@ -63,9 +63,6 @@ project.fragment.lock.json
 artifacts/
 **/Properties/launchSettings.json
 
-# VS Code
-.vscode/
-
 *_i.c
 *_p.c
 *_i.h
@@ -522,3 +519,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AI
+.claude/
+.copilot/
+
+# Don't ignore the lib under frontend
+!frontend/src/lib/
