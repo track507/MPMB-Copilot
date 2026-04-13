@@ -39,6 +39,25 @@ _session_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar("se
 _edition_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar("edition", default=None)
 
 
+# Backend package root: .../backend (parent of .../backend/app)
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_log_dir() -> Path:
+    """Resolve the log directory, anchoring relative paths to the backend root.
+
+    Relative paths (including the default `./logs`) are interpreted
+    relative to `backend/` so logs land in the same place regardless of
+    which CWD started the process (project root via uvicorn, or
+    backend/ via pytest).
+    """
+    raw = os.getenv("LOG_DIR", "./logs")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = _BACKEND_ROOT / path
+    return path
+
+
 # Configuration
 @lru_cache(maxsize=1)
 def _get_config() -> dict[str, Any]:
@@ -48,7 +67,7 @@ def _get_config() -> dict[str, Any]:
         "format": os.getenv("LOG_FORMAT", "json"),  # "json" or "console"
         "show_locals": os.getenv("LOG_SHOW_LOCALS", "false").lower() == "true",
         "slow_query_threshold_ms": int(os.getenv("LOG_SLOW_QUERY_MS", "3000")),
-        "log_dir": os.getenv("LOG_DIR", "./logs"),
+        "log_dir": _resolve_log_dir(),
         "log_retention_days": int(os.getenv("LOG_RETENTION_DAYS", "30")),
         "log_error_retention_days": int(os.getenv("LOG_ERROR_RETENTION_DAYS", "90")),
     }
@@ -167,7 +186,7 @@ def configure_logging() -> None:
     root.addHandler(console_handler)
 
     # 2. File handlers - daily rotation
-    log_dir = Path(config["log_dir"])
+    log_dir = config["log_dir"]
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # app.log - all messages at INFO+, rotates daily, keeps N days

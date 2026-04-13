@@ -128,7 +128,6 @@ class RAGEngine:
             RAGResponse with content, usage, retrieval info, and timing.
         """
         t_start = time.perf_counter()
-        resolved_provider = provider or settings.default_llm_provider
 
         # 1. Retrieve relevant chunks
         t_retrieve = time.perf_counter()
@@ -145,19 +144,19 @@ class RAGEngine:
             or settings.default_edition
         )
 
-        # 3. Build messages with prompt caching
-        messages = prompt_builder.build_messages(
+        # 3. Build the user prompt with RAG context
+        user_prompt = prompt_builder.build_user_prompt(
             query=query,
             retrieval_result=retrieval_result,
-            conversation_history=conversation_history,
             edition=resolved_edition,
-            provider=resolved_provider,
         )
 
         # 4. Generate LLM response
         t_generate = time.perf_counter()
         llm_response = await llm_client.generate(
-            messages=messages,
+            instructions=prompt_builder.get_static_instructions(),
+            user_prompt=user_prompt,
+            history=conversation_history,
             provider=provider,
             model=model,
             temperature=temperature,
@@ -227,27 +226,26 @@ class RAGEngine:
             or settings.default_edition
         )
 
-        # 3. Build messages
-        messages = prompt_builder.build_messages(
+        # 3. Build the user prompt with RAG context
+        user_prompt = prompt_builder.build_user_prompt(
             query=query,
             retrieval_result=retrieval_result,
-            conversation_history=conversation_history,
             edition=resolved_edition,
-            provider=resolved_provider,
         )
 
         # 4. Stream LLM response
         t_generate = time.perf_counter()
 
         async for event in llm_client.stream(
-            messages=messages,
+            instructions=prompt_builder.get_static_instructions(),
+            user_prompt=user_prompt,
+            history=conversation_history,
             provider=provider,
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
         ):
             if event.done:
-                # Final event - attach all metadata
                 generation_ms = (time.perf_counter() - t_generate) * 1000
                 total_ms = (time.perf_counter() - t_start) * 1000
 

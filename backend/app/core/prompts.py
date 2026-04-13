@@ -1,30 +1,15 @@
-"""Prompt construction for MPMB-Copilot RAG pipeline.
+"""Prompt construction for MPMB-Copilot's RAG pipeline.
 
-Builds the two-layer system prompt:
-    1. **Static instructions** (cacheable) - MPMB rules, ES5 constraints,
-                object type reference, edition awareness.  Stays identical across
-                turns in a conversation so Anthropic's prompt caching applies.
-    2. **Dynamic RAG context** (per-query) - formatted authoritative and
-                example chunks from the retriever.  Changes each turn.
-
-The prompt builder produces raw message dicts (not LangChain Message
-objects) so that `cache_control` keys can be attached for Anthropic.
-Other providers ignore the extra key harmlessly.
+Separates:
+    1. **Static instructions** - the stable system prompt passed to
+                `Agent(instructions=...)` so provider-side instruction caching
+                stays warm across turns.
+    2. **Dynamic RAG context** - per-turn retrieved chunks injected
+                into the user prompt so they don't invalidate that cache.
 
 The static instructions text is stored in `settings.system_prompt`.
-When that field is None/empty, the built-in default is used.  The
-frontend can later let users edit this via `PATCH /api/settings`.
-
-Usage:
-    from app.core.prompts import prompt_builder
-
-    messages = prompt_builder.build_messages(
-        query="How do I add a spell?",
-        retrieval_result=result,
-        conversation_history=[...],
-        edition="2014",
-    )
-    # -> list of message dicts ready for LLM client
+When that field is None/empty, the built-in default is used. The
+frontend can edit this via `PATCH /api/settings`.
 """
 
 from typing import Optional
@@ -92,25 +77,25 @@ WHEN WRITING CODE:
 GROUNDING IN PROVIDED CONTEXT:
 The chat backend retrieves relevant MPMB source code, syntax templates, \
 and engine function definitions on every turn and injects them into your \
-system message under "Syntax rules and engine behavior" and "Implementation \
+prompt context under "Syntax rules and engine behavior" and "Implementation \
 examples" sections.
 
 - Treat that retrieved context as your primary source of truth.  When the \
-	user asks about an engine function (e.g. CreateSpellList, ParseSpell, \
-	AddSubClass, etc.) or about valid attributes, look in the retrieved \
-	sections FIRST and quote / cite from them directly.
+user asks about an engine function (e.g. CreateSpellList, ParseSpell, \
+AddSubClass, etc.) or about valid attributes, look in the retrieved \
+sections FIRST and quote / cite from them directly.
 - If the user asks for a specific function's implementation and that \
-	function IS present in the retrieved context, reproduce it from the \
-	context.  Do not claim you lack access.
+function IS present in the retrieved context, reproduce it from the \
+context.  Do not claim you lack access.
 - If the requested function or attribute is NOT in the retrieved context, \
-	say exactly that ("That function isn't in my retrieved context for this \
-	query") rather than refusing in general terms or guessing.  You may then \
-	suggest the user re-ask with a more specific phrasing or point them to \
-	the upstream MPMB repository.
+say exactly that ("That function isn't in my retrieved context for this \
+query") rather than refusing in general terms or guessing.  You may then \
+suggest the user re-ask with a more specific phrasing or point them to \
+the upstream MPMB repository.
 - Never describe yourself as an LLM that lacks access to MPMB internals - \
-	the engine source IS indexed and retrievable; missing results mean the \
-	retriever didn't surface a match for this particular query, not that the \
-	source is unavailable."""
+the engine source IS indexed and retrievable; missing results mean the \
+retriever didn't surface a match for this particular query, not that the \
+source is unavailable."""
 
 
 # RAG context formatting
@@ -122,7 +107,6 @@ def _format_chunk(chunk: dict, index: int) -> str:
     score = chunk.get("score", 0.0)
     content = chunk.get("content", "")
 
-    # Metadata line for provenance
     meta_parts = [f"[{index}]", f"({edition})"]
     if chunk_type:
         meta_parts.append(chunk_type)
@@ -146,9 +130,9 @@ def _format_chunk_section(chunks: list[dict], section_title: str) -> str:
     return "\n\n".join(formatted)
 
 
-# * Message construction
+# * Prompt builder
 class PromptBuilder:
-    """Builds message lists for LLM calls with cache-aware structure."""
+    """Builds prompt payloads for LLM calls."""
 
     def get_static_instructions(self) -> str:
         """Return the static system prompt text.
@@ -176,14 +160,12 @@ class PromptBuilder:
 
         sections = []
 
-        # Edition context
         if edition:
             sections.append(
                 f"The user is working with the **{edition}** edition. "
                 f"Provide syntax and examples matching this edition."
             )
 
-        # Authoritative section
         auth_section = _format_chunk_section(
             retrieval_result.authoritative,
             "Syntax rules and engine behavior (authoritative - trust these for correctness)",
@@ -191,7 +173,6 @@ class PromptBuilder:
         if auth_section:
             sections.append(auth_section)
 
-        # Examples section
         ex_section = _format_chunk_section(
             retrieval_result.examples,
             "Implementation examples (use these as patterns, but follow the rules above)",
@@ -207,114 +188,15 @@ class PromptBuilder:
         retrieval_result: Optional[RetrievalResult] = None,
         edition: Optional[str] = None,
     ) -> str:
-        """Build a single user-prompt string with RAG context prepended.
+        """Build a user-prompt string with RAG context prepended.
 
-        Used by the PydanticAI code path where the static system prompt
-        goes to `Agent(instructions=...)` and the per-turn RAG context
-        is injected into the user prompt so it doesn't bust the
-        instruction cache.
-
-        Returns:
-            The query as-is when there's no RAG context, or the RAG
-            context followed by a separator and the user question.
+        Returns the query as-is when there's no RAG context, or the RAG
+        context followed by a separator and the user question.
         """
         rag_context = self.format_rag_context(retrieval_result, edition)
         if rag_context:
             return f"{rag_context}\n\n---\n\nUser question: {query}"
         return query
-
-    # DEPRECATED: will be removed after Phase A migration completes.
-    def build_messages(
-        self,
-        query: str,
-        retrieval_result: Optional[RetrievalResult] = None,
-        conversation_history: Optional[list[dict]] = None,
-        edition: Optional[str] = None,
-        provider: Optional[str] = None,
-    ) -> list[dict]:
-        """Build the complete message list for an LLM call.
-
-        Returns raw dicts (not LangChain Message objects) so that
-        cache_control can be attached for Anthropic.  The LLM client
-        passes these directly to the provider.
-
-        Args:
-            query: Current user question.
-            retrieval_result: Output from the retriever (may be None).
-            conversation_history: Previous messages as dicts with
-                'role' and 'content' keys (from session DB).
-            edition: Active edition for context.
-            provider: LLM provider name (affects cache_control).
-
-        Returns:
-            List of message dicts ready for the LLM client.
-        """
-        messages = []
-
-        # System message (two content blocks)
-        static_text = self.get_static_instructions()
-        rag_context = self.format_rag_context(retrieval_result, edition)
-
-        system_content = self._build_system_content(
-            static_text=static_text,
-            rag_context=rag_context,
-            provider=provider or settings.default_llm_provider,
-        )
-        messages.append({"role": "system", "content": system_content})
-
-        # Conversation history
-        if conversation_history:
-            for msg in conversation_history:
-                messages.append(
-                    {
-                        "role": msg["role"],
-                        "content": msg["content"],
-                    }
-                )
-
-        # Current user query
-        messages.append({"role": "user", "content": query})
-
-        return messages
-
-    # DEPRECATED: will be removed after Phase A migration completes.
-    def _build_system_content(
-        self,
-        static_text: str,
-        rag_context: str,
-        provider: str,
-    ) -> list[dict] | str:
-        """Build system message content, with cache_control for Anthropic.
-
-        For Anthropic: returns a list of content blocks so the static
-        portion can be cached separately from the dynamic RAG context.
-
-        For other providers: returns a plain string (they don't support
-        content blocks in system messages).
-        """
-        if provider == "anthropic":
-            blocks = [
-                {
-                    "type": "text",
-                    "text": static_text,
-                    "cache_control": {"type": "ephemeral"},
-                },
-            ]
-
-            if rag_context:
-                blocks.append(
-                    {
-                        "type": "text",
-                        "text": rag_context,
-                    }
-                )
-
-            return blocks
-
-        # OpenAI / Ollama: plain string
-        if rag_context:
-            return f"{static_text}\n\n{rag_context}"
-        return static_text
 
 
 # * Global instance

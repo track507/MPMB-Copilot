@@ -30,11 +30,6 @@ router = APIRouter()
 
 
 # * Helpers
-def _resolve_session_id(request: ChatRequest) -> str | None:
-    """Get the session ID from request, supporting both old and new field names."""
-    return request.session_id or request.conversation_id
-
-
 async def _load_history(session_id_str: str | None) -> tuple[UUID | None, list[dict]]:
     """Load conversation history from the session store.
 
@@ -83,14 +78,12 @@ async def _save_messages(
         return
 
     try:
-        # Save user message
         await session_service.add_message(
             session_id=session_uuid,
             role="user",
             content={"text": user_message},
         )
 
-        # Save assistant message with LLM metadata
         kwargs = {}
         if rag_response:
             usage = rag_response.usage if isinstance(rag_response.usage, dict) else {}
@@ -120,7 +113,7 @@ async def _save_messages(
 
 
 def _build_metadata(
-    conversation_id: str = "",
+    session_id: str = "",
     provider: str = "",
     model: str = "",
     usage: dict | None = None,
@@ -133,7 +126,7 @@ def _build_metadata(
     without another metadata refactor.
     """
     return {
-        "conversation_id": conversation_id,
+        "session_id": session_id,
         "provider": provider,
         "model": model,
         "usage": usage or {},
@@ -176,16 +169,13 @@ def _build_sources_from_rag(rag_response) -> list[dict]:
 async def chat(request: ChatRequest):
     """Generate a complete RAG-powered response with session persistence."""
     try:
-        session_id_str = _resolve_session_id(request)
-        logger.info(f"Chat request: session_id={session_id_str} provider={request.provider} edition={request.edition}")
+        logger.info(
+            f"Chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
+        )
 
-        # Load conversation history
-        session_uuid, history = await _load_history(session_id_str)
-
-        # Ensure session exists
+        session_uuid, history = await _load_history(request.session_id)
         session_uuid = await _ensure_session(session_uuid, request.edition)
 
-        # Run full RAG pipeline
         rag_response = await rag_engine.generate(
             query=request.message,
             conversation_history=history,
@@ -196,18 +186,16 @@ async def chat(request: ChatRequest):
             max_tokens=request.max_tokens,
         )
 
-        # Persist messages
         await _save_messages(session_uuid, request.message, rag_response.content, rag_response)
 
-        # Build response
-        conversation_id = str(session_uuid) if session_uuid else (session_id_str or "")
+        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         sources = None
         if request.include_source and rag_response.retrieval_info:
             sources = _build_sources_from_rag(rag_response)
 
         metadata = _build_metadata(
-            conversation_id=conversation_id,
+            session_id=session_id,
             provider=rag_response.provider,
             model=rag_response.model,
             usage=rag_response.usage,
@@ -217,7 +205,7 @@ async def chat(request: ChatRequest):
 
         return ChatResponse(
             response=rag_response.content,
-            conversation_id=conversation_id,
+            session_id=session_id,
             sources=sources,
             metadata=metadata,
         )
@@ -248,18 +236,14 @@ async def chat(request: ChatRequest):
 async def chat_stream(request: ChatRequest):
     """Stream a RAG-powered response via SSE with session persistence."""
     try:
-        session_id_str = _resolve_session_id(request)
         logger.info(
-            f"Streaming chat request: session_id={session_id_str} provider={request.provider} edition={request.edition}"
+            f"Streaming chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        # Load conversation history
-        session_uuid, history = await _load_history(session_id_str)
-
-        # Ensure session exists
+        session_uuid, history = await _load_history(request.session_id)
         session_uuid = await _ensure_session(session_uuid, request.edition)
 
-        conversation_id = str(session_uuid) if session_uuid else (session_id_str or "")
+        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         async def event_generator():
             """Generate SSE events from the RAG stream."""
@@ -282,7 +266,7 @@ async def chat_stream(request: ChatRequest):
                             chunk="",
                             done=True,
                             metadata=_build_metadata(
-                                conversation_id=conversation_id,
+                                session_id=session_id,
                                 provider=event.provider or "",
                                 model=event.model or "",
                                 usage=event.usage,
@@ -300,7 +284,6 @@ async def chat_stream(request: ChatRequest):
                         )
                         yield f"data: {chunk.model_dump_json()}\n\n"
 
-                # Save messages after stream completes
                 assistant_text = "".join(full_content)
                 await _save_messages(session_uuid, request.message, assistant_text, final_event)
 
@@ -321,7 +304,7 @@ async def chat_stream(request: ChatRequest):
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
-                "X-Conversation-Id": conversation_id,
+                "X-Session-Id": session_id,
             },
         )
 

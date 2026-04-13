@@ -1,6 +1,6 @@
 # MPMB-Copilot
 
-> **Last Updated:** April 1, 2026
+> **Last Updated:** April 12, 2026
 > **Status:** Initial end-to-end RAG MVP is running
 > **Latest verified setup:** `npm run setup:all` successfully cloned the source repos, chunked them, started Docker services, and indexed **4,831 vectors across 281 unique source files**
 
@@ -40,8 +40,9 @@ The repo is no longer blocked in setup.
 - **Chat pipeline**
   - `POST /api/chat` runs the full RAG pipeline and returns response metadata
   - `POST /api/chat/stream` streams responses via SSE
+  - session-backed conversation history is persisted and replayed through the chat flow
   - retriever logic combines authoritative chunks with example chunks
-  - Anthropic, OpenAI, and Ollama are supported through LangChain wrappers
+  - Anthropic, OpenAI, and Ollama are supported through a PydanticAI-backed multi-provider client
 
 - **Operations**
   - `/api/health` reports backend, Qdrant, LLM provider, and embedding readiness
@@ -50,14 +51,14 @@ The repo is no longer blocked in setup.
 
 ## Current Gaps
 
-- **Session persistence is not wired yet**
-  - `conversation_id` is accepted by the chat API, but conversation history loading is still stubbed
-
 - **Source citations are still lightweight**
   - chat responses currently return retrieval summary metadata rather than full per-chunk file/line citations
 
 - **Tool use and extended thinking are scaffolded, not implemented**
   - the settings exist in `backend/app/settings.py`, but provider calls do not yet use them
+
+- **Manual provider/browser verification still needs a final pass**
+  - backend tests are passing, but Anthropic/OpenAI browser smoke checks and cache-read verification are still checklist items
 
 - **Docker health and app health may disagree**
   - on Windows, Docker may occasionally show Qdrant as unhealthy even while `/api/health` reports Qdrant as healthy and queries succeed
@@ -258,12 +259,12 @@ mpmb-copilot/
 
 ### Next Priorities
 
-- wire session persistence into the chat flow
 - return richer per-source citations in chat responses
 - connect tool use and extended thinking settings to provider calls
+- build and wire the MPMB source toolset
 - add source tracking and deterministic vector IDs
 - add more tests and end-to-end verification
-- continue frontend and persistence work
+- continue frontend and UX polish
 
 ## License
 

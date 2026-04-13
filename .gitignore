@@ -526,3 +526,6 @@ __marimo__/
 
 # Don't ignore the lib under frontend
 !frontend/src/lib/
+# Runtime logs
+/logs/
+/backend/logs/

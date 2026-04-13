@@ -87,10 +87,10 @@ export function ChatWindow(): ReactElement {
 	);
 
 	return (
-		<div className="flex h-full flex-col">
+		<div className="flex h-full min-w-0 flex-col">
 			{/* Messages area */}
-			<div className="flex-1 overflow-y-auto px-4 py-6">
-				<div className="mx-auto max-w-3xl space-y-6">
+			<div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6">
+				<div className="mx-auto min-w-0 max-w-3xl space-y-6">
 					{serverMessages.length === 0 && !isStreaming && pendingUserMessage === null && (
 						<div className="py-24 text-center">
 							<h2 className="text-2xl font-bold tracking-tight">MPMB Copilot</h2>
@@ -115,7 +115,7 @@ export function ChatWindow(): ReactElement {
 
 			{/* Input area */}
 			<div className="border-t border-border bg-background px-4 py-3">
-				<form onSubmit={handleSubmit} className="mx-auto flex max-w-3xl items-end gap-2">
+				<form onSubmit={handleSubmit} className="mx-auto flex min-w-0 max-w-3xl items-end gap-2">
 					<textarea
 						ref={textareaRef}
 						value={input}

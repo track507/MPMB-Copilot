@@ -7,6 +7,9 @@
 	"engines": {
 		"node": ">=24.0.0"
 	},
+	"workspaces": [
+		"frontend"
+	],
 	"scripts": {
 		"start": "npm run dev",
 		"setup": "pwsh -File ./scripts/setup.ps1",
@@ -16,7 +19,7 @@
 		"dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
 		"dev:full": "node ./scripts/dev.mjs",
 		"dev:backend": "uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000",
-		"dev:frontend": "npm --prefix frontend run dev",
+		"dev:frontend": "npm -w frontend run dev",
 		"docker:up": "docker compose up -d",
 		"docker:down": "docker compose down",
 		"docker:logs": "docker compose logs -f backend",
@@ -26,14 +29,14 @@
 		"lint": "npm run lint:js && npm run lint:ts && npm run lint:py && npm run lint:md",
 		"lint:js": "eslint .",
 		"lint:js:fix": "eslint . --fix",
-		"lint:ts": "npm --prefix frontend run lint",
-		"lint:ts:fix": "npm --prefix frontend run lint:fix",
+		"lint:ts": "npm -w frontend run lint",
+		"lint:ts:fix": "npm -w frontend run lint:fix",
 		"lint:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app tests scripts",
 		"lint:py:fix": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app tests scripts --fix",
 		"lint:md": "markdownlint-cli2 \"README.md\" \"docs/**/*.md\" \"data/README.md\" \".github/**/*.md\"",
 		"frontend:dev": "npm --prefix frontend run dev",
-		"frontend:build": "npm --prefix frontend run build",
-		"frontend:typecheck": "npm --prefix frontend run typecheck",
+		"frontend:build": "npm -w frontend run build",
+		"frontend:typecheck": "npm -w frontend run typecheck",
 		"format": "npm run format:js && npm run format:py",
 		"format:js": "prettier . --write",
 		"format:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format backend/app tests scripts",
@@ -74,6 +77,6 @@
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0",
 		"markdownlint-cli2": "^0.22.0",
-		"prettier": "^3.8.1"
+		"prettier": "^3.8.2"
 	}
 }

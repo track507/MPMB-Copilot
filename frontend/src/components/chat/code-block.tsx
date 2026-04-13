@@ -19,7 +19,7 @@ export function CodeBlock({ code, language = "javascript" }: CodeBlockProps): Re
 	}, [code]);
 
 	return (
-		<div className="not-prose my-2 overflow-hidden rounded-md border border-zinc-700 bg-zinc-900 text-zinc-100">
+		<div className="not-prose my-2 w-full max-w-full overflow-hidden rounded-md border border-zinc-700 bg-zinc-900 text-zinc-100">
 			<div className="flex items-center justify-between border-b border-zinc-700 bg-zinc-800 px-3 py-1.5">
 				<span className="text-xs text-zinc-400">{language}</span>
 				<button
@@ -42,8 +42,8 @@ export function CodeBlock({ code, language = "javascript" }: CodeBlockProps): Re
 				</button>
 			</div>
 
-			<pre className="overflow-x-auto p-3 text-xs leading-relaxed">
-				<code className="font-mono text-zinc-100">{code}</code>
+			<pre className="max-w-full overflow-x-auto p-3 text-xs leading-relaxed">
+				<code className="block min-w-max font-mono text-zinc-100">{code}</code>
 			</pre>
 		</div>
 	);

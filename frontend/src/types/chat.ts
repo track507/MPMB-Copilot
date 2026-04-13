@@ -13,7 +13,7 @@ export interface ChatRequest {
 
 export interface ChatResponse {
 	readonly response: string;
-	readonly conversation_id: string;
+	readonly session_id: string;
 	readonly sources: SourceReference[] | null;
 	readonly metadata: ChatMetadata;
 }
@@ -48,7 +48,7 @@ export interface ChatRetrieval {
 }
 
 export interface ChatMetadata {
-	readonly conversation_id?: string | undefined;
+	readonly session_id?: string | undefined;
 	readonly provider?: string | undefined;
 	readonly model?: string | undefined;
 	readonly usage?: ChatUsage | undefined;

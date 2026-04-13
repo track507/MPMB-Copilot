@@ -21,7 +21,7 @@ export function MessageBubble({ role, content, sources, isStreaming = false }: M
 	const isUser = role === "user";
 
 	return (
-		<div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+		<div className={cn("flex min-w-0 gap-3", isUser && "flex-row-reverse")}>
 			<div
 				className={cn(
 					"flex size-8 shrink-0 items-center justify-center rounded-full",
@@ -30,10 +30,10 @@ export function MessageBubble({ role, content, sources, isStreaming = false }: M
 				{isUser ? <User className="size-4" /> : <Bot className="size-4" />}
 			</div>
 
-			<div className={cn("max-w-[85%] space-y-2", isUser && "text-right")}>
+			<div className={cn("min-w-0 max-w-[85%] space-y-2", isUser && "text-right")}>
 				<div
 					className={cn(
-						"inline-block rounded-lg px-4 py-2.5 text-sm leading-relaxed",
+						"inline-block max-w-full overflow-hidden rounded-lg px-4 py-2.5 text-sm leading-relaxed",
 						isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
 					)}>
 					{isUser ? (
@@ -41,7 +41,7 @@ export function MessageBubble({ role, content, sources, isStreaming = false }: M
 					) : (
 						<div
 							className={cn(
-								"prose prose-sm dark:prose-invert max-w-none",
+								"prose prose-sm dark:prose-invert min-w-0 max-w-none",
 								"prose-pre:m-0 prose-pre:bg-transparent prose-pre:p-0",
 								"prose-code:before:content-none prose-code:after:content-none"
 							)}>
@@ -68,7 +68,7 @@ export function MessageBubble({ role, content, sources, isStreaming = false }: M
 									},
 									pre: ({ children }) => <>{children}</>,
 									table: ({ children, ...props }) => (
-										<div className="my-2 overflow-x-auto">
+										<div className="my-2 max-w-full overflow-x-auto">
 											<table className="w-full border-collapse text-xs" {...props}>
 												{children}
 											</table>

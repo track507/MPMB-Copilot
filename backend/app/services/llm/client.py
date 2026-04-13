@@ -11,25 +11,24 @@ The client reads provider selection and behavioral params from
 Usage:
     from app.services.llm import llm_client
 
-    # Non-streaming
-    response = await llm_client.generate(messages)
-    print(response.content)
-    print(response.usage)
-
-    # Streaming
-    async for event in llm_client.stream(messages):
-        print(event.content, end="", flush=True)
-
-    # Override provider/model per call
     response = await llm_client.generate(
-        messages, provider="openai", model="gpt-4o",
+        instructions="You are a helpful assistant.",
+        user_prompt="Hello",
     )
+
+    async for event in llm_client.stream(
+        instructions="...",
+        user_prompt="Hello",
+        history=[{"role": "user", "content": "earlier turn"}],
+    ):
+        print(event.content, end="", flush=True)
 """
 
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
 
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -65,9 +64,6 @@ class LLMResponse:
     stop_reason: Optional[str] = None
     """Why generation stopped (end_turn, max_tokens, etc.)."""
 
-    # DEPRECATED: remove after parity tests. No consumers exist.
-    raw: Optional[Any] = None
-
 
 @dataclass
 class LLMStreamEvent:
@@ -86,54 +82,6 @@ class LLMStreamEvent:
     """Stop reason - populated only on the final event."""
 
 
-# * Message splitting
-def _split_messages(messages: list[dict]) -> tuple[str, list[dict], str]:
-    """Split a flat message list into (system_text, history, user_prompt).
-
-    The legacy `build_messages()` returns a flat `list[dict]` with a
-    system message first, conversation history in the middle, and the
-    current user query last.  This function extracts those three parts
-    so they can be routed to PydanticAI's `Agent(instructions=...)`,
-    `message_history`, and `user_prompt` respectively.
-
-    For the system content: if it's a list of Anthropic-style content
-    blocks (dicts with `text` keys), the text parts are concatenated.
-    PydanticAI handles cache_control via `AnthropicModelSettings`, so
-    manual cache_control blocks are stripped.
-    """
-    system_text = ""
-    history: list[dict] = []
-    user_prompt = ""
-
-    if not messages:
-        return system_text, history, user_prompt
-
-    start = 0
-    # Extract system message (always first if present)
-    if messages[0]["role"] == "system":
-        raw_content = messages[0]["content"]
-        if isinstance(raw_content, list):
-            # Anthropic-style content blocks: [{"type": "text", "text": "...", ...}]
-            system_text = "\n\n".join(
-                block["text"] for block in raw_content if isinstance(block, dict) and "text" in block
-            )
-        else:
-            system_text = str(raw_content)
-        start = 1
-
-    # Last message is the current user query
-    if start < len(messages) and messages[-1]["role"] == "user":
-        user_prompt = messages[-1]["content"]
-        end = len(messages) - 1
-    else:
-        end = len(messages)
-
-    # Everything in between is conversation history
-    history = messages[start:end]
-
-    return system_text, history, user_prompt
-
-
 # * PydanticAI Agent factory
 def _build_agent(
     instructions: str,
@@ -144,11 +92,12 @@ def _build_agent(
 ) -> Agent:
     """Instantiate a PydanticAI `Agent` for the given provider.
 
-    The static system instructions are passed as `instructions=` so they
-    can be cached by Anthropic via `anthropic_cache_instructions`.  Per-turn
-    RAG context belongs in the user prompt, not here, so the cache stays warm.
+    Static system instructions are passed as `instructions=` so they can
+    be cached by Anthropic via `anthropic_cache_instructions`. Per-turn
+    RAG context belongs in the user prompt, not here, so the cache stays
+    warm.
 
-    Cache settings are applied only on the anthropic branch.  OpenAI and
+    Cache settings are applied only on the anthropic branch. OpenAI and
     Ollama get plain `ModelSettings`.
     """
     provider = provider or settings.default_llm_provider
@@ -189,7 +138,6 @@ def _build_agent(
         return Agent(openai_model, instructions=instructions, model_settings=model_settings)
 
     elif provider == "ollama":
-        # Ollama exposes a Chat Completions-compatible API.
         ollama_model = OpenAIChatModel(
             model_name=model,
             provider=OllamaProvider(base_url=config.ollama_host),
@@ -222,13 +170,36 @@ def _extract_usage(usage) -> dict[str, Any]:
     }
 
 
+def _extract_stop_reason_from_messages(messages: list[Any]) -> Optional[str]:
+    """Best-effort extraction of a stop reason from model response messages.
+
+    PydanticAI does not expose a provider-agnostic stop reason on the top-level
+    result object. The most reliable cross-provider signal we have is the final
+    `ModelResponse.finish_reason` when present.
+    """
+    for message in reversed(messages):
+        if not isinstance(message, ModelResponse):
+            continue
+
+        reason = getattr(message, "finish_reason", None)
+        if reason is None:
+            continue
+        if hasattr(reason, "value"):
+            return str(reason.value)
+        return str(reason)
+
+    return None
+
+
 # * Client
 class LLMClient:
     """Unified LLM client with streaming, caching, and provider switching."""
 
     async def generate(
         self,
-        messages: list[dict],
+        instructions: str,
+        user_prompt: str,
+        history: Optional[list[dict]] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
@@ -237,10 +208,10 @@ class LLMClient:
         """Generate a complete (non-streaming) response.
 
         Args:
-            messages: Message dicts with 'role' and 'content' keys.
-                System message (first item) becomes Agent instructions.
-                Last user message becomes the prompt.
-                Everything in between is conversation history.
+            instructions: Static system prompt for `Agent(instructions=...)`.
+            user_prompt: Current user message (may include per-turn RAG context).
+            history: Prior conversation messages as dicts with `role` and
+                `content` keys (from the session DB).
             provider: Override the default provider.
             model: Override the default model.
             temperature: Override the default temperature.
@@ -252,39 +223,38 @@ class LLMClient:
         resolved_provider = provider or settings.default_llm_provider
         resolved_model = model or settings.default_model
 
-        system_text, history_dicts, user_prompt = _split_messages(messages)
-
         agent = _build_agent(
-            instructions=system_text,
+            instructions=instructions,
             provider=resolved_provider,
             model=resolved_model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
 
-        pydantic_history = to_pydantic_messages(history_dicts)
+        pydantic_history = to_pydantic_messages(history or [])
 
         logger.info(
-            f"LLM generate: provider={resolved_provider} model={resolved_model} "
-            f"messages={len(messages)} history={len(pydantic_history)}"
+            f"LLM generate: provider={resolved_provider} model={resolved_model} history={len(pydantic_history)}"
         )
 
         result = await agent.run(user_prompt, message_history=pydantic_history)
 
         usage = _extract_usage(result.usage())
+        stop_reason = _extract_stop_reason_from_messages(result.new_messages())
 
         return LLMResponse(
             content=result.output,
             provider=resolved_provider,
             model=resolved_model,
             usage=usage,
-            stop_reason=None,  # PydanticAI doesn't expose stop_reason directly
-            raw=None,
+            stop_reason=stop_reason,
         )
 
     async def stream(
         self,
-        messages: list[dict],
+        instructions: str,
+        user_prompt: str,
+        history: Optional[list[dict]] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
         temperature: Optional[float] = None,
@@ -292,40 +262,36 @@ class LLMClient:
     ) -> AsyncIterator[LLMStreamEvent]:
         """Stream a response as incremental events.
 
-        Yields LLMStreamEvent objects.  The final event has
-        `done=True` and includes usage metadata if available.
+        Yields `LLMStreamEvent` objects. The final event has `done=True`
+        and includes usage metadata if available.
         """
         resolved_provider = provider or settings.default_llm_provider
         resolved_model = model or settings.default_model
 
-        system_text, history_dicts, user_prompt = _split_messages(messages)
-
         agent = _build_agent(
-            instructions=system_text,
+            instructions=instructions,
             provider=resolved_provider,
             model=resolved_model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
 
-        pydantic_history = to_pydantic_messages(history_dicts)
+        pydantic_history = to_pydantic_messages(history or [])
 
-        logger.info(
-            f"LLM stream: provider={resolved_provider} model={resolved_model} "
-            f"messages={len(messages)} history={len(pydantic_history)}"
-        )
+        logger.info(f"LLM stream: provider={resolved_provider} model={resolved_model} history={len(pydantic_history)}")
 
         async with agent.run_stream(user_prompt, message_history=pydantic_history) as stream:
             async for delta in stream.stream_text(delta=True):
                 yield LLMStreamEvent(content=delta)
 
             usage = _extract_usage(stream.usage())
+            stop_reason = _extract_stop_reason_from_messages(stream.all_messages())
 
         yield LLMStreamEvent(
             content="",
             done=True,
             usage=usage,
-            stop_reason=None,
+            stop_reason=stop_reason,
         )
 
 

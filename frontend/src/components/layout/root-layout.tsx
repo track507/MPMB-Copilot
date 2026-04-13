@@ -9,10 +9,10 @@ export default function RootLayout(): ReactElement {
 		<div className="flex h-screen overflow-hidden bg-background text-foreground">
 			<SidebarNav />
 
-			<div className="flex flex-1 flex-col overflow-hidden">
+			<div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 				<TopBar />
 
-				<main className="flex-1 overflow-y-auto">
+				<main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
 					<Outlet />
 				</main>
 			</div>
