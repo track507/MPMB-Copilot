@@ -61,4 +61,7 @@ export interface SourceReference {
 	readonly content: string;
 	readonly score: number;
 	readonly line_range?: [number, number] | undefined;
+	readonly edition?: string | undefined;
+	readonly source_tier?: string | undefined;
+	readonly chunk_type?: string | undefined;
 }

@@ -88,6 +88,34 @@ _OBJECT_TYPE_KEYWORDS: dict[str, str] = {
     # identifier SourceList still matches via the code-identifier check.
 }
 
+# Literal MPMB code identifiers, sorted longest-first so prefix
+# collisions resolve to the more specific name (ClassSubList before
+# ClassList, BackgroundFeatureList before BackgroundList).
+_CODE_IDENTIFIERS: tuple[str, ...] = tuple(
+    sorted(
+        (
+            "SpellsList",
+            "ClassList",
+            "ClassSubList",
+            "RaceList",
+            "FeatsList",
+            "MagicItemsList",
+            "CreatureList",
+            "BackgroundList",
+            "BackgroundFeatureList",
+            "WeaponsList",
+            "ArmourList",
+            "AmmoList",
+            "GearList",
+            "SourceList",
+            "CompanionList",
+            "PacksList",
+        ),
+        key=len,
+        reverse=True,
+    )
+)
+
 # * Sorted by length descending so multi-word phrases match first
 _OBJECT_TYPE_KEYWORDS_SORTED = sorted(_OBJECT_TYPE_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
 
@@ -95,41 +123,24 @@ _OBJECT_TYPE_KEYWORDS_SORTED = sorted(_OBJECT_TYPE_KEYWORDS.items(), key=lambda 
 def _infer_object_type(query: str) -> Optional[str]:
     """Detect MPMB object type from query text.
 
-    Checks multi-word phrases first, then single words with word boundary.
-    Also checks for literal ObjectType names (code identifiers).
+    Checks literal code identifiers first (longest-first to resolve
+    prefix collisions), then multi-word phrases, then single-word
+    keywords. All matching uses word boundaries so substrings of
+    longer names don't produce false positives.
     """
-    query_lower = query.lower()
-
-    # Check for literal code identifiers first (e.g. "SpellsList", "FeatsList")
-    for code_name in (
-        "SpellsList",
-        "ClassList",
-        "ClassSubList",
-        "RaceList",
-        "FeatsList",
-        "MagicItemsList",
-        "CreatureList",
-        "BackgroundList",
-        "BackgroundFeatureList",
-        "WeaponsList",
-        "ArmourList",
-        "AmmoList",
-        "GearList",
-        "SourceList",
-        "CompanionList",
-        "PacksList",
-    ):
-        if code_name in query:
+    # Literal code identifiers - word-boundary matched so "SubClassList"
+    # in user text doesn't falsely match "ClassList".
+    for code_name in _CODE_IDENTIFIERS:
+        if re.search(rf"\b{re.escape(code_name)}\b", query):
             return code_name
 
-    # Check keyword phrases
+    # Keyword phrases
+    query_lower = query.lower()
     for keyword, obj_type in _OBJECT_TYPE_KEYWORDS_SORTED:
         if " " in keyword:
-            # Multi-word: substring match
             if keyword in query_lower:
                 return obj_type
         else:
-            # Single-word: word boundary match to avoid "class" in "subclass"
             if re.search(rf"\b{re.escape(keyword)}\b", query_lower):
                 return obj_type
 

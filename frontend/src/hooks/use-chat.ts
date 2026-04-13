@@ -96,6 +96,8 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 									if (chunk.done) {
 										useChatStore.getState().completeStream(chunk.metadata ?? null);
 									} else {
+										// eslint-disable-next-line no-console
+										console.log("chunk", chunk.chunk);
 										useChatStore.getState().appendStreamChunk(chunk.chunk);
 									}
 								} catch {

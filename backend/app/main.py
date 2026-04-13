@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import chat, health, index, sessions, tasks
+from app.api import chat, health, index, sessions, settings, tasks
 from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
@@ -104,6 +104,7 @@ app.include_router(chat.router, prefix=config.api_prefix, tags=["Chat"])
 app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"])
 app.include_router(sessions.router, prefix=config.api_prefix, tags=["Sessions"])
 app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"])
+app.include_router(settings.router, prefix=config.api_prefix, tags=["Settings"])
 
 
 # Root endpoint

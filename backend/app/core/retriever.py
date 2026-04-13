@@ -83,6 +83,7 @@ class RetrievalResult:
             "edition": self.query_analysis.edition if self.query_analysis else None,
             "object_type": self.query_analysis.object_type if self.query_analysis else None,
             "timing_ms": round(self.timing_ms, 1),
+            "chunks": [*self.authoritative, *self.examples],
         }
 
 

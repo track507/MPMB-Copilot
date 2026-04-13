@@ -17,6 +17,9 @@ export function ChatWindow(): ReactElement {
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const shouldAutoScrollRef = useRef(true);
+
 	const { data: session } = useSession(sessionId);
 
 	const handleError = useCallback((error: Error) => {
@@ -36,16 +39,22 @@ export function ChatWindow(): ReactElement {
 	// Server-confirmed messages from React Query
 	const serverMessages = session?.messages ?? [];
 
-	// Derive: show pending user message only if server hasn't confirmed it yet
-	const lastServerMessage = serverMessages[serverMessages.length - 1];
-	const showPendingUser = pendingUserMessage !== null && lastServerMessage?.content.text !== pendingUserMessage.text;
+	const showPendingUser = pendingUserMessage !== null && isStreaming;
+	const showStreamedText = isStreaming || streamedText.length > 0;
 
-	// Derive: show streaming bubble only if server hasn't confirmed the assistant response yet
-	const showStreamedText = streamedText.length > 0 && lastServerMessage?.role !== "assistant";
+	// Track whether user is near the bottom. Only auto-scroll when they are.
+	const handleScroll = useCallback(() => {
+		const container = scrollContainerRef.current;
+		if (container === null) return;
+		const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+		shouldAutoScrollRef.current = distanceFromBottom < 100;
+	}, []);
 
 	// Auto-scroll to bottom on new messages or streaming
 	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		if (shouldAutoScrollRef.current) {
+			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+		}
 	}, [serverMessages.length, streamedText, showPendingUser]);
 
 	// Auto-resize textarea
@@ -61,6 +70,7 @@ export function ChatWindow(): ReactElement {
 		const trimmed = input.trim();
 		if (trimmed.length === 0 || isStreaming) return;
 		setInput("");
+		shouldAutoScrollRef.current = true;
 
 		// Optimistic: show user message immediately via the store
 		useChatStore.getState().addUserMessage(trimmed);
@@ -89,7 +99,7 @@ export function ChatWindow(): ReactElement {
 	return (
 		<div className="flex h-full min-w-0 flex-col">
 			{/* Messages area */}
-			<div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6">
+			<div ref={scrollContainerRef} onScroll={handleScroll} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-6">
 				<div className="mx-auto min-w-0 max-w-3xl space-y-6">
 					{serverMessages.length === 0 && !isStreaming && pendingUserMessage === null && (
 						<div className="py-24 text-center">
@@ -98,15 +108,12 @@ export function ChatWindow(): ReactElement {
 						</div>
 					)}
 
-					{/* Server-confirmed messages */}
 					{serverMessages.map((msg) => (
 						<MessageBubble key={msg.id} role={msg.role} content={msg.content.text} sources={msg.content.sources} />
 					))}
 
-					{/* Optimistic user message */}
 					{showPendingUser && <MessageBubble role="user" content={pendingUserMessage.text} />}
 
-					{/* Streaming assistant response */}
 					{showStreamedText && <MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} />}
 
 					<div ref={messagesEndRef} />

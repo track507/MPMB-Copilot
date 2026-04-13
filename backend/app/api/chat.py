@@ -102,6 +102,12 @@ async def _save_messages(
                 },
             )
 
+        assistant_content_dict = {"text": assistant_content}
+        if rag_response and rag_response.retrieval_info:
+            sources = _build_sources_from_rag(rag_response)
+            if sources:
+                assistant_content_dict["sources"] = sources
+
         await session_service.add_message(
             session_id=session_uuid,
             role="assistant",
@@ -136,22 +142,33 @@ def _build_metadata(
 
 
 def _build_sources_from_rag(rag_response) -> list[dict]:
-    """Extract source citations from a RAG response."""
-    sources = []
+    """Build per-chunk source citations from a RAG response.
+
+    Returns a list of SourceReference-shaped dicts that the frontend
+    renders in the source citation panel. Each entry identifies the
+    chunk's file, edition, tier, score, and line range.
+    """
+    sources: list[dict] = []
+
     retrieval = rag_response.retrieval_info or {}
+    chunks = retrieval.get("chunks") or []
 
-    auth_count = retrieval.get("authoritative_count", 0)
-    ex_count = retrieval.get("examples_count", 0)
+    for chunk in chunks:
+        content = chunk.get("content", "")
+        preview = content if len(content) <= 400 else content[:400] + "..."
 
-    if auth_count or ex_count:
         sources.append(
             {
-                "type": "retrieval_summary",
-                "authoritative_chunks": auth_count,
-                "example_chunks": ex_count,
-                "intent": retrieval.get("intent"),
-                "edition": retrieval.get("edition"),
-                "object_type": retrieval.get("object_type"),
+                "file": chunk.get("source_file", "unknown"),
+                "content": preview,
+                "score": float(chunk.get("score", 0.0)),
+                "line_range": [
+                    int(chunk.get("start_line", 0)),
+                    int(chunk.get("end_line", 0)),
+                ],
+                "edition": chunk.get("edition"),
+                "source_tier": chunk.get("source_tier"),
+                "chunk_type": chunk.get("chunk_type"),
             }
         )
 
