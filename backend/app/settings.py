@@ -89,15 +89,31 @@ class Settings:
         default_factory=lambda: dict(_DEFAULT_TIER_BUDGETS),
     )
 
-    # Tool use (Phase 2 - defaults to off)
+    # Tool use
     enable_tool_use: bool = False
-    """Allow the LLM to call search tools for additional context."""
+    """Allow the LLM to call MPMB source verification tools."""
 
     max_tool_calls: int = 5
-    """Safety cap on tool calls per query."""
+    """Cap on tool calls per request. 0 = unlimited (LLM decides)."""
 
+    # ! tool_search_limit is deprecated, retrieval now handles enumeration. Field kept for settings JSON compat.
     tool_search_limit: int = 5
-    """Max chunks returned per tool call."""
+    """Deprecated legacy field. Kept for settings JSON compat."""
+
+    tool_grep_max_matches: int = 50
+    """Max match rows returned by mpmb_grep before truncation tag."""
+
+    tool_max_file_bytes: int = 1_048_576
+    """Reject reads when the resolved file is larger than this (bytes)."""
+
+    tool_read_max_lines: int = 2000
+    """Hard cap on lines returned by mpmb_read in a single call."""
+
+    tool_grep_pattern_max_len: int = 500
+    """Reject grep patterns longer than this many characters."""
+
+    tool_grep_file_timeout_sec: float = 1.0
+    """Per-file regex timeout for mpmb_grep (approximate; enforced via elapsed-time check)."""
 
     # Anthropic prompt caching (Anthropic only)
     anthropic_cache_instructions: bool = True
