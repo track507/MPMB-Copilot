@@ -73,27 +73,12 @@ class ChatResponse(BaseModel):
 class ChatStreamChunk(BaseModel):
     """Individual chunk from a streaming chat response.
 
-    Used for server-sent events (SSE) streaming to provide real-time
-    response generation to clients.
-
-    Attributes:
-            chunk: Partial response text for this stream chunk
-            done: Whether this is the final chunk in the stream
-            metadata: Optional metadata sent with final chunk, same structure as
-                    ChatResponse.metadata. Only present when done=True.
-
-    Example:
-            >>> # Intermediate chunk
-            >>> chunk = ChatStreamChunk(chunk="To add a spell", done=False)
-            >>>
-            >>> # Final chunk
-            >>> final = ChatStreamChunk(
-            ...     chunk="",
-            ...     done=True,
-            ...     metadata={"usage": {"total_tokens": 1250}, ...}
-            ... )
+    Carries either a text delta (`chunk`), a tool event
+    (`event` + `tool`), or the final payload (`done=True` + `metadata`).
     """
 
-    chunk: str = Field(..., description="Partial response text")
+    chunk: str = Field("", description="Partial response text")
     done: bool = Field(False, description="Whether stream is complete")
+    event: Optional[str] = Field(None, description="Stream event type: tool_start | tool_end")
+    tool: Optional[dict] = Field(None, description="Tool call info for tool_start/tool_end events")
     metadata: Optional[dict] = Field(None, description="Generation metadata (only in final chunk when done=True)")

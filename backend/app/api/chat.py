@@ -125,13 +125,14 @@ def _build_metadata(
     usage: dict | None = None,
     retrieval_info: dict | None = None,
     timing: dict | None = None,
+    tools: dict | None = None,
 ) -> dict:
     """Build nested metadata matching the frontend `ChatMetadata` type.
 
     Groups are passed through as-is so Phase B can add `tool_events`
     without another metadata refactor.
     """
-    return {
+    meta = {
         "session_id": session_id,
         "provider": provider,
         "model": model,
@@ -139,6 +140,9 @@ def _build_metadata(
         "retrieval": retrieval_info or {},
         "timing": timing or {},
     }
+    if tools:
+        meta["tools"] = tools
+    return meta
 
 
 def _build_sources_from_rag(rag_response) -> list[dict]:
@@ -193,9 +197,12 @@ async def chat(request: ChatRequest):
         session_uuid, history = await _load_history(request.session_id)
         session_uuid = await _ensure_session(session_uuid, request.edition)
 
+        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
+
         rag_response = await rag_engine.generate(
             query=request.message,
             conversation_history=history,
+            session_id=session_id,
             edition=request.edition or settings.default_edition,
             provider=request.provider,
             model=request.model,
@@ -204,8 +211,6 @@ async def chat(request: ChatRequest):
         )
 
         await _save_messages(session_uuid, request.message, rag_response.content, rag_response)
-
-        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         sources = None
         if request.include_source and rag_response.retrieval_info:
@@ -271,6 +276,7 @@ async def chat_stream(request: ChatRequest):
                 async for event in rag_engine.stream(
                     query=request.message,
                     conversation_history=history,
+                    session_id=session_id,
                     edition=request.edition or settings.default_edition,
                     provider=request.provider,
                     model=request.model,
@@ -289,10 +295,19 @@ async def chat_stream(request: ChatRequest):
                                 usage=event.usage,
                                 retrieval_info=event.retrieval_info,
                                 timing=event.timing,
+                                tools=event.tools,
                             ),
                         )
                         yield f"data: {final_chunk.model_dump_json()}\n\n"
                         yield "data: [DONE]\n\n"
+                    elif event.event in ("tool_start", "tool_end"):
+                        tool_chunk = ChatStreamChunk(
+                            chunk="",
+                            done=False,
+                            event=event.event,
+                            tool=event.tool,
+                        )
+                        yield f"data: {tool_chunk.model_dump_json(exclude_none=True)}\n\n"
                     else:
                         full_content.append(event.content)
                         chunk = ChatStreamChunk(
