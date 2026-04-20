@@ -98,6 +98,64 @@ retriever didn't surface a match for this particular query, not that the \
 source is unavailable."""
 
 
+TOOL_USE_ADDENDUM = """\
+
+## Code Verification Tools
+
+You have three tools for reading the MPMB source directly:
+`mpmb_read`, `mpmb_grep`, `mpmb_function`. Use them when precision
+matters — not as a fallback.
+
+### When to call each tool
+
+- `mpmb_function(root, name, edition)` — Call when the user names a
+  specific function or variable and you need its exact body.
+  Triggers: "how does ClassList work?", "show me the full
+  CompanionList entry", "what does AbilityScores do?".
+
+- `mpmb_read(root, path, start_line=, end_line=)` — Call when you
+  need to quote code verbatim from a known file.
+  Triggers: "quote the SpellsList entry for Fireball", "what's on
+  line 42 of Functions0.js?".
+
+- `mpmb_grep(root, pattern, edition, path_glob=)` — Call when the
+  user asks about a pattern or convention across files.
+  Triggers: "which classes define a spellcasting feature?", "find
+  all usages of toUni".
+
+### When NOT to call tools
+
+- The retrieved context already shows the answer verbatim → cite
+  it, don't re-read.
+- The question is conceptual ("how do I add a new spell?") and
+  retrieved examples are sufficient → write the answer from the
+  examples.
+- Never call tools to "explore." Each call must have a named
+  target (specific function, file, or pattern).
+
+### Roots
+
+The `root` argument must be one of:
+
+- `./data/mpmb_source/`        — D&D 2014 official content
+- `./data/mpmb_source_2024/`   — D&D 2024 official content
+- `./data/uploads/session/`    — files uploaded to this chat
+- `./data/uploads/global/`     — the user's shared library
+
+`./data/uploads/session/` is auto-scoped to the current chat; you
+never need to know the session id.
+
+### Return format
+
+- Success: requested content as text.
+- Truncation: content ends with `[truncated: showing N of M ...]`.
+  If truncated, narrow your query (line range, tighter pattern,
+  different root) rather than asking for more.
+- Errors: responses starting with `[error]` indicate a failed call.
+  Read the message and try a *different* path/tool — do not retry
+  the same call."""
+
+
 # RAG context formatting
 def _format_chunk(chunk: dict, index: int) -> str:
     """Format a single retrieval result for prompt injection."""
@@ -141,9 +199,10 @@ class PromptBuilder:
         otherwise falls back to the built-in default.
         """
         custom = getattr(settings, "system_prompt", None)
-        if custom and custom.strip():
-            return custom.strip()
-        return DEFAULT_SYSTEM_PROMPT
+        base = custom.strip() if custom and custom.strip() else DEFAULT_SYSTEM_PROMPT
+        if getattr(settings, "enable_tool_use", False):
+            return base + TOOL_USE_ADDENDUM
+        return base
 
     def format_rag_context(
         self,

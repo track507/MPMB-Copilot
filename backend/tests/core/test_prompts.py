@@ -62,3 +62,25 @@ def test_get_static_instructions_returns_default_when_settings_empty():
     assert "MorePurpleMoreBetter" in instructions
     assert "ES5" in instructions
     assert "## Syntax rules and engine behavior" not in instructions
+
+
+def test_tool_use_addendum_absent_when_disabled(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", False)
+    text = prompt_builder.get_static_instructions()
+    assert "Code Verification Tools" not in text
+
+
+def test_tool_use_addendum_present_when_enabled(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+    text = prompt_builder.get_static_instructions()
+    assert "Code Verification Tools" in text
+    assert "mpmb_read" in text
+    assert "mpmb_grep" in text
+    assert "mpmb_function" in text
+    assert "./data/uploads/session/" in text
