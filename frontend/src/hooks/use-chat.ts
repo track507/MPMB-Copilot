@@ -95,9 +95,11 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 									const chunk = JSON.parse(data) as ChatStreamChunk;
 									if (chunk.done) {
 										useChatStore.getState().completeStream(chunk.metadata ?? null);
-									} else {
-										// eslint-disable-next-line no-console
-										console.log("chunk", chunk.chunk);
+									} else if (chunk.event === "tool_start" && chunk.tool) {
+										useChatStore.getState().onToolStart(chunk.tool);
+									} else if (chunk.event === "tool_end" && chunk.tool) {
+										useChatStore.getState().onToolEnd(chunk.tool);
+									} else if (chunk.chunk) {
 										useChatStore.getState().appendStreamChunk(chunk.chunk);
 									}
 								} catch {
