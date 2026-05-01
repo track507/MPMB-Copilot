@@ -1,6 +1,6 @@
 import { syncChunksToDocker } from "./docker-sync.mjs";
 
-const BASE_URL = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/+$/, "");
+const BASE_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const HEALTH_URL = `${BASE_URL}/api/health`;
 const INDEX_URL = `${BASE_URL}/api/index`;
 

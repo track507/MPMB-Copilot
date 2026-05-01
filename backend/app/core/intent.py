@@ -96,6 +96,7 @@ _MPMB_SYMBOLS: dict[str, QueryIntent] = {
     "ClassList": QueryIntent.LOOKUP,
     "ClassSubList": QueryIntent.LOOKUP,
     "RaceList": QueryIntent.LOOKUP,
+    "RaceSubList": QueryIntent.LOOKUP,
     "FeatsList": QueryIntent.LOOKUP,
     "MagicItemsList": QueryIntent.LOOKUP,
     "CreatureList": QueryIntent.LOOKUP,

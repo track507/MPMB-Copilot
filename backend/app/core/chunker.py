@@ -56,6 +56,7 @@ OBJECT_TYPE_MAP = {
     "ClassList": "class",
     "ClassSubList": "subclass",
     "RaceList": "race",
+    "RaceSubList": "racial_variant",
     "FeatsList": "feat",
     "MagicItemsList": "magic_item",
     "CreatureList": "creature",
