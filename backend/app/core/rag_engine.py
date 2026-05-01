@@ -211,6 +211,10 @@ class RAGEngine:
         t_generate = time.perf_counter()
         tool_calls: list[dict[str, Any]] = []
         tool_start_times: dict[str, float] = {}
+        # ? After a tool result, the model's next text part starts mid-sentence
+        # ? with no separator. Inject a paragraph break before the first text
+        # ? chunk that follows a tool_end so sentences don't collide.
+        needs_separator = False
 
         run_kwargs: dict[str, Any] = {"message_history": pydantic_history}
         if deps is not None:
@@ -223,12 +227,16 @@ class RAGEngine:
                 if Agent.is_model_request_node(node):
                     async with node.stream(run.ctx) as request_stream:
                         async for event in request_stream:
+                            text: str | None = None
                             if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                                if event.part.content:
-                                    yield RAGStreamEvent(content=event.part.content)
+                                text = event.part.content
                             elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-                                if event.delta.content_delta:
-                                    yield RAGStreamEvent(content=event.delta.content_delta)
+                                text = event.delta.content_delta
+                            if text:
+                                if needs_separator:
+                                    text = "\n\n" + text.lstrip()
+                                    needs_separator = False
+                                yield RAGStreamEvent(content=text)
                 elif Agent.is_call_tools_node(node):
                     async with node.stream(run.ctx) as handle_stream:
                         async for event in handle_stream:
@@ -252,6 +260,7 @@ class RAGEngine:
                                     event="tool_end",
                                     tool={"name": name, "status": status, "duration_ms": duration_ms},
                                 )
+                                needs_separator = True
 
         generation_ms = (time.perf_counter() - t_generate) * 1000
         total_ms = (time.perf_counter() - t_start) * 1000
