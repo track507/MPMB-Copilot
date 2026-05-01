@@ -1,280 +1,198 @@
 # MPMB-Copilot
 
-> **Last Updated:** April 12, 2026
-> **Status:** Initial end-to-end RAG MVP is running
-> **Latest verified setup:** `npm run setup:all` successfully cloned the source repos, chunked them, started Docker services, and indexed **4,831 vectors across 281 unique source files**
+> **AI assistant that helps you write MPMB JS scripts using the actual MPMB source code and examples as ground truth.**
+> ⚠️ **Pre-release.** This is a working prototype, not a polished product. Setup involves several moving parts (Docker, an LLM API key, indexing) and the UX still has rough edges. If you're a D&D player who just wants AI help writing MPMB scripts, expect a bumpy ride for now — feedback welcome.
 
-## Overview
+<!-- TODO: add screenshot of chat UI showing a tool-use response with the "Used 2 tools" footer expanded -->
 
-**MPMB-Copilot** is a RAG-powered assistant for MorePurpleMoreBetter's D&D 5e Character Record Sheet workflows and related MPMB scripting tasks.
+## What it does
 
-The current backend can:
+MPMB-Copilot is a chat interface, like ChatGPT or Claude, but specialized for [MorePurpleMoreBetter's D&D 5e Character Record Sheet](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet). When you ask a question, it:
 
-- acquire and chunk MPMB source repositories
-- index those chunks into Qdrant
-- retrieve tier-balanced context for a query
-- generate answers through Anthropic, OpenAI, or Ollama
-- stream responses over Server-Sent Events
+1. Searches the actual MPMB source code (8,700+ chunks across 2014 + 2024 editions plus the WotC Imports repo)
+2. Retrieves the most relevant code snippets, syntax templates, and examples
+3. Sends them as context to Claude (Anthropic), GPT (OpenAI), or a local Ollama model
+4. Streams the answer back, with citations, so you can copy-paste working code
 
-## Current Standing
+It also has **tool use**: the model can read specific files, search by pattern, or look up a specific function's body when it needs to verify an exact signature instead of guessing. You'll see a "🔍 Verifying code…" indicator when it does, and a "Used N tools" footer below the answer.
 
-The repo is no longer blocked in setup.
+## Who this is for
 
-- Docker-based setup has been verified end to end
-- the vector index is populated and `/api/index/status` returns real metadata
-- `/api/chat` and `/api/chat/stream` use the actual RAG pipeline, not placeholders
-- intent detection, query analysis, prompt building, retrieval, and LLM generation are wired together
-- background indexing tasks are exposed through `/api/tasks`
+- **Homebrew authors** who want to add a new race, subclass, spell, or magic item to MPMB and need help with the syntax
+- **MPMB contributors** who maintain the source and want a fast way to look up obscure attributes or trace call sites
+- **Curious tinkerers** who want to understand how MPMB works under the hood
 
-## What Works Today
+You don't need to be a programmer, but you do need to be comfortable installing Docker and editing a config file once. After that, it's just a chat window.
 
-- **Source acquisition + chunking**
-  - `scripts/setup.ps1` clones or updates the 2014 MPMB branch, the 2024 branch, and the Imports repo
-  - `scripts/chunk_mpmb.py` produces chunk JSON files in `data/chunked_output`
+## What you'll need
 
-- **Indexing**
-  - `POST /api/index` starts non-blocking indexing in the background
-  - `GET /api/index/status` reports `collection_name`, `total_vectors`, `indexed_files`, `last_updated`, and status
-  - `GET /api/tasks/{task_id}` exposes indexing progress
+- **An LLM API key.** Anthropic Claude is the default and works best (the system prompt is tuned for it). OpenAI and Ollama also work. You pay the LLM provider directly for tokens — this project doesn't host anything.
+- **Docker Desktop** (Windows/macOS) or Docker Engine (Linux) — for Postgres and the vector database.
+- **Node.js 24+** and **Python 3.13+** — for running the chunker, the backend, and the web UI.
+- **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/).
+- **About 5 GB of disk** for the chunked source files, vector index, and Docker images.
 
-- **Chat pipeline**
-  - `POST /api/chat` runs the full RAG pipeline and returns response metadata
-  - `POST /api/chat/stream` streams responses via SSE
-  - session-backed conversation history is persisted and replayed through the chat flow
-  - retriever logic combines authoritative chunks with example chunks
-  - Anthropic, OpenAI, and Ollama are supported through a PydanticAI-backed multi-provider client
-
-- **Operations**
-  - `/api/health` reports backend, Qdrant, LLM provider, and embedding readiness
-  - `/api/docs` exposes the OpenAPI docs
-  - npm scripts provide a single CLI for setup, Docker lifecycle, chunking, linting, and tests
-
-## Current Gaps
-
-- **Source citations are still lightweight**
-  - chat responses currently return retrieval summary metadata rather than full per-chunk file/line citations
-
-- **Tool use and extended thinking are scaffolded, not implemented**
-  - the settings exist in `backend/app/settings.py`, but provider calls do not yet use them
-
-- **Manual provider/browser verification still needs a final pass**
-  - backend tests are passing, but Anthropic/OpenAI browser smoke checks and cache-read verification are still checklist items
-
-- **Docker health and app health may disagree**
-  - on Windows, Docker may occasionally show Qdrant as unhealthy even while `/api/health` reports Qdrant as healthy and queries succeed
-
-## Quick Start
-
-### Prerequisites
-
-- Git
-- Python 3.13 or newer available as `python` or `py -3`
-- Node.js 24 or newer
-- npm 11 or newer
-- Docker Desktop or another Docker Engine setup
-- a configured LLM provider in `.env`
-  - Anthropic API key, OpenAI API key, or a reachable Ollama host
-
-### Setup
-
-1. Create `.env` from `.env.example` and fill in your provider settings.
-1. Install repo tooling:
+## Quick start
 
 ```bash
+# 1. Clone this repo and the MPMB sources it indexes
+git clone https://github.com/track507/MPMB-Copilot.git
+cd MPMB-Copilot
 npm install
-```
 
-1. Run the full verified setup flow:
+# 2. Add your API key
+cp .env.example .env
+# edit .env, set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 
-```bash
+# 3. One-shot setup: clones MPMB sources, chunks them, starts Postgres+Qdrant, indexes
 npm run setup:all
-```
 
-That command chain will:
-
-1. clone or update the source repositories
-1. run the chunker
-1. build and start Docker services
-1. wait for the backend to become healthy
-1. trigger indexing and wait for completion
-
-### Verify the Stack
-
-```bash
-curl http://localhost:8000/api/health
-curl http://localhost:8000/api/index/status
-```
-
-Docs are available at:
-
-```txt
-http://localhost:8000/api/docs
-```
-
-### Updating Content After Setup
-
-If you change source repositories or want to refresh the index:
-
-1. Re-run the chunker:
-
-```bash
-npm run chunk
-```
-
-1. Reindex (backend must be running):
-
-```bash
-npm run index
-```
-
-No Docker rebuild is needed. The backend reads chunk files from a volume mount.
-
-## Local Backend Development
-
-If you want to run the backend outside Docker:
-
-```bash
-uv sync --project backend --all-groups
+# 4. Run the dev servers (frontend + backend)
 npm run dev
 ```
 
-Useful note:
+Open <http://localhost:5173/> and start chatting.
 
-- `npm run dev` uses `uv run --no-sync`, so you should run `uv sync --project backend --all-groups` at least once before local development
+The first time you start the backend it will take ~30 seconds to load the embedding model. After that, responses stream in a few seconds.
 
-## Common Commands
+## Updating the MPMB sources
+
+MPMB ships updates frequently. To pull the latest source, re-chunk, and re-index:
+
+```bash
+npm run setup     # git pull on the source repos + re-run the chunker
+npm run index     # rebuild the vector index (backend must be running)
+```
+
+## How it's built
+
+```mermaid
+flowchart LR
+    Browser["Browser<br/>React UI (Vite)"]
+
+    subgraph Backend["FastAPI backend (Python)"]
+        QA["Query analysis<br/>+ intent detection"]
+        Retriever["Tier-aware retriever"]
+        Prompt["Prompt builder"]
+        Agent["PydanticAI agent"]
+        Tools["MPMB tools<br/>(mpmb_read / mpmb_grep / mpmb_function)"]
+    end
+
+    Qdrant[("Qdrant<br/>dense + BM25 (RRF)")]
+    Postgres[("Postgres<br/>sessions + messages")]
+    LLM(["LLM provider<br/>Anthropic / OpenAI / Ollama"])
+    Sources[("MPMB source files<br/>2014 + 2024 + Imports")]
+
+    Browser <-- SSE --> QA
+    QA --> Retriever
+    Retriever <--> Qdrant
+    Retriever --> Prompt
+    Prompt --> Agent
+    Agent <--> LLM
+    Agent <--> Tools
+    Tools -. read-only .-> Sources
+    Backend <--> Postgres
+```
+
+- **Frontend:** React 19 + Vite + TanStack Query + Zustand + shadcn/ui
+- **Backend:** FastAPI + PydanticAI + SQLAlchemy
+- **Vector store:** Qdrant (hybrid retrieval: dense embeddings via FastEmbed + BM25 sparse, fused with RRF)
+- **Database:** Postgres (session and message persistence)
+- **LLM providers:** Anthropic, OpenAI, Ollama (configurable)
+
+For the deeper architecture write-up, see [`docs/superpowers/specs/2026-04-18-phase-b-tool-use-design.md`](./docs/superpowers/specs/2026-04-18-phase-b-tool-use-design.md).
+
+## Repository layout
+
+```
+MPMB-Copilot/
+├── backend/                  # FastAPI app — see backend/README.md
+├── frontend/                 # React app    — see frontend/README.md
+├── data/                     # gitignored: cloned MPMB sources, chunks, index cache
+├── docker/                   # Dockerfiles for backend + custom postgres image
+├── docker-compose.yml        # postgres + qdrant + backend
+├── docs/                     # specs, plans, policy docs
+├── scripts/
+│   ├── setup.ps1             # clone/pull MPMB source repos, run chunker
+│   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
+│   ├── index.mjs             # trigger /api/index against running backend
+│   ├── check-port.mjs        # pre-flight check before uvicorn
+│   └── wait-and-index.mjs    # used by setup:all — poll backend then index
+├── package.json              # all dev commands
+└── README.md                 # you are here
+```
+
+## Common commands
 
 ```bash
 # First-time setup
-npm run setup              # clone/update repos + run the chunker
-npm run setup:docker       # build and start containers
-npm run setup:index        # wait for backend health, then index
-npm run setup:all          # all three in sequence
+npm run setup              # clone/update MPMB source repos + chunk
+npm run setup:docker       # build & start postgres + qdrant + backend containers
+npm run setup:index        # wait for backend health then index Qdrant
+npm run setup:all          # all three above, in order
 
-# Day-to-day content updates
-npm run chunk              # re-run the chunker (no rebuild needed)
-npm run index              # reindex against the running backend
-npm run index:if-empty     # index only if Qdrant has no vectors
-
-# Local development
-npm run dev                # local FastAPI dev server (outside Docker)
-
-# Docker lifecycle
-npm run docker:up          # start containers (no rebuild)
+# Day-to-day
+npm run dev                # frontend + backend in parallel (recommended)
+npm run dev:backend        # backend only (FastAPI on :8000)
+npm run dev:frontend       # frontend only (Vite on :5173)
+npm run docker:up          # start postgres + qdrant
 npm run docker:down        # stop containers
-npm run docker:logs        # tail backend logs
+
+# Refreshing content
+npm run chunk              # re-chunk after pulling MPMB sources
+npm run index              # re-upsert chunks into Qdrant
+npm run index:if-empty     # only index if Qdrant collection is empty
 
 # Quality gates
 npm run check              # lint + format check + tests
-npm run check:full         # above + mypy type checking
+npm run check:full         # also runs mypy + tsc
 ```
 
-## API Surface
+## Features
 
-### Health
+- ✅ **Hybrid retrieval** — dense embeddings (BAAI/bge-small-en-v1.5) + BM25 sparse, RRF-fused for relevance even on rare identifier names
+- ✅ **Tier-aware ranking** — authoritative sources (`_functions/`, `_variables/`, `additional content syntax/`) score above community examples
+- ✅ **Edition-aware** — auto-detects whether your question is about 2014 or 2024 rules and filters accordingly
+- ✅ **Tool use** — the model can read specific files, grep across the source, or fetch a function's body when it needs verbatim code
+- ✅ **Streaming** — Server-Sent Events stream tokens as they generate, with intermediate tool-use indicators
+- ✅ **Session persistence** — every conversation is saved to Postgres and resumes on refresh
+- ✅ **Auto-titled sessions** — first message generates a 4-6 word title (like Claude web)
+- ✅ **Source citations** — every answer attaches the file paths it pulled from
 
-- `GET /api/health`
-- `GET /api/ping`
+## What's next
 
-### Chat
+Phase B (read-only tool use) is shipped. Future work:
 
-- `POST /api/chat`
-- `POST /api/chat/stream`
+- **Phase C** — write tools that can apply edits or generate diff patches against MPMB source files
+- **Phase D** — upload API for user-supplied source bundles (e.g. private homebrew collections)
+- **Phase E** — adaptive thinking + auto-tuned tool-call limits per query type
+- **Polish** — improved retriever speed, richer source UI, in-chat code execution sandbox
 
-### Indexing
+## Troubleshooting
 
-- `GET /api/index/status`
-- `POST /api/index`
-- `DELETE /api/index`
+**Backend won't start / port 8000 is busy.**
+A previous backend process is still alive. On Windows:
 
-### Background Tasks
-
-- `GET /api/tasks`
-- `GET /api/tasks/{task_id}`
-- `DELETE /api/tasks/{task_id}`
-
-## Architecture
-
-```txt
-User Query
-  -> FastAPI /api/chat
-  -> query analysis + intent detection
-  -> tier-aware retriever
-  -> prompt builder
-  -> provider-specific LLM client
-  -> response / stream
-
-Initial Setup
-  -> scripts/setup.ps1
-  -> scripts/chunk_mpmb.py
-  -> docker compose up -d --build
-  -> scripts/wait-and-index.mjs
-  -> POST /api/index
-  -> Qdrant vector index
+```powershell
+Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
-## Repository Layout
+**Page refresh takes 30+ seconds.**
+You're hitting the IPv6 fallback timeout. Make sure your `.env` uses `127.0.0.1` (not `localhost`) for `POSTGRES_HOST` and `QDRANT_HOST`.
 
-```txt
-mpmb-copilot/
-├backend/
-│   ├app/
-│   │   ├api/                 # health, chat, index, task endpoints
-│   │   ├core/                # query analysis, intent, prompts, retriever, rag engine
-│   │   ├model/               # Pydantic request/response models
-│   │   ├services/            # embeddings, indexing, LLM client, vector store, task manager
-│   │   ├config.py            # environment-backed app config
-│   │   └settings.py          # hot-reloadable behavioral settings
-│   ├pyproject.toml
-│   └uv.lock
-├data/                        # gitignored runtime data and chunk output
-├docker/
-│   ├backend/
-│   │   └Dockerfile
-│   └postgres/
-│       ├Dockerfile
-│       └init.sql
-├scripts/
-│   ├chunk_mpmb.py
-│   ├index.mjs
-│   ├setup.ps1
-│   └wait-and-index.mjs
-├docker-compose.yml
-└package.json
-```
+**`npm run index` says "Backend is not reachable".**
+Backend isn't running. Start it with `npm run dev` (recommended) or `npm run docker:up && npm run setup:index`.
 
-## Roadmap
+**Qdrant container is unhealthy in `docker compose ps`.**
+On Windows this is a known false positive — Qdrant is responsive but its healthcheck script can't run. Confirm with `curl http://127.0.0.1:6333/`.
 
-### Completed or Verified
-
-- project structure and repo tooling
-- Docker stack for backend, Postgres, and Qdrant
-- source acquisition and chunking
-- vector indexing into Qdrant
-- initial RAG engine
-- streaming chat endpoint
-- multi-provider LLM client
-- volume-mounted chunk data (no image rebuild needed for content updates)
-- standalone reindex command (`npm run index`)
-
-### Next Priorities
-
-- return richer per-source citations in chat responses
-- connect tool use and extended thinking settings to provider calls
-- build and wire the MPMB source toolset
-- add source tracking and deterministic vector IDs
-- add more tests and end-to-end verification
-- continue frontend and UX polish
+**Postgres password mismatch after `docker compose up`.**
+Postgres only honors `POSTGRES_PASSWORD` on first volume init. If your `.env` password no longer matches what the volume was initialized with, either reset (destructive: `docker volume rm mpmb_postgres_data`) or `ALTER USER mpmb_user WITH PASSWORD '...'` inside the container.
 
 ## License
 
-This repository is licensed under the **Apache License 2.0**. See [`LICENSE`](./LICENSE).
+Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
-## Content and Custom Document Policy
+This repo distributes **code only**. The MPMB source files in `data/mpmb_source/` and `data/mpmb_source_2024/` are cloned at setup time from [MorePurpleMoreBetter's repository](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet) and are subject to MPMB's own licensing.
 
-- This repository distributes code only and does **not** bundle third-party documentation corpora for RAG.
-- Users who add custom reference files are responsible for ensuring they have legal rights to upload, index, and use that content.
-- Uploaded or custom content is intended for user-provided retrieval context and is not represented as relicensed by this project.
-- See:
-  - [`docs/CUSTOM_DOCS_POLICY.md`](./docs/CUSTOM_DOCS_POLICY.md)
-  - [`docs/TERMS_OF_USE.md`](./docs/TERMS_OF_USE.md)
+See [`docs/CUSTOM_DOCS_POLICY.md`](./docs/CUSTOM_DOCS_POLICY.md) and [`docs/TERMS_OF_USE.md`](./docs/TERMS_OF_USE.md) for content policies.
