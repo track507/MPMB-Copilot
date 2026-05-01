@@ -13,6 +13,8 @@ Session persistence:
     - Falls back to stateless mode if the database is unavailable
 """
 
+import asyncio
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -23,6 +25,7 @@ from app.core.rag_engine import rag_engine
 from app.logger import get_logger
 from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
 from app.services.db import db, session_service
+from app.services.title_generator import generate_session_title
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -78,16 +81,27 @@ async def _save_messages(
         return
 
     try:
-        await session_service.add_message(
+        user_msg = await session_service.add_message(
             session_id=session_uuid,
             role="user",
             content={"text": user_message},
         )
 
+        # ? First user message in a new session — kick off async title generation
+        if user_msg.sequence_number == 1:
+            asyncio.create_task(generate_session_title(session_uuid, user_message))
+
         kwargs = {}
         if rag_response:
             usage = rag_response.usage if isinstance(rag_response.usage, dict) else {}
             timing = rag_response.timing if hasattr(rag_response, "timing") else {}
+            tools_meta = getattr(rag_response, "tools", None)
+            meta_data: dict[str, Any] = {
+                "retrieval": getattr(rag_response, "retrieval_info", None),
+                "timing": timing,
+            }
+            if tools_meta:
+                meta_data["tools"] = tools_meta
             kwargs.update(
                 provider=getattr(rag_response, "provider", None),
                 model=getattr(rag_response, "model", None),
@@ -96,10 +110,7 @@ async def _save_messages(
                 total_tokens=usage.get("total_tokens", 0),
                 latency_ms=int(timing.get("total_ms", 0)) if isinstance(timing, dict) else 0,
                 stop_reason=getattr(rag_response, "stop_reason", None),
-                meta_data={
-                    "retrieval": getattr(rag_response, "retrieval_info", None),
-                    "timing": timing,
-                },
+                meta_data=meta_data,
             )
 
         assistant_content_dict = {"text": assistant_content}

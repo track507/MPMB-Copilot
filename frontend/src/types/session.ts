@@ -1,4 +1,12 @@
 /** Mirrors backend SessionOut / SessionDetailOut / MessageOut schemas. */
+import type { ChatToolsMetadata } from "@/types/chat";
+
+export interface MessageMetadata {
+	readonly retrieval?: Record<string, unknown> | null;
+	readonly timing?: Record<string, unknown>;
+	readonly tools?: ChatToolsMetadata;
+	readonly [key: string]: unknown;
+}
 
 export interface Session {
 	readonly id: string;
@@ -48,7 +56,7 @@ export interface Message {
 	readonly total_tokens: number;
 	readonly latency_ms: number | null;
 	readonly stop_reason: string | null;
-	readonly meta_data: Record<string, unknown>;
+	readonly meta_data: MessageMetadata;
 }
 
 export interface MessageContent {

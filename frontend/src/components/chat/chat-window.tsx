@@ -111,33 +111,20 @@ export function ChatWindow(): ReactElement {
 					)}
 
 					{serverMessages.map((msg) => (
-						<MessageBubble key={msg.id} role={msg.role} content={msg.content.text} sources={msg.content.sources} />
+						<MessageBubble key={msg.id} role={msg.role} content={msg.content.text} sources={msg.content.sources} tools={msg.meta_data.tools} />
 					))}
 
 					{showPendingUser && <MessageBubble role="user" content={pendingUserMessage.text} />}
 
-					{showStreamedText && <MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} />}
+					{showStreamedText && (
+						<MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} tools={!isStreaming ? metadata?.tools : undefined} />
+					)}
 
 					{isStreaming && sawToolThisStream && (
 						<div className="mt-1 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
 							<span className="animate-pulse">🔍</span>
 							<span>Verifying code…</span>
 						</div>
-					)}
-
-					{!isStreaming && metadata?.tools && metadata.tools.total_calls > 0 && (
-						<details className="mt-2 text-xs text-muted-foreground">
-							<summary className="cursor-pointer">
-								Used {metadata.tools.total_calls} tool{metadata.tools.total_calls === 1 ? "" : "s"}
-							</summary>
-							<ul className="mt-1 list-disc pl-5">
-								{metadata.tools.calls.map((call, i) => (
-									<li key={i}>
-										{call.name} - {call.status} ({call.duration_ms.toFixed(0)}ms)
-									</li>
-								))}
-							</ul>
-						</details>
 					)}
 					<div ref={messagesEndRef} />
 				</div>

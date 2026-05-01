@@ -6,18 +6,19 @@ import { SourceCitation } from "./source-citation";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
 import type { ComponentPropsWithoutRef } from "react";
-import type { SourceReference } from "@/types/chat";
+import type { ChatToolsMetadata, SourceReference } from "@/types/chat";
 
 interface MessageBubbleProps {
 	readonly role: "user" | "assistant" | "system";
 	readonly content: string;
 	readonly sources?: SourceReference[] | undefined;
 	readonly isStreaming?: boolean | undefined;
+	readonly tools?: ChatToolsMetadata | undefined;
 }
 
 type CodeProps = ComponentPropsWithoutRef<"code">;
 
-export function MessageBubble({ role, content, sources, isStreaming = false }: MessageBubbleProps): ReactElement {
+export function MessageBubble({ role, content, sources, isStreaming = false, tools }: MessageBubbleProps): ReactElement {
 	const isUser = role === "user";
 
 	return (
@@ -93,6 +94,21 @@ export function MessageBubble({ role, content, sources, isStreaming = false }: M
 				</div>
 
 				{sources !== undefined && sources.length > 0 && <SourceCitation sources={sources} />}
+
+				{!isUser && tools !== undefined && tools.total_calls > 0 && (
+					<details className="mt-2 text-xs text-muted-foreground">
+						<summary className="cursor-pointer">
+							Used {tools.total_calls} tool{tools.total_calls === 1 ? "" : "s"}
+						</summary>
+						<ul className="mt-1 list-disc pl-5 text-left">
+							{tools.calls.map((call, i) => (
+								<li key={i}>
+									{call.name} - {call.status} ({call.duration_ms.toFixed(0)}ms)
+								</li>
+							))}
+						</ul>
+					</details>
+				)}
 			</div>
 		</div>
 	);
