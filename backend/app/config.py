@@ -11,12 +11,15 @@ from typing import Annotated, Literal, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+# * Repo root resolved from this file: backend/app/config.py -> repo root
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class Config(BaseSettings):
     """Application settings loaded from environment variables"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
