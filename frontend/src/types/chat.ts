@@ -1,4 +1,6 @@
 /** Mirrors backend ChatRequest / ChatResponse / ChatStreamChunk schemas. */
+export type ToolName = "mpmb_read" | "mpmb_grep" | "mpmb_function";
+export type ToolStatus = "success" | "error" | "truncated";
 
 export interface ChatRequest {
 	readonly message: string;
@@ -18,10 +20,27 @@ export interface ChatResponse {
 	readonly metadata: ChatMetadata;
 }
 
+export interface ToolEventPayload {
+	readonly name: ToolName | (string & {});
+	readonly status?: ToolStatus | undefined;
+	readonly duration_ms?: number | undefined;
+}
+
 export interface ChatStreamChunk {
 	readonly chunk: string;
 	readonly done: boolean;
+	readonly event?: "tool_start" | "tool_end" | undefined;
+	readonly tool?: ToolEventPayload | undefined;
 	readonly metadata?: ChatMetadata | undefined;
+}
+
+export interface ChatToolsMetadata {
+	readonly total_calls: number;
+	readonly calls: ReadonlyArray<{
+		readonly name: string;
+		readonly status: string;
+		readonly duration_ms: number;
+	}>;
 }
 
 export interface ChatUsage {
@@ -54,6 +73,7 @@ export interface ChatMetadata {
 	readonly usage?: ChatUsage | undefined;
 	readonly timing?: ChatTiming | undefined;
 	readonly retrieval?: ChatRetrieval | undefined;
+	readonly tools?: ChatToolsMetadata | undefined;
 }
 
 export interface SourceReference {
