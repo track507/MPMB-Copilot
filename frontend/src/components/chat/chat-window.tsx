@@ -34,7 +34,7 @@ export function ChatWindow(): ReactElement {
 	// Read transient state from the store
 	const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
 	const streamedText = useChatStore((s) => s.streamedText);
-	const activeToolCount = useChatStore((s) => s.activeToolCount);
+	const sawToolThisStream = useChatStore((s) => s.sawToolThisStream);
 	const metadata = useChatStore((s) => s.metadata);
 	const isStreaming = useChatStore((s) => s.isStreaming);
 
@@ -118,7 +118,7 @@ export function ChatWindow(): ReactElement {
 
 					{showStreamedText && <MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} />}
 
-					{activeToolCount > 0 && (
+					{isStreaming && sawToolThisStream && (
 						<div className="mt-1 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
 							<span className="animate-pulse">🔍</span>
 							<span>Verifying code…</span>

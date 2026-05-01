@@ -18,7 +18,7 @@
 		"setup:all": "npm run setup && npm run setup:docker && npm run setup:index",
 		"dev": "concurrently -n backend,frontend -c blue,magenta \"npm run dev:backend\" \"npm run dev:frontend\"",
 		"dev:full": "node ./scripts/dev.mjs",
-		"dev:backend": "uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000",
+		"dev:backend": "uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --reload-dir backend/app --host 0.0.0.0 --port 8000",
 		"dev:frontend": "npm -w frontend run dev",
 		"docker:up": "docker compose up -d",
 		"docker:down": "docker compose down",

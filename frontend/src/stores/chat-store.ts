@@ -13,6 +13,7 @@ interface ChatStoreState {
 	isStreaming: boolean;
 	metadata: ChatMetadata | null;
 	activeToolCount: number;
+	sawToolThisStream: boolean;
 }
 
 interface ChatStoreActions {
@@ -21,6 +22,7 @@ interface ChatStoreActions {
 	onToolStart: (tool: ToolEventPayload) => void;
 	onToolEnd: (tool: ToolEventPayload) => void;
 	completeStream: (metadata: ChatMetadata | null) => void;
+	clearOptimistic: () => void;
 	reset: () => void;
 }
 
@@ -32,6 +34,7 @@ const initialState: ChatStoreState = {
 	isStreaming: false,
 	metadata: null,
 	activeToolCount: 0,
+	sawToolThisStream: false,
 };
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -48,6 +51,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 			streamedText: "",
 			metadata: null,
 			activeToolCount: 0,
+			sawToolThisStream: false,
 		});
 	},
 
@@ -56,7 +60,10 @@ export const useChatStore = create<ChatStore>((set) => ({
 	},
 
 	onToolStart: () => {
-		set((state) => ({ activeToolCount: state.activeToolCount + 1 }));
+		set((state) => ({
+			activeToolCount: state.activeToolCount + 1,
+			sawToolThisStream: true,
+		}));
 	},
 
 	onToolEnd: () => {
@@ -67,6 +74,10 @@ export const useChatStore = create<ChatStore>((set) => ({
 
 	completeStream: (metadata: ChatMetadata | null) => {
 		set({ isStreaming: false, metadata, activeToolCount: 0 });
+	},
+
+	clearOptimistic: () => {
+		set({ pendingUserMessage: null, streamedText: "", activeToolCount: 0, sawToolThisStream: false });
 	},
 
 	reset: () => {

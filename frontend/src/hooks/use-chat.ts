@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChatStore } from "@/stores/chat-store";
 import type { ChatRequest, ChatStreamChunk } from "@/types/chat";
@@ -16,6 +17,7 @@ interface UseChatReturn {
 export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 	const abortRef = useRef<AbortController | null>(null);
 	const queryClient = useQueryClient();
+	const [, setSearchParams] = useSearchParams();
 
 	// Abort any in-flight stream when the hook unmounts (e.g. session switch remounts ChatWindow)
 	useEffect(() => {
@@ -95,6 +97,18 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 									const chunk = JSON.parse(data) as ChatStreamChunk;
 									if (chunk.done) {
 										useChatStore.getState().completeStream(chunk.metadata ?? null);
+										const newSessionId = chunk.metadata?.session_id;
+										// Navigate to new session if created, but only if we didn't already have a session (i.e. this was the first message in a new conversation)
+										if (sessionId === null && newSessionId !== undefined && newSessionId !== "") {
+											setSearchParams(
+												(prev) => {
+													const next = new URLSearchParams(prev);
+													next.set("session", newSessionId);
+													return next;
+												},
+												{ replace: true }
+											);
+										}
 									} else if (chunk.event === "tool_start" && chunk.tool) {
 										useChatStore.getState().onToolStart(chunk.tool);
 									} else if (chunk.event === "tool_end" && chunk.tool) {
@@ -112,8 +126,8 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 					// Refresh session data after complete response
 					await queryClient.invalidateQueries({ queryKey: ["sessions"] });
 
-					// Server has caught up - clear transient state
-					useChatStore.getState().reset();
+					// Server has caught up - clear optimistic UI but keep metadata for footer
+					useChatStore.getState().clearOptimistic();
 				} catch (err: unknown) {
 					if (err instanceof DOMException && err.name === "AbortError") return;
 					const error = err instanceof Error ? err : new Error(String(err));
@@ -124,7 +138,7 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 				}
 			})();
 		},
-		[sessionId, onError, queryClient]
+		[sessionId, onError, queryClient, setSearchParams]
 	);
 
 	return { sendMessage, cancelStream };
