@@ -34,6 +34,8 @@ export function ChatWindow(): ReactElement {
 	// Read transient state from the store
 	const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
 	const streamedText = useChatStore((s) => s.streamedText);
+	const activeToolCount = useChatStore((s) => s.activeToolCount);
+	const metadata = useChatStore((s) => s.metadata);
 	const isStreaming = useChatStore((s) => s.isStreaming);
 
 	// Server-confirmed messages from React Query
@@ -116,6 +118,27 @@ export function ChatWindow(): ReactElement {
 
 					{showStreamedText && <MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} />}
 
+					{activeToolCount > 0 && (
+						<div className="mt-1 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+							<span className="animate-pulse">🔍</span>
+							<span>Verifying code…</span>
+						</div>
+					)}
+
+					{!isStreaming && metadata?.tools && metadata.tools.total_calls > 0 && (
+						<details className="mt-2 text-xs text-muted-foreground">
+							<summary className="cursor-pointer">
+								Used {metadata.tools.total_calls} tool{metadata.tools.total_calls === 1 ? "" : "s"}
+							</summary>
+							<ul className="mt-1 list-disc pl-5">
+								{metadata.tools.calls.map((call, i) => (
+									<li key={i}>
+										{call.name} - {call.status} ({call.duration_ms.toFixed(0)}ms)
+									</li>
+								))}
+							</ul>
+						</details>
+					)}
 					<div ref={messagesEndRef} />
 				</div>
 			</div>
