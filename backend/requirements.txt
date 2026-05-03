@@ -234,7 +234,7 @@ protobuf==7.34.1
     # via
     #   onnxruntime
     #   qdrant-client
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
     # via mpmb-copilot-backend
 py-rust-stemmers==0.1.5
     # via fastembed
