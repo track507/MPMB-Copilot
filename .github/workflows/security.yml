@@ -21,6 +21,7 @@ concurrency:
 env:
     HUSKY: "0"
     UV_CACHE_DIR: .uv-cache
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
     dependency-review:
@@ -45,6 +46,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         continue-on-error: true
+        if: vars.ENABLE_CODEQL == 'true'
 
         strategy:
             fail-fast: false
@@ -100,15 +102,13 @@ jobs:
               run: mkdir -p security-reports
 
             - name: npm audit
-              continue-on-error: true
-              run: npm audit --workspaces --include-workspace-root --audit-level=moderate --json > security-reports/npm-audit.json
+              run: npm audit --workspaces --include-workspace-root --audit-level=moderate --json > security-reports/npm-audit.json || true
 
             - name: Export backend requirements
               run: uv export --project backend --all-groups --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt
 
             - name: pip-audit
-              continue-on-error: true
-              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json
+              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json || true
 
             - name: Trivy filesystem scan
               uses: aquasecurity/trivy-action@v0.35.0
@@ -124,7 +124,7 @@ jobs:
 
             - name: Upload Trivy SARIF to code scanning
               uses: github/codeql-action/upload-sarif@v4
-              continue-on-error: true
+              if: vars.ENABLE_CODE_SCANNING_UPLOAD == 'true'
               with:
                   sarif_file: security-reports/trivy-fs.sarif
                   category: trivy-fs
@@ -166,7 +166,7 @@ jobs:
 
             - name: Upload Scorecard SARIF
               uses: github/codeql-action/upload-sarif@v4
-              continue-on-error: true
+              if: vars.ENABLE_CODE_SCANNING_UPLOAD == 'true'
               with:
                   sarif_file: security-reports/scorecard.sarif
                   category: openssf-scorecard

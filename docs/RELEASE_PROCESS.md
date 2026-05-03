@@ -58,6 +58,15 @@ Users should run `npm run setup` or `scripts/setup.ps1` after unpacking to clone
 
 Security jobs are intentionally non-blocking because some GitHub native scanning features require public repositories or GitHub Advanced Security. Their reports are still uploaded as workflow artifacts when possible.
 
+Code scanning upload is disabled by default to keep private/non-GHAS repositories green. To opt in later, enable code scanning in repository settings and add repository variables:
+
+- `ENABLE_CODEQL=true`
+- `ENABLE_CODE_SCANNING_UPLOAD=true`
+
+Without those variables, the workflow still runs npm, Python, Trivy, Dependency Review, and Scorecard-style checks where possible, but it does not call GitHub's SARIF/code-scanning APIs.
+
+The standalone analyzer smoke test only runs when `scripts/analyze/analyze-repos.py` and `scripts/analyze/src/mpmb_repo_analyzer/__main__.py` are present in the checked-out commit. This lets CI stay green before the analyzer tool is committed.
+
 ## Current Action Majors
 
 These were checked against primary GitHub project pages before adding the workflows:

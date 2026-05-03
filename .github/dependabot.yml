@@ -8,9 +8,6 @@ updates:
           day: monday
           time: "08:00"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - github-actions
 
     - package-ecosystem: npm
       directory: /
@@ -19,9 +16,6 @@ updates:
           day: monday
           time: "08:15"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - npm
 
     - package-ecosystem: npm
       directory: /frontend
@@ -30,20 +24,14 @@ updates:
           day: monday
           time: "08:30"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - npm
 
-    - package-ecosystem: pip
+    - package-ecosystem: uv
       directory: /backend
       schedule:
           interval: weekly
           day: monday
           time: "08:45"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - python
 
     - package-ecosystem: docker
       directory: /
@@ -52,9 +40,6 @@ updates:
           day: monday
           time: "09:00"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - docker
 
     - package-ecosystem: docker
       directory: /docker/backend
@@ -63,6 +48,3 @@ updates:
           day: monday
           time: "09:15"
       open-pull-requests-limit: 5
-      labels:
-          - dependencies
-          - docker

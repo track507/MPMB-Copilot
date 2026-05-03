@@ -18,6 +18,7 @@ concurrency:
 env:
     HUSKY: "0"
     UV_CACHE_DIR: .uv-cache
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
     build-and-publish:
@@ -46,9 +47,7 @@ jobs:
               uses: astral-sh/setup-uv@v8.0.0
               with:
                   enable-cache: true
-                  cache-dependency-glob: |
-                      backend/uv.lock
-                      scripts/analyze/uv.lock
+                  cache-dependency-glob: backend/uv.lock
 
             - name: Install Node dependencies
               run: npm ci
@@ -61,6 +60,9 @@ jobs:
 
             - name: Build frontend
               run: npm run frontend:build
+
+            - name: Create CI env file for Compose validation
+              run: cp .env.example .env
 
             - name: Validate Compose file
               run: docker compose config --quiet
