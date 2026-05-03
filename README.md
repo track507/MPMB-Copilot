@@ -3,6 +3,26 @@
 > **AI assistant that helps you write MPMB JS scripts using the actual MPMB source code and examples as ground truth.**
 > ⚠️ **Pre-release.** This is a working prototype, not a polished product. Setup involves several moving parts (Docker, an LLM API key, indexing) and the UX still has rough edges. If you're a D&D player who just wants AI help writing MPMB scripts, expect a bumpy ride for now — feedback welcome.
 
+## NOTES
+
+There are currently some outstanding items I need to implement. I want this be more agentic insted of the normal RAG workflow; i.e. Ask question -> Embed & Query -> Returns top K results -> LLM processes that -> Generate Response -> Returns back to you. I see several issues with this, mainly efficiency and wastefulness. Broad questions tend to return large results, and we're relying on semantic meanings rather than intent. That's why I gave this LLM tools so that it can decide for itself whether or not the results from the Query store are insufficient and use those tools to gather the information it actually needs. Some major breaking changes will be coming soon, mainly in the form of agentic development. Instead of embedding and querying every question against the store, your question will go straight to the LLM and it'll have a query tool where it can query the store as it needs to. See below for future plans and TODO's.
+
+## TODO's
+
+- Eliminate pre-retrieval path
+- New `mpmb_search` tool with `query`, `edition`, `top_k?`
+    - This trusts the LLM will make the right call on when to search
+- Prompt caching using Anthropic break points
+    - Anthropic allows up to 4 break points on a query. We set one on the system prompt since that never changes, and then n-1 on the chat history so that a new question doesn't always invoke a new cache miss.
+    - The cache window ~5 minutes, but on a cache hit, you'll only consume ~%10 of the cost you'd normally would if you didn't use caching.
+    - This does not seem like a lot, but may I remind you, that your entire chat history will be sent to the LLM so it is compounding and an exponential savings on money when this is enabled.
+        - Why send the entire chat history to the LLM? This is how most chat agents currently work. This is no different especially the fact that I have allowed people to pick their poison of choice. If you switch from Anthropic to OpenAI, it's a simple configuration change and it just works as intended.
+- Per-tool pill text on the frontend.
+    - More descriptive design for all the tool the LLM is using
+- Per provider cheap model configuration. Mostly for things like title generation, future routing, etc.
+- Editable titles & auto-titles are deferred if manual exists.
+- I have to add screen shots of it actually working. I'll do that after my in-depth analysis of the MPMB repo and source repo's.
+
 <!-- TODO: add screenshot of chat UI showing a tool-use response with the "Used 2 tools" footer expanded -->
 
 ## What it does
