@@ -33,7 +33,8 @@ Users should run `npm run setup` or `scripts/setup.ps1` after unpacking to clone
 ## CI/CD Workflows
 
 - `.github/workflows/ci.yml`
-  - lint, format check, tests, type checks
+  - lint, format check, tests
+  - optional non-blocking type checks when `ENABLE_TYPECHECK=true`
   - frontend production build artifact
   - Docker Compose validation
   - backend Docker image build
@@ -60,10 +61,13 @@ Security jobs are intentionally non-blocking because some GitHub native scanning
 
 Code scanning upload is disabled by default to keep private/non-GHAS repositories green. To opt in later, enable code scanning in repository settings and add repository variables:
 
+- `ENABLE_DEPENDENCY_REVIEW=true`
 - `ENABLE_CODEQL=true`
 - `ENABLE_CODE_SCANNING_UPLOAD=true`
 
-Without those variables, the workflow still runs npm, Python, Trivy, Dependency Review, and Scorecard-style checks where possible, but it does not call GitHub's SARIF/code-scanning APIs.
+Without those variables, the workflow still runs npm, Python, Trivy, and Scorecard-style checks where possible, but it does not call GitHub's Dependency Review or SARIF/code-scanning APIs.
+
+Python mypy currently reports existing backend typing debt. CI therefore runs `npm run check` as the required quality gate, while `npm run check:full` remains available locally. Set `ENABLE_TYPECHECK=true` later after the backend typing debt is paid down.
 
 The standalone analyzer smoke test only runs when `scripts/analyze/analyze-repos.py` and `scripts/analyze/src/mpmb_repo_analyzer/__main__.py` are present in the checked-out commit. This lets CI stay green before the analyzer tool is committed.
 
@@ -77,7 +81,7 @@ These were checked against primary GitHub project pages before adding the workfl
 - `actions/upload-artifact@v7`
 - `github/codeql-action/*@v4`
 - `actions/dependency-review-action@v4`
-- `astral-sh/setup-uv@v8.0.0`
+- `astral-sh/setup-uv@v8.1.0`
 - `aquasecurity/trivy-action@v0.35.0`
 - `anchore/sbom-action@v0.24.0`
 - `ossf/scorecard-action@v2.4.3`

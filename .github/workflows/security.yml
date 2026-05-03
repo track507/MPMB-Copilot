@@ -28,7 +28,7 @@ jobs:
         name: Dependency Review
         runs-on: ubuntu-latest
         timeout-minutes: 10
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
         continue-on-error: true
 
         steps:
