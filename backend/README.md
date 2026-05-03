@@ -89,6 +89,10 @@ Key vars (full list in `.env.example`):
 | `QDRANT_PORT` | `6333` | |
 | `MPMB_SOURCE_DIR` | `./data/mpmb_source` | 2014 sources clone target |
 | `MPMB_SOURCE_2024_DIR` | `./data/mpmb_source_2024` | 2024 sources clone target |
+| `MPMB_REPO_URL` | `https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git` | 2014 source repo |
+| `MPMB_REPO_2024_URL` | `https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet.git` | 2024 source repo |
+| `MPMB_REPO_BRANCH_2014` | `master` | 2014 source branch |
+| `MPMB_REPO_BRANCH_2024` | `main` | 2024 source branch |
 | `ENABLE_TOOL_USE` | `false` | Set to `true` to expose `mpmb_read` / `mpmb_grep` / `mpmb_function` to the model |
 | `MAX_TOOL_CALLS` | `8` | Per-request tool-call cap |
 

@@ -40,7 +40,7 @@ def main() -> int:
         print(f"  git clone {config.mpmb_repo_url} {config.mpmb_source_dir}")
         print(
             f"  git clone --branch {config.mpmb_repo_branch_2024} "
-            f"{config.mpmb_repo_url} {config.mpmb_source_2024_dir}"
+            f"{config.mpmb_repo_2024_url} {config.mpmb_source_2024_dir}"
         )
         print(f"  git clone {config.imports_repo_url} {config.imports_source_dir}")
         return 1

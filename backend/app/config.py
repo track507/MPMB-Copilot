@@ -120,10 +120,11 @@ class Config(BaseSettings):
     index_cache_dir: str = "./data/index_cache"
     upload_dir: str = "./data/uploads"
 
-    # Source Repository URLs (used by acquire_sources script)
+    # Source Repository URLs (used by source acquisition scripts)
     mpmb_repo_url: str = "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git"
+    mpmb_repo_2024_url: str = "https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet.git"
     mpmb_repo_branch_2014: str = "master"
-    mpmb_repo_branch_2024: str = "dnd2024"
+    mpmb_repo_branch_2024: str = "main"
     imports_repo_url: str = "https://github.com/safety-orange/Imports-for-MPMB-s-Character-Sheet.git"
 
     # Computed Properties
@@ -216,7 +217,7 @@ class Config(BaseSettings):
                     "path": mpmb_2024,
                     "edition": "2024",
                     "repo": "mpmb",
-                    "description": "MPMB main repo (dnd2024)",
+                    "description": "MPMB 2024 repo (main)",
                 }
             )
 

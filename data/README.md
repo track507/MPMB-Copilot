@@ -8,7 +8,7 @@ This directory contains local data files that are NOT committed to git.
   - Managed by `scripts/setup.ps1`
   - Not committed (external source dependency)
 
-- **mpmb_source_2024/** - Local clone of the MPMB main repository (`dnd2024`)
+- **mpmb_source_2024/** - Local clone of the MPMB 2024 repository (`main`)
   - Managed by `scripts/setup.ps1`
   - Not committed (external source dependency)
 
@@ -51,3 +51,4 @@ The setup script does not start Docker or run indexing. It is only responsible f
 
 - Placeholder files such as `.gitkeep` may exist in these folders so the directory structure can be committed. `scripts/setup.ps1` will remove those placeholders when it needs to clone a repo into that folder.
 - Source and output locations can be overridden through `.env` values such as `MPMB_SOURCE_DIR`, `MPMB_SOURCE_2024_DIR`, `IMPORTS_SOURCE_DIR`, `ADOBE_DOCS_DIR`, and `CHUNKED_OUTPUT_DIR`.
+- Source repository defaults can be overridden with `MPMB_REPO_URL`, `MPMB_REPO_2024_URL`, `MPMB_REPO_BRANCH_2014`, `MPMB_REPO_BRANCH_2024`, and `IMPORTS_REPO_URL`.

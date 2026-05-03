@@ -42,7 +42,8 @@
 
 | Repository                                            | Content                                                       | Branch Strategy                                              |
 | ----------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
-| **morepurplemorebetter/MPMBs-Character-Record-Sheet** | Core engine: `_functions/`, syntax templates, sheet mechanics | `master` (2014), `dnd2024` (2024)                            |
+| **morepurplemorebetter/MPMBs-Character-Record-Sheet** | 2014 core engine: `_functions/`, syntax templates, sheet mechanics | `master` |
+| **morepurplemorebetter/2024_MPMBs-Character-Record-Sheet** | 2024 core engine: `_functions/`, syntax templates, sheet mechanics | `main` |
 | **safety-orange/Imports-for-MPMB-s-Character-Sheet**  | Content scripts: spells, races, classes, feats, items, etc.   | Likely has 2014/2024 content in separate folders or branches |
 
 ### Source Acquisition (Two Modes)
@@ -53,7 +54,7 @@ The setup script clones both repos into `data/` with both branches:
 ```txt
 data/
 ├── mpmb_source/           # Main MPMB repo (master branch)
-├── mpmb_source_2024/      # Main MPMB repo (dnd2024 branch)
+├── mpmb_source_2024/      # 2024 MPMB repo (main branch)
 ├── imports_source/        # safety-orange Imports repo
 └── user_sources/          # User's own custom scripts (optional)
 ```
@@ -71,7 +72,7 @@ MPMB_EDITION_DEFAULT=2014
 Every chunk gets an `edition` metadata field during indexing:
 
 - `"2014"` — from master branch or 2014-specific content
-- `"2024"` — from dnd2024 branch or 2024-specific content
+- `"2024"` — from the 2024 MPMB repo or 2024-specific import content
 - `"both"` — core engine functions that apply to both editions
 - `"unknown"` — user-provided content without clear edition markers
 
@@ -642,7 +643,7 @@ Your existing PowerShell scripts are thorough. Add:
 ```
 1. acquire_sources.py
    ├── git clone morepurplemorebetter/MPMBs-Character-Record-Sheet (master)
-   ├── git clone morepurplemorebetter/MPMBs-Character-Record-Sheet (dnd2024 branch)
+   ├── git clone morepurplemorebetter/2024_MPMBs-Character-Record-Sheet (main)
    ├── git clone safety-orange/Imports-for-MPMB-s-Character-Sheet
    └── (optional) user-provided directories
 
@@ -789,7 +790,7 @@ Phase 6 makes it distributable.
 
 3. **System prompt size:** The MPMB syntax templates are quite large. We may need to dynamically include only the relevant template section (e.g., spell template when asking about spells) rather than the entire template reference. This is a retrieval strategy question.
 
-4. **dnd2024 branch content:** Need to verify what's different in the dnd2024 branch — is it entirely separate syntax templates, or just modified attribute sets? This affects how we tag and retrieve.
+4. **2024 source content:** Need to keep tracking how the separate 2024 repo diverges from the 2014 repo. It now includes 2024-only syntax/engine surfaces such as `WeaponMasteriesList` and `DefaultEvalsList`.
 
 5. **Frontend complexity:** A simple chat UI is straightforward. But features like "edit and re-run" previous code, "diff between 2014/2024 versions," or "validate generated code against ESLint" would be more valuable. Start simple, iterate.
 

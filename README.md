@@ -193,6 +193,6 @@ Postgres only honors `POSTGRES_PASSWORD` on first volume init. If your `.env` pa
 
 Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
-This repo distributes **code only**. The MPMB source files in `data/mpmb_source/` and `data/mpmb_source_2024/` are cloned at setup time from [MorePurpleMoreBetter's repository](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet) and are subject to MPMB's own licensing.
+This repo distributes **code only**. The MPMB source files in `data/mpmb_source/` are cloned at setup time from [MorePurpleMoreBetter's 2014 repository](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet), and the files in `data/mpmb_source_2024/` are cloned from [MorePurpleMoreBetter's 2024 repository](https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet). Both are subject to MPMB's own licensing.
 
 See [`docs/CUSTOM_DOCS_POLICY.md`](./docs/CUSTOM_DOCS_POLICY.md) and [`docs/TERMS_OF_USE.md`](./docs/TERMS_OF_USE.md) for content policies.

@@ -70,6 +70,9 @@ OBJECT_TYPE_MAP = {
     "ToolsList": "tool",
     "PacksList": "pack",
     "SourceList": "source",
+    "PsionicsList": "psionic",
+    "WeaponMasteriesList": "weapon_mastery",
+    "DefaultEvalsList": "default_eval",
 }
 
 ADD_FUNCTION_MAP = {

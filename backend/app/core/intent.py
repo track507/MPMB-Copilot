@@ -106,9 +106,13 @@ _MPMB_SYMBOLS: dict[str, QueryIntent] = {
     "ArmourList": QueryIntent.LOOKUP,
     "AmmoList": QueryIntent.LOOKUP,
     "GearList": QueryIntent.LOOKUP,
+    "ToolsList": QueryIntent.LOOKUP,
     "SourceList": QueryIntent.LOOKUP,
     "CompanionList": QueryIntent.LOOKUP,
     "PacksList": QueryIntent.LOOKUP,
+    "PsionicsList": QueryIntent.LOOKUP,
+    "WeaponMasteriesList": QueryIntent.LOOKUP,
+    "DefaultEvalsList": QueryIntent.LOOKUP,
     # Add* functions -> lookup
     "AddSubClass": QueryIntent.LOOKUP,
     "AddFeatureChoice": QueryIntent.LOOKUP,

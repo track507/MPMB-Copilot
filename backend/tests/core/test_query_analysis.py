@@ -12,6 +12,10 @@ from app.core.query_analysis import analyze_query
         ("Show me BackgroundFeatureList syntax", "BackgroundFeatureList"),
         ("How do BackgroundList entries work?", "BackgroundList"),
         ("Tell me about SpellsList", "SpellsList"),
+        ("How does WeaponMasteriesList work?", "WeaponMasteriesList"),
+        ("Show DefaultEvalsList syntax", "DefaultEvalsList"),
+        ("How do I add artisan tools?", "ToolsList"),
+        ("How do I add psionic disciplines?", "PsionicsList"),
         # Prefix collisions - the longer name must win when both are present
         ("How does ClassSubList differ from ClassList?", "ClassSubList"),
         # Typo / non-existent identifier must not falsely match a prefix

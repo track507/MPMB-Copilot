@@ -14,7 +14,12 @@
       DATA_DIR
       MPMB_SOURCE_DIR
       MPMB_SOURCE_2024_DIR
+      MPMB_REPO_URL
+      MPMB_REPO_2024_URL
+      MPMB_REPO_BRANCH_2014
+      MPMB_REPO_BRANCH_2024
       IMPORTS_SOURCE_DIR
+      IMPORTS_REPO_URL
       CHUNKED_OUTPUT_DIR
 #>
 
@@ -185,8 +190,8 @@ function Get-GitOutput {
 
 	$cleanOutput = @(
 		$output |
-			ForEach-Object { $_.ToString().TrimEnd() } |
-			Where-Object { $_ -and $_ -notmatch '^warning:' }
+		ForEach-Object { $_.ToString().TrimEnd() } |
+		Where-Object { $_ -and $_ -notmatch '^warning:' }
 	)
 
 	return ($cleanOutput | Out-String).Trim()
@@ -207,8 +212,8 @@ function Get-GitStatusLines {
 
 	return @(
 		$output |
-			ForEach-Object { $_.ToString().TrimEnd() } |
-			Where-Object { $_ -and $_ -notmatch '^warning:' }
+		ForEach-Object { $_.ToString().TrimEnd() } |
+		Where-Object { $_ -and $_ -notmatch '^warning:' }
 	)
 }
 
@@ -247,8 +252,8 @@ function Enable-GitSafeDirectory {
 	if ($exitCode -eq 0 -and $null -ne $configuredPaths) {
 		$matchesExisting = @(
 			$configuredPaths |
-				ForEach-Object { $_.ToString().Trim() } |
-				Where-Object { (Normalize-PathValue -PathValue $_) -eq $normalizedResolvedPath }
+			ForEach-Object { $_.ToString().Trim() } |
+			Where-Object { (Normalize-PathValue -PathValue $_) -eq $normalizedResolvedPath }
 		)
 		if ($matchesExisting.Count -gt 0) {
 			return
@@ -266,7 +271,8 @@ function Sync-GitRepository {
 		[string]$Name,
 		[string]$RepositoryUrl,
 		[string]$TargetDirectory,
-		[string]$Branch
+		[string]$Branch,
+		[switch]$AllowRemoteRetarget
 	)
 
 	$shouldClone = $false
@@ -278,7 +284,7 @@ function Sync-GitRepository {
 			$allowedPlaceholderNames = @(".gitkeep", ".gitignore", "README.md")
 			$nonPlaceholderItems = @(
 				$existingItems |
-					Where-Object { $allowedPlaceholderNames -notcontains $_.Name }
+				Where-Object { $allowedPlaceholderNames -notcontains $_.Name }
 			)
 
 			if ($nonPlaceholderItems.Count -gt 0) {
@@ -315,7 +321,22 @@ function Sync-GitRepository {
 		}
 
 		if ((-not $skipExistingRepoUpdate) -and ((Normalize-GitUrl $originUrl) -ne (Normalize-GitUrl $RepositoryUrl))) {
-			throw "$Name target points at a different repository: $originUrl"
+			if ($AllowRemoteRetarget) {
+				Write-Log "$Name target points at $originUrl; retargeting origin to $RepositoryUrl." -Level INFO
+				if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Retarget origin for $Name")) {
+					Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "remote", "set-url", "origin", $RepositoryUrl)
+					Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+				}
+			}
+			else {
+				throw "$Name target points at a different repository: $originUrl"
+			}
+		}
+
+		if ((-not $skipExistingRepoUpdate) -and $AllowRemoteRetarget) {
+			if ($script:PSCmdlet.ShouldProcess($TargetDirectory, "Normalize fetch refspec for $Name")) {
+				Invoke-ExternalCommand -FilePath "git" -Arguments @("-C", $TargetDirectory, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+			}
 		}
 
 		$currentBranch = Get-GitOutput -RepositoryPath $TargetDirectory -Arguments @("rev-parse", "--abbrev-ref", "HEAD")
@@ -434,8 +455,9 @@ $importsSourceDir = Resolve-ProjectPath (Get-SettingValue -Name "IMPORTS_SOURCE_
 $chunkedOutputDir = Resolve-ProjectPath (Get-SettingValue -Name "CHUNKED_OUTPUT_DIR" -Default "./data/chunked_output" -DotEnvValues $dotEnvValues)
 
 $mpmbRepoUrl = Get-SettingValue -Name "MPMB_REPO_URL" -Default "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git" -DotEnvValues $dotEnvValues
+$mpmbRepo2024Url = Get-SettingValue -Name "MPMB_REPO_2024_URL" -Default "https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet.git" -DotEnvValues $dotEnvValues
 $mpmbRepoBranch2014 = Get-SettingValue -Name "MPMB_REPO_BRANCH_2014" -Default "master" -DotEnvValues $dotEnvValues
-$mpmbRepoBranch2024 = Get-SettingValue -Name "MPMB_REPO_BRANCH_2024" -Default "dnd2024" -DotEnvValues $dotEnvValues
+$mpmbRepoBranch2024 = Get-SettingValue -Name "MPMB_REPO_BRANCH_2024" -Default "main" -DotEnvValues $dotEnvValues
 $importsRepoUrl = Get-SettingValue -Name "IMPORTS_REPO_URL" -Default "https://github.com/safety-orange/Imports-for-MPMB-s-Character-Sheet.git" -DotEnvValues $dotEnvValues
 
 Write-Log "Using source paths:" -Level INFO
@@ -458,9 +480,10 @@ Sync-GitRepository `
 
 Sync-GitRepository `
 	-Name "MPMB main repo (2024)" `
-	-RepositoryUrl $mpmbRepoUrl `
+	-RepositoryUrl $mpmbRepo2024Url `
 	-TargetDirectory $mpmbSource2024Dir `
-	-Branch $mpmbRepoBranch2024
+	-Branch $mpmbRepoBranch2024 `
+	-AllowRemoteRetarget
 
 Sync-GitRepository `
 	-Name "Imports repo" `
