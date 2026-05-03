@@ -47,7 +47,7 @@ coverage==7.13.5
     # via pytest-cov
 cuda-bindings==13.2.0 ; sys_platform == 'linux'
     # via torch
-cuda-pathfinder==1.5.0 ; sys_platform == 'linux'
+cuda-pathfinder==1.5.4 ; sys_platform == 'linux'
     # via cuda-bindings
 cuda-toolkit==13.0.2 ; sys_platform == 'linux'
     # via torch
