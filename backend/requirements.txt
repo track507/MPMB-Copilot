@@ -295,7 +295,7 @@ requests==2.33.0
     # via
     #   fastembed
     #   tiktoken
-rich==14.3.3
+rich==15.0.0
     # via typer
 ruff==0.15.8
 safetensors==0.7.0
