@@ -1,0 +1,285 @@
+name: Release
+
+on:
+    push:
+        branches: [main, develop]
+        tags:
+            - "v*"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+    actions: read
+
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    HUSKY: "0"
+    UV_CACHE_DIR: .uv-cache
+
+jobs:
+    build-and-publish:
+        name: Build and Publish Release
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version-file: ".nvmrc"
+                  cache: npm
+
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.13"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v8
+              with:
+                  enable-cache: true
+                  cache-dependency-glob: |
+                      backend/uv.lock
+                      scripts/analyze/uv.lock
+
+            - name: Install Node dependencies
+              run: npm ci
+
+            - name: Sync backend dependencies
+              run: uv sync --project backend --group dev --frozen
+
+            - name: Run tests
+              run: npm run test
+
+            - name: Build frontend
+              run: npm run frontend:build
+
+            - name: Validate Compose file
+              run: docker compose config --quiet
+
+            - name: Build backend Docker image
+              run: docker build -f docker/backend/Dockerfile -t mpmb-copilot-backend:${{ github.sha }} .
+
+            - name: Resolve release metadata
+              id: meta
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  package_version="$(node -p "require('./package.json').version")"
+                  short_sha="${GITHUB_SHA::7}"
+
+                  if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+                      release_tag="${GITHUB_REF_NAME}"
+                      release_name="MPMB-Copilot ${GITHUB_REF_NAME}"
+                      release_version="${GITHUB_REF_NAME#v}"
+                      mutable_tag="false"
+                      if [[ "${GITHUB_REF_NAME}" == *"-"* ]]; then
+                          prerelease="true"
+                          latest="false"
+                      else
+                          prerelease="false"
+                          latest="true"
+                      fi
+                  elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+                      release_tag="main-latest"
+                      release_name="MPMB-Copilot main latest"
+                      release_version="${package_version}+main.${GITHUB_RUN_NUMBER}.${short_sha}"
+                      mutable_tag="true"
+                      prerelease="false"
+                      latest="true"
+                  elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
+                      release_tag="develop-latest"
+                      release_name="MPMB-Copilot develop snapshot"
+                      release_version="${package_version}+develop.${GITHUB_RUN_NUMBER}.${short_sha}"
+                      mutable_tag="true"
+                      prerelease="true"
+                      latest="false"
+                  else
+                      echo "Release workflow only publishes from main, develop, or v* tags." >&2
+                      exit 1
+                  fi
+
+                  asset_prefix="mpmb-copilot-${release_tag}"
+                  bundle_name="${asset_prefix}"
+
+                  {
+                      echo "package_version=${package_version}"
+                      echo "release_tag=${release_tag}"
+                      echo "release_name=${release_name}"
+                      echo "release_version=${release_version}"
+                      echo "asset_prefix=${asset_prefix}"
+                      echo "bundle_name=${bundle_name}"
+                      echo "mutable_tag=${mutable_tag}"
+                      echo "prerelease=${prerelease}"
+                      echo "latest=${latest}"
+                      echo "short_sha=${short_sha}"
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Move mutable branch tag
+              if: steps.meta.outputs.mutable_tag == 'true'
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  git tag -f "${{ steps.meta.outputs.release_tag }}" "$GITHUB_SHA"
+                  git push --force origin "refs/tags/${{ steps.meta.outputs.release_tag }}"
+
+            - name: Build self-contained release bundle
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  bundle_dir="dist/${{ steps.meta.outputs.bundle_name }}"
+                  mkdir -p "$bundle_dir"
+
+                  rsync -a ./ "$bundle_dir"/ \
+                      --exclude='.git/' \
+                      --exclude='.env' \
+                      --exclude='.env.local' \
+                      --exclude='.uv-cache/' \
+                      --exclude='.pytest_cache/' \
+                      --exclude='.ruff_cache/' \
+                      --exclude='node_modules/' \
+                      --exclude='frontend/node_modules/' \
+                      --exclude='backend/.venv/' \
+                      --exclude='dist/' \
+                      --exclude='scripts/analyze/reports/' \
+                      --exclude='data/mpmb_source/' \
+                      --exclude='data/mpmb_source_2024/' \
+                      --exclude='data/imports_source/' \
+                      --exclude='data/chunked_output/' \
+                      --exclude='data/index_cache/' \
+                      --exclude='data/uploads/' \
+                      --exclude='**/*.log'
+
+                  mkdir -p "$bundle_dir/frontend/dist"
+                  cp -a frontend/dist/. "$bundle_dir/frontend/dist/"
+
+                  cat > "$bundle_dir/RELEASE_INFO.txt" <<'INFO'
+                  MPMB-Copilot Release Bundle
+
+                  This bundle contains the application source, lock files, Docker configuration,
+                  setup scripts, documentation, and a prebuilt frontend/dist directory.
+
+                  It intentionally does not include:
+                  - .env secrets
+                  - node_modules
+                  - Python virtual environments
+                  - cloned MPMB source repositories under data/
+                  - generated Qdrant/Postgres/runtime data
+
+                  Run scripts/setup.ps1 or npm run setup to clone/update the external MPMB sources.
+                  INFO
+
+                  {
+                      echo ""
+                      echo "Release tag: ${{ steps.meta.outputs.release_tag }}"
+                      echo "Release version: ${{ steps.meta.outputs.release_version }}"
+                      echo "Commit: ${GITHUB_SHA}"
+                      echo "Generated: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+                  } >> "$bundle_dir/RELEASE_INFO.txt"
+
+                  tar -C dist -czf "dist/${{ steps.meta.outputs.asset_prefix }}.tar.gz" "${{ steps.meta.outputs.bundle_name }}"
+                  (cd dist && zip -qr "${{ steps.meta.outputs.asset_prefix }}.zip" "${{ steps.meta.outputs.bundle_name }}")
+
+            - name: Generate SBOM
+              uses: anchore/sbom-action@v0.24.0
+              continue-on-error: true
+              with:
+                  path: dist/${{ steps.meta.outputs.bundle_name }}
+                  format: spdx-json
+                  output-file: dist/${{ steps.meta.outputs.asset_prefix }}.spdx.json
+                  upload-artifact: false
+
+            - name: Generate checksums and release notes
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  cd dist
+
+                  checksum_files=(
+                      "${{ steps.meta.outputs.asset_prefix }}.zip"
+                      "${{ steps.meta.outputs.asset_prefix }}.tar.gz"
+                  )
+                  if [[ -f "${{ steps.meta.outputs.asset_prefix }}.spdx.json" ]]; then
+                      checksum_files+=("${{ steps.meta.outputs.asset_prefix }}.spdx.json")
+                  fi
+                  sha256sum "${checksum_files[@]}" > "${{ steps.meta.outputs.asset_prefix }}.SHA256SUMS.txt"
+
+                  cat > release-notes.md <<NOTES
+                  ## MPMB-Copilot ${{ steps.meta.outputs.release_version }}
+
+                  Commit: \`${GITHUB_SHA}\`
+                  Branch/ref: \`${GITHUB_REF_NAME}\`
+
+                  ### Assets
+
+                  - \`${{ steps.meta.outputs.asset_prefix }}.zip\` - Windows-friendly release bundle.
+                  - \`${{ steps.meta.outputs.asset_prefix }}.tar.gz\` - Unix-friendly release bundle.
+                  - \`${{ steps.meta.outputs.asset_prefix }}.SHA256SUMS.txt\` - SHA-256 checksums.
+                  - \`${{ steps.meta.outputs.asset_prefix }}.spdx.json\` - SBOM, when generation succeeds.
+
+                  The bundle includes source, lock files, Docker configuration, setup scripts, docs, and built frontend assets.
+                  External MPMB source repositories are intentionally excluded and are cloned by the setup scripts.
+                  NOTES
+
+            - name: Upload release artifacts to workflow run
+              uses: actions/upload-artifact@v7
+              with:
+                  name: release-assets-${{ steps.meta.outputs.release_tag }}
+                  path: |
+                      dist/${{ steps.meta.outputs.asset_prefix }}.zip
+                      dist/${{ steps.meta.outputs.asset_prefix }}.tar.gz
+                      dist/${{ steps.meta.outputs.asset_prefix }}.SHA256SUMS.txt
+                      dist/${{ steps.meta.outputs.asset_prefix }}.spdx.json
+                      dist/release-notes.md
+                  if-no-files-found: warn
+                  retention-days: 30
+
+            - name: Publish GitHub Release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  tag="${{ steps.meta.outputs.release_tag }}"
+                  title="${{ steps.meta.outputs.release_name }}"
+                  assets=(
+                      "dist/${{ steps.meta.outputs.asset_prefix }}.zip"
+                      "dist/${{ steps.meta.outputs.asset_prefix }}.tar.gz"
+                      "dist/${{ steps.meta.outputs.asset_prefix }}.SHA256SUMS.txt"
+                  )
+                  if [[ -f "dist/${{ steps.meta.outputs.asset_prefix }}.spdx.json" ]]; then
+                      assets+=("dist/${{ steps.meta.outputs.asset_prefix }}.spdx.json")
+                  fi
+
+                  create_flags=(--target "$GITHUB_SHA" --title "$title" --notes-file dist/release-notes.md)
+                  edit_flags=(--title "$title" --notes-file dist/release-notes.md)
+
+                  if [[ "${{ steps.meta.outputs.prerelease }}" == "true" ]]; then
+                      create_flags+=(--prerelease)
+                      edit_flags+=(--prerelease)
+                  fi
+
+                  if [[ "${{ steps.meta.outputs.latest }}" == "true" ]]; then
+                      create_flags+=(--latest)
+                      edit_flags+=(--latest)
+                  fi
+
+                  if gh release view "$tag" >/dev/null 2>&1; then
+                      gh release upload "$tag" "${assets[@]}" --clobber
+                      gh release edit "$tag" "${edit_flags[@]}"
+                  else
+                      gh release create "$tag" "${assets[@]}" "${create_flags[@]}"
+                  fi

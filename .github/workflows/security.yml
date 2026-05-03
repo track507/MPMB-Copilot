@@ -1,0 +1,180 @@
+name: Security
+
+on:
+    push:
+        branches: [main, develop]
+    pull_request:
+        branches: [main, develop]
+    schedule:
+        - cron: "23 9 * * 1"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    actions: read
+    security-events: write
+
+concurrency:
+    group: security-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    HUSKY: "0"
+    UV_CACHE_DIR: .uv-cache
+
+jobs:
+    dependency-review:
+        name: Dependency Review
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Review dependency changes
+              uses: actions/dependency-review-action@v4
+              with:
+                  fail-on-severity: high
+                  comment-summary-in-pr: always
+
+    codeql:
+        name: CodeQL
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        continue-on-error: true
+
+        strategy:
+            fail-fast: false
+            matrix:
+                language: [javascript-typescript, python]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v4
+              with:
+                  languages: ${{ matrix.language }}
+                  queries: security-extended,security-and-quality
+
+            - name: Perform CodeQL analysis
+              uses: github/codeql-action/analyze@v4
+              with:
+                  category: /language:${{ matrix.language }}
+
+    vulnerability-audit:
+        name: Dependency and Filesystem Audit
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        continue-on-error: true
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version-file: ".nvmrc"
+                  cache: npm
+
+            - name: Setup Python
+              uses: actions/setup-python@v6
+              with:
+                  python-version: "3.13"
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v8
+              with:
+                  enable-cache: true
+                  cache-dependency-glob: backend/uv.lock
+
+            - name: Install Node dependencies
+              run: npm ci
+
+            - name: Create security report directory
+              run: mkdir -p security-reports
+
+            - name: npm audit
+              continue-on-error: true
+              run: npm audit --workspaces --include-workspace-root --audit-level=moderate --json > security-reports/npm-audit.json
+
+            - name: Export backend requirements
+              run: uv export --project backend --all-groups --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt
+
+            - name: pip-audit
+              continue-on-error: true
+              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json
+
+            - name: Trivy filesystem scan
+              uses: aquasecurity/trivy-action@v0.35.0
+              continue-on-error: true
+              with:
+                  scan-type: fs
+                  scan-ref: .
+                  format: sarif
+                  output: security-reports/trivy-fs.sarif
+                  severity: CRITICAL,HIGH
+                  ignore-unfixed: true
+                  exit-code: "0"
+
+            - name: Upload Trivy SARIF to code scanning
+              uses: github/codeql-action/upload-sarif@v4
+              continue-on-error: true
+              with:
+                  sarif_file: security-reports/trivy-fs.sarif
+                  category: trivy-fs
+
+            - name: Upload security reports
+              uses: actions/upload-artifact@v7
+              with:
+                  name: security-reports
+                  path: security-reports/
+                  if-no-files-found: warn
+                  retention-days: 30
+
+    scorecard:
+        name: OpenSSF Scorecard
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        continue-on-error: true
+        if: github.event_name != 'pull_request'
+        permissions:
+            contents: read
+            security-events: write
+            id-token: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  persist-credentials: false
+
+            - name: Create security report directory
+              run: mkdir -p security-reports
+
+            - name: Run Scorecard
+              uses: ossf/scorecard-action@v2.4.3
+              with:
+                  results_file: security-reports/scorecard.sarif
+                  results_format: sarif
+                  publish_results: false
+
+            - name: Upload Scorecard SARIF
+              uses: github/codeql-action/upload-sarif@v4
+              continue-on-error: true
+              with:
+                  sarif_file: security-reports/scorecard.sarif
+                  category: openssf-scorecard
+
+            - name: Upload Scorecard report
+              uses: actions/upload-artifact@v7
+              with:
+                  name: scorecard-report
+                  path: security-reports/scorecard.sarif
+                  if-no-files-found: warn
+                  retention-days: 30
