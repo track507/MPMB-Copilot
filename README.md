@@ -7,6 +7,8 @@
 
 There are currently some outstanding items I need to implement. I want this be more agentic insted of the normal RAG workflow; i.e. Ask question -> Embed & Query -> Returns top K results -> LLM processes that -> Generate Response -> Returns back to you. I see several issues with this, mainly efficiency and wastefulness. Broad questions tend to return large results, and we're relying on semantic meanings rather than intent. That's why I gave this LLM tools so that it can decide for itself whether or not the results from the Query store are insufficient and use those tools to gather the information it actually needs. Some major breaking changes will be coming soon, mainly in the form of agentic development. Instead of embedding and querying every question against the store, your question will go straight to the LLM and it'll have a query tool where it can query the store as it needs to. See below for future plans and TODO's.
 
+I have not tested this with OpenAI since I started this project. Testing has been exclusively with Anthropic since that my model of choice. Please keep this in mind that as of 5/03/2025, everything is working as intended with Anthropic. If you encounter issues with other providers please let me know.
+
 ## TODO's
 
 - Eliminate pre-retrieval path
