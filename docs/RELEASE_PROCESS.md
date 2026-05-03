@@ -68,7 +68,7 @@ These were checked against primary GitHub project pages before adding the workfl
 - `actions/upload-artifact@v7`
 - `github/codeql-action/*@v4`
 - `actions/dependency-review-action@v4`
-- `astral-sh/setup-uv@v8`
+- `astral-sh/setup-uv@v8.0.0`
 - `aquasecurity/trivy-action@v0.35.0`
 - `anchore/sbom-action@v0.24.0`
 - `ossf/scorecard-action@v2.4.3`
