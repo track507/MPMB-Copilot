@@ -71,7 +71,7 @@ fsspec==2026.3.0
     # via
     #   huggingface-hub
     #   torch
-genai-prices==0.0.56
+genai-prices==0.0.57
     # via pydantic-ai-slim
 greenlet==3.3.2 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
