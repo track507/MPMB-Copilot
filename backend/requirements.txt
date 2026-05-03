@@ -220,7 +220,7 @@ packaging==26.0
     #   transformers
 pathspec==1.0.4
     # via mypy
-pillow==12.1.1
+pillow==12.2.0
     # via
     #   fastembed
     #   mpmb-copilot-backend
