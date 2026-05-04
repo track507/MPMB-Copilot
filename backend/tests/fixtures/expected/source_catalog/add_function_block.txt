@@ -1,0 +1,3 @@
+MPMB ADD FUNCTIONS (alternative to direct object assignment):
+- AddRacialVariant(...)
+- AddSubClass(...)

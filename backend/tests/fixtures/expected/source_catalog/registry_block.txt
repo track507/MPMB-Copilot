@@ -1,0 +1,5 @@
+MPMB OBJECT TYPES you can create or modify:
+- ClassSubList["key"] = { ... }
+- FeatsList["key"] = { ... }
+- SpellsList["key"] = { ... }
+- WeaponMasteriesList["key"] = { ... }

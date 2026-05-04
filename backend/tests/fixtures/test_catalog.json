@@ -1,0 +1,66 @@
+{
+	"generated_at": "2026-01-01T00:00:00Z",
+	"project_root": "/test/fixture",
+	"repos": {
+		"mpmb_source": {
+			"branch": "master",
+			"commit": "aaaaaaaaaaaaaaaa",
+			"short_commit": "aaaaaaa",
+			"date": "2026-01-01",
+			"subject": "test",
+			"refs": "HEAD -> master",
+			"remote": "test"
+		},
+		"mpmb_source_2024": {
+			"branch": "main",
+			"commit": "bbbbbbbbbbbbbbbb",
+			"short_commit": "bbbbbbb",
+			"date": "2026-01-01",
+			"subject": "test",
+			"refs": "HEAD -> main",
+			"remote": "test"
+		},
+		"imports_source": {
+			"branch": "master",
+			"commit": "cccccccccccccccc",
+			"short_commit": "ccccccc",
+			"date": "2026-01-01",
+			"subject": "test",
+			"refs": "HEAD -> master",
+			"remote": "test"
+		}
+	},
+	"objects": [
+		{ "repo": "mpmb_source", "file": "f.js", "line": 10, "object_type": "SpellsList", "object_key": "test-spell", "assignment_kind": "bracket_object" },
+		{
+			"repo": "mpmb_source_2024",
+			"file": "f.js",
+			"line": 11,
+			"object_type": "WeaponMasteriesList",
+			"object_key": "test-mastery",
+			"assignment_kind": "bracket_object"
+		},
+		{ "repo": "mpmb_source", "file": "f.js", "line": 12, "object_type": "FeatsList", "object_key": "test-feat", "assignment_kind": "bracket_object" },
+		{ "repo": "mpmb_source", "file": "f.js", "line": 13, "object_type": "ClassSubList", "object_key": "test-sub", "assignment_kind": "bracket_object" }
+	],
+	"add_calls": [
+		{ "repo": "mpmb_source", "file": "f.js", "line": 20, "function_name": "AddSubClass", "mapped": true },
+		{ "repo": "mpmb_source", "file": "f.js", "line": 21, "function_name": "AddRacialVariant", "mapped": true },
+		{ "repo": "mpmb_source", "file": "f.js", "line": 22, "function_name": "AddString", "mapped": false }
+	],
+	"functions": [{ "repo": "mpmb_source", "file": "_functions/F.js", "line": 30, "name": "ParseSpell", "kind": "declaration" }],
+	"coverage_metrics": [
+		{
+			"key": "object_baseline",
+			"label": "Object coverage",
+			"current": 90,
+			"target": 100,
+			"missed": 10,
+			"severity": "medium",
+			"description": "Test gap.",
+			"action": "Improve."
+		}
+	],
+	"source_keys": { "P": 100, "P24": 50, "SRD": 80 },
+	"required_versions": { "mpmb_source": { "13": 1 }, "mpmb_source_2024": { "24": 1 }, "imports_source": {} }
+}

@@ -46,7 +46,7 @@
 		"typecheck": "npm run typecheck:py && npm run typecheck:ts",
 		"typecheck:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev mypy backend/app",
 		"typecheck:ts": "npm --prefix frontend run typecheck",
-		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest tests",
+		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest backend/ -v",
 		"check": "npm run lint && npm run format:check && npm run test",
 		"check:full": "npm run check && npm run typecheck",
 		"prepare": "husky"

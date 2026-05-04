@@ -96,6 +96,17 @@ class Settings:
     max_tool_calls: int = 5
     """Cap on tool calls per request. 0 = unlimited (LLM decides)."""
 
+    source_catalog_path: Optional[str] = None
+    """Override path to mpmb-analysis.json. None → resolution falls through to
+    config/env, then to ./scripts/analyze/reports/mpmb-analysis.json."""
+
+    source_catalog_enabled: bool = True
+    """Master switch. False → service stays in MISSING state regardless of file."""
+
+    inject_catalog_context: bool = True
+    """When True, prompt builder renders catalog-derived registry/Add blocks
+    into the system prompt and per-query hints into the user prompt."""
+
     # ! tool_search_limit is deprecated, retrieval now handles enumeration. Field kept for settings JSON compat.
     tool_search_limit: int = 5
     """Deprecated legacy field. Kept for settings JSON compat."""
@@ -163,6 +174,9 @@ class Settings:
             thinking_budget_tokens=getattr(config_module, "thinking_budget_tokens", cls.thinking_budget_tokens),
             tool_search_limit=getattr(config_module, "tool_search_limit", cls.tool_search_limit),
             system_prompt=getattr(config_module, "system_prompt", cls.system_prompt),
+            source_catalog_path=getattr(config_module, "source_catalog_path", cls.source_catalog_path),
+            source_catalog_enabled=getattr(config_module, "source_catalog_enabled", cls.source_catalog_enabled),
+            inject_catalog_context=getattr(config_module, "inject_catalog_context", cls.inject_catalog_context),
         )
 
         # Resolve JSON file path

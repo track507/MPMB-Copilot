@@ -75,6 +75,7 @@ ignore_missing_imports = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "--basetemp=.pytest-tmp"
 
 [dependency-groups]
 dev = [

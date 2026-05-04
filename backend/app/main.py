@@ -53,6 +53,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         collection_info = await store.collection_info()
         logger.info("qdrant_connected", collection_info=collection_info)
 
+    from app.services.source_catalog import source_catalog_service
+
+    catalog_health = source_catalog_service.load()
+    logger.info(
+        "source_catalog_loaded_at_startup",
+        state=catalog_health.state.value,
+        symbol_count=catalog_health.symbol_count,
+        object_count=catalog_health.object_count,
+        catalog_path=catalog_health.catalog_path,
+    )
     yield
 
     # Shutdown

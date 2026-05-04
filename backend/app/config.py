@@ -108,6 +108,10 @@ class Config(BaseSettings):
     mpmb_source_dir: str = "./data/mpmb_source"
     mpmb_source_2024_dir: str = "./data/mpmb_source_2024"
     imports_source_dir: str = "./data/imports_source"
+    source_catalog_path: Optional[str] = Field(
+        default=None,
+        validation_alias="MPMB_CATALOG_PATH",
+    )
 
     # Additional user-provided source directories (comma-separated)
     user_source_dirs: str = ""
