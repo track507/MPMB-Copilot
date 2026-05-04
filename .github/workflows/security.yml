@@ -142,7 +142,7 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 20
         continue-on-error: true
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event.repository.private == false
         permissions:
             contents: read
             security-events: write
