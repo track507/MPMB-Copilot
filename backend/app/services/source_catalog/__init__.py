@@ -26,7 +26,7 @@ from app.services.source_catalog.prompt_render import (
     deterministic_add_function_block,
     deterministic_registry_block,
 )
-from app.services.source_catalog.staleness import check_staleness
+from app.services.source_catalog.staleness import StalenessTTLCache
 
 logger = get_logger(__name__)
 
@@ -71,8 +71,9 @@ class SourceCatalogService:
         self._registry_block: str = ""
         self._add_function_block: str = ""
         self._last_staleness_check: Optional[datetime] = None
+        self._staleness_cache = StalenessTTLCache(ttl_seconds=60.0)
 
-    # Public API -------------------------------------------------------------
+    # Public API
 
     def load(self) -> CatalogHealth:
         """Idempotent. Called once from FastAPI lifespan startup. Never raises."""
@@ -103,13 +104,18 @@ class SourceCatalogService:
                 self._add_function_block = ""
             return self._snapshot_health()
 
+        self._staleness_cache.invalidate()
         path = _resolve_catalog_path()
         result = await asyncio.to_thread(load_catalog, path)
         self._apply_load_result(path, result, trigger="explicit")
         return self._snapshot_health()
 
     async def health(self) -> CatalogHealth:
-        """Cheap. Checks mtime; reloads if changed. Returns current snapshot."""
+        """
+        Cheap
+        Checks mtime; reloads if changed
+        Refreshes staleness on TTL cadence
+        """
         path = self._catalog_path or _resolve_catalog_path()
         if path.exists():
             try:
@@ -119,6 +125,8 @@ class SourceCatalogService:
             if current_mtime is not None and current_mtime != self._file_mtime:
                 logger.info("source_catalog_mtime_changed", path=str(path))
                 await self.reload()
+
+        await self._refresh_staleness_if_due()
         return self._snapshot_health()
 
     def has_data(self) -> bool:
@@ -151,7 +159,7 @@ class SourceCatalogService:
     def static_prompt_blocks(self) -> tuple[str, str]:
         return self._registry_block, self._add_function_block
 
-    # Internals --------------------------------------------------------------
+    # Internals
 
     def _apply_load_result(
         self,
@@ -183,7 +191,7 @@ class SourceCatalogService:
         new_indexes = build_indexes(result.catalog)
         new_registry_block = deterministic_registry_block(new_indexes)
         new_add_block = deterministic_add_function_block(new_indexes)
-        staleness_state, live_commits = check_staleness(result.catalog.repos)
+        staleness_state, live_commits = self._staleness_cache.get_or_compute(result.catalog.repos)
         final_state = CatalogState.STALE if staleness_state == CatalogState.STALE else CatalogState.HEALTHY
 
         with self._lock:
@@ -226,6 +234,21 @@ class SourceCatalogService:
             ),
             last_staleness_check=self._last_staleness_check,
         )
+
+    async def _refresh_staleness_if_due(self) -> None:
+        """
+        Re-evaluate staleness via the TTL cache.
+        No file re-parse; just compares captured catalog commits to live git HEAD again (cheap when within the TTL window)
+        """
+        if self._indexes is None or not self._repos:
+            return
+        new_state, live = await asyncio.to_thread(self._staleness_cache.get_or_compute, dict(self._repos))
+        with self._lock:
+            # Only flip between HEALTHY and STALE; don't override MISSING/MALFORMED.
+            if self._state in (CatalogState.HEALTHY, CatalogState.STALE):
+                self._state = new_state
+            self._live_repo_commits = dict(live)
+            self._last_staleness_check = datetime.now(tz=timezone.utc)
 
 
 source_catalog_service = SourceCatalogService()

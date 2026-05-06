@@ -41,7 +41,25 @@
 			"assignment_kind": "bracket_object"
 		},
 		{ "repo": "mpmb_source", "file": "f.js", "line": 12, "object_type": "FeatsList", "object_key": "test-feat", "assignment_kind": "bracket_object" },
-		{ "repo": "mpmb_source", "file": "f.js", "line": 13, "object_type": "ClassSubList", "object_key": "test-sub", "assignment_kind": "bracket_object" }
+		{ "repo": "mpmb_source", "file": "f.js", "line": 13, "object_type": "ClassSubList", "object_key": "test-sub", "assignment_kind": "bracket_object" },
+		{ "repo": "mpmb_source", "file": "f.js", "line": 14, "object_type": "ClassList", "object_key": "test-class", "assignment_kind": "bracket_object" },
+		{
+			"repo": "mpmb_source",
+			"file": "f.js",
+			"line": 15,
+			"object_type": "BackgroundFeatureList",
+			"object_key": "test-bg-feature",
+			"assignment_kind": "bracket_object"
+		},
+		{ "repo": "mpmb_source", "file": "f.js", "line": 16, "object_type": "BackgroundList", "object_key": "test-bg", "assignment_kind": "bracket_object" },
+		{
+			"repo": "mpmb_source_2024",
+			"file": "f.js",
+			"line": 17,
+			"object_type": "DefaultEvalsList",
+			"object_key": "test-default-eval",
+			"assignment_kind": "bracket_object"
+		}
 	],
 	"add_calls": [
 		{ "repo": "mpmb_source", "file": "f.js", "line": 20, "function_name": "AddSubClass", "mapped": true },

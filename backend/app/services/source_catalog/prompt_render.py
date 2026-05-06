@@ -30,7 +30,7 @@ def deterministic_registry_block(indexes: Indexes) -> str:
     registries = sorted(name for name, sym in indexes.symbols.items() if sym.kind == SymbolKind.REGISTRY)
     for name in registries:
         lines.append(f'- {name}["key"] = {{ ... }}')
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def deterministic_add_function_block(indexes: Indexes) -> str:
@@ -39,7 +39,7 @@ def deterministic_add_function_block(indexes: Indexes) -> str:
     fns = sorted(name for name, sym in indexes.symbols.items() if sym.kind == SymbolKind.ADD_DECLARATION)
     for name in fns:
         lines.append(f"- {name}(...)")
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def per_query_hints(

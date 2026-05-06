@@ -70,13 +70,12 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None) -> UUI
         return None
 
 
-async def _save_messages(
-    session_uuid: UUID | None,
-    user_message: str,
-    assistant_content: str,
-    rag_response=None,
-) -> None:
-    """Save user and assistant messages to the session."""
+async def _save_user_message(session_uuid: UUID | None, user_message: str) -> None:
+    """
+    Save the user message and trigger title generation on the first message
+
+    Persisted before streaming begins so the message survives any downstream failure (e.g., agent request_limit or model errors)
+    """
     if not session_uuid or not db.is_connected:
         return
 
@@ -87,16 +86,32 @@ async def _save_messages(
             content={"text": user_message},
         )
 
-        # ? First user message in a new session — kick off async title generation
+        # ? First user message in a new session - kick off async title generation
         if user_msg.sequence_number == 1:
             asyncio.create_task(generate_session_title(session_uuid, user_message))
+    except Exception as e:
+        logger.error(f"Failed to save user message: {e}")
 
-        kwargs = {}
+
+async def _save_assistant_message(
+    session_uuid: UUID | None,
+    assistant_content: str,
+    rag_response=None,
+    error: str | None = None,
+) -> None:
+    """Save the assistant message. Records partial content + error when the stream fails."""
+    if not session_uuid or not db.is_connected:
+        return
+
+    try:
+        kwargs: dict[str, Any] = {}
+        meta_data: dict[str, Any] = {}
+
         if rag_response:
             usage = rag_response.usage if isinstance(rag_response.usage, dict) else {}
             timing = rag_response.timing if hasattr(rag_response, "timing") else {}
             tools_meta = getattr(rag_response, "tools", None)
-            meta_data: dict[str, Any] = {
+            meta_data = {
                 "retrieval": getattr(rag_response, "retrieval_info", None),
                 "timing": timing,
             }
@@ -110,11 +125,17 @@ async def _save_messages(
                 total_tokens=usage.get("total_tokens", 0),
                 latency_ms=int(timing.get("total_ms", 0)) if isinstance(timing, dict) else 0,
                 stop_reason=getattr(rag_response, "stop_reason", None),
-                meta_data=meta_data,
             )
 
-        assistant_content_dict = {"text": assistant_content}
-        if rag_response and rag_response.retrieval_info:
+        if error:
+            meta_data["error"] = error
+            kwargs["stop_reason"] = "error"
+
+        if meta_data:
+            kwargs["meta_data"] = meta_data
+
+        assistant_content_dict: dict[str, Any] = {"text": assistant_content}
+        if rag_response and getattr(rag_response, "retrieval_info", None):
             sources = _build_sources_from_rag(rag_response)
             if sources:
                 assistant_content_dict["sources"] = sources
@@ -122,11 +143,11 @@ async def _save_messages(
         await session_service.add_message(
             session_id=session_uuid,
             role="assistant",
-            content={"text": assistant_content},
+            content=assistant_content_dict,
             **kwargs,
         )
     except Exception as e:
-        logger.error(f"Failed to save messages: {e}")
+        logger.error(f"Failed to save assistant message: {e}")
 
 
 def _build_metadata(
@@ -210,18 +231,25 @@ async def chat(request: ChatRequest):
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
-        rag_response = await rag_engine.generate(
-            query=request.message,
-            conversation_history=history,
-            session_id=session_id,
-            edition=request.edition or settings.default_edition,
-            provider=request.provider,
-            model=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-        )
+        # * Persist user message before generation so it survives downstream failures
+        await _save_user_message(session_uuid, request.message)
 
-        await _save_messages(session_uuid, request.message, rag_response.content, rag_response)
+        try:
+            rag_response = await rag_engine.generate(
+                query=request.message,
+                conversation_history=history,
+                session_id=session_id,
+                edition=request.edition or settings.default_edition,
+                provider=request.provider,
+                model=request.model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+            )
+        except Exception as gen_error:
+            await _save_assistant_message(session_uuid, "", error=str(gen_error))
+            raise
+
+        await _save_assistant_message(session_uuid, rag_response.content, rag_response)
 
         sources = None
         if request.include_source and rag_response.retrieval_info:
@@ -278,6 +306,9 @@ async def chat_stream(request: ChatRequest):
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
+        # * Persist user message before streaming so it survives any agent/model failure
+        await _save_user_message(session_uuid, request.message)
+
         async def event_generator():
             """Generate SSE events from the RAG stream."""
             full_content = []
@@ -296,6 +327,8 @@ async def chat_stream(request: ChatRequest):
                 ):
                     if event.done:
                         final_event = event
+                        assistant_text = "".join(full_content)
+                        await _save_assistant_message(session_uuid, assistant_text, final_event)
                         final_chunk = ChatStreamChunk(
                             chunk="",
                             done=True,
@@ -327,11 +360,11 @@ async def chat_stream(request: ChatRequest):
                         )
                         yield f"data: {chunk.model_dump_json()}\n\n"
 
-                assistant_text = "".join(full_content)
-                await _save_messages(session_uuid, request.message, assistant_text, final_event)
-
             except Exception as e:
                 logger.error(f"Stream error: {e}", exc_info=True)
+                # ! Persist partial text + error so the user's question survives the page reload
+                partial_text = "".join(full_content)
+                await _save_assistant_message(session_uuid, partial_text, error=str(e))
                 error_chunk = ChatStreamChunk(
                     chunk="",
                     done=True,

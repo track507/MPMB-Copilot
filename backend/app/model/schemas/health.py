@@ -45,6 +45,18 @@ class ServiceStatus(BaseModel):
     message: Optional[str] = Field(None, description="Optional status message or error details")
 
 
+class SourceCatalogHealthBlock(BaseModel):
+    """Health snapshot of the source catalog service."""
+
+    status: str  # "healthy" | "degraded"
+    state: str  # CatalogState value
+    message: str
+    generated_at: Optional[str] = None
+    symbol_count: int = 0
+    object_count: int = 0
+    coverage_severity_summary: dict[str, int] = Field(default_factory=dict)
+
+
 class HealthResponse(BaseModel):
     """Health check response model from the /health endpoint.
 
@@ -114,4 +126,7 @@ class HealthResponse(BaseModel):
     timestamp: datetime = Field(..., description="Health check timestamp (UTC)")
     services: dict[str, dict[str, str]] = Field(
         ..., description="Service-specific health statuses keyed by service name"
+    )
+    source_catalog: Optional[SourceCatalogHealthBlock] = Field(
+        None, description="Source catalog service health (None if not loaded)"
     )

@@ -45,6 +45,8 @@ from app.core.retriever import retriever
 from app.core.tools import Deps, build_mpmb_toolset
 from app.logger import get_logger
 from app.services.llm.messages import to_pydantic_messages
+from app.services.source_catalog import source_catalog_service
+from app.services.source_catalog.prompt_render import per_query_hints as _render_hints
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -97,6 +99,45 @@ def _derive_tool_status(result_text: str) -> str:
     return "success"
 
 
+def _build_catalog_hints(retrieval_result, settings_ref) -> Optional[str]:
+    """Construct per-query catalog hints from a RetrievalResult."""
+    qa = getattr(retrieval_result, "query_analysis", None)
+    object_type_match = None
+    if qa is not None and qa.object_type:
+        match = source_catalog_service.find_object_type(qa.object_type)
+        if match is None:
+            # Synthesize a minimal match so the hint still surfaces the resolved type
+            from app.model.schemas.source_catalog import ObjectTypeMatch
+
+            object_type_match = ObjectTypeMatch(
+                object_type=qa.object_type,
+                matched_via="code_identifier",
+                matched_term=qa.object_type,
+            )
+        else:
+            object_type_match = match
+
+    matched_symbols: list = []
+    # We don't have the symbol name in IntentResult today; v1 leaves matched_symbols empty.
+    # Future: thread the matched symbol through IntentResult.
+
+    # `health()` is async; per-request hint rendering needs a cheap sync read.
+    # has_data() distinguishes HEALTHY/STALE (both ok) from MISSING/MALFORMED.
+    # Known small gap: this collapses STALE -> HEALTHY for hint purposes, so the
+    # spec's "stale-warning prefix" doesn't fire yet. Tracked in closeout follow-ups.
+    from app.model.schemas.source_catalog import CatalogState
+
+    catalog_state = CatalogState.HEALTHY if source_catalog_service.has_data() else CatalogState.MISSING
+
+    return _render_hints(
+        object_type_match=object_type_match,
+        matched_symbols=matched_symbols,
+        coverage_warnings=tuple(source_catalog_service.coverage_warnings()),
+        catalog_state=catalog_state,
+        injection_enabled=bool(getattr(settings_ref, "inject_catalog_context", True)),
+    )
+
+
 class RAGEngine:
     async def generate(
         self,
@@ -121,10 +162,12 @@ class RAGEngine:
             or settings.default_edition
         )
 
+        catalog_hints = _build_catalog_hints(retrieval_result, settings)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
             retrieval_result=retrieval_result,
             edition=resolved_edition,
+            catalog_hints=catalog_hints,
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
@@ -189,10 +232,12 @@ class RAGEngine:
             or (retrieval_result.query_analysis.edition if retrieval_result.query_analysis else None)
             or settings.default_edition
         )
+        catalog_hints = _build_catalog_hints(retrieval_result, settings)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
             retrieval_result=retrieval_result,
             edition=resolved_edition,
+            catalog_hints=catalog_hints,
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)

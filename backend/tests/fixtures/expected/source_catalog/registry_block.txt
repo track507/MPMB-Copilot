@@ -1,5 +1,9 @@
 MPMB OBJECT TYPES you can create or modify:
+- BackgroundFeatureList["key"] = { ... }
+- BackgroundList["key"] = { ... }
+- ClassList["key"] = { ... }
 - ClassSubList["key"] = { ... }
+- DefaultEvalsList["key"] = { ... }
 - FeatsList["key"] = { ... }
 - SpellsList["key"] = { ... }
 - WeaponMasteriesList["key"] = { ... }

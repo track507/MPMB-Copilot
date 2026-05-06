@@ -47,7 +47,7 @@ class Config(BaseSettings):
     max_tokens: int = 4000
     temperature: float = 0.2
     enable_tool_use: bool = False
-    max_tool_calls: int = 5
+    max_tool_calls: int = 0
     enable_extended_thinking: bool = False
     thinking_budget_tokens: int = 4000
 

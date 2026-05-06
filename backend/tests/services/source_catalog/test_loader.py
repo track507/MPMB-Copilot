@@ -15,7 +15,7 @@ def test_load_valid_catalog(valid_catalog_path: Path) -> None:
     assert result.state == CatalogState.HEALTHY
     assert isinstance(result.catalog, CatalogModel)
     assert result.catalog.generated_at == "2026-01-01T00:00:00Z"
-    assert len(result.catalog.objects) == 4
+    assert len(result.catalog.objects) == 8
     assert result.file_mtime is not None
     assert "loaded" in result.message.lower() or "ok" in result.message.lower()
 

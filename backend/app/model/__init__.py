@@ -16,7 +16,7 @@ from app.model.orm import (
 
 # API Schemas
 from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
-from app.model.schemas.health import HealthResponse, ServiceStatus
+from app.model.schemas.health import HealthResponse, ServiceStatus, SourceCatalogHealthBlock
 from app.model.schemas.index import IndexRequest, IndexResponse, IndexStatus
 from app.model.schemas.session import (
     MessageOut,
@@ -42,6 +42,7 @@ __all__ = [
     # Health
     "HealthResponse",
     "ServiceStatus",
+    "SourceCatalogHealthBlock",
     # Chat
     "ChatRequest",
     "ChatResponse",

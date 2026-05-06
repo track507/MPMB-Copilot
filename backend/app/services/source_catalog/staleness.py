@@ -5,6 +5,8 @@ PR 1 ships the helper. PR 5 adds the 60s TTL cache wrapper around SourceCatalogS
 """
 
 import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -84,3 +86,35 @@ def check_staleness(
         CatalogState.STALE if has_drift else CatalogState.HEALTHY,
         live_commits,
     )
+
+
+class StalenessTTLCache:
+    """60s TTL wrapper around `check_staleness`. Thread-safe."""
+
+    def __init__(self, ttl_seconds: float = 60.0) -> None:
+        self._ttl = ttl_seconds
+        self._lock = threading.Lock()
+        self._cached_at: float = 0.0
+        self._cached_state: Optional[CatalogState] = None
+        self._cached_live: dict[str, str] = {}
+
+    def get_or_compute(
+        self,
+        repos: dict[str, RepoProvenance],
+    ) -> tuple[CatalogState, dict[str, str]]:
+        now = time.monotonic()
+        with self._lock:
+            if self._cached_state is not None and now - self._cached_at < self._ttl:
+                return self._cached_state, dict(self._cached_live)
+        state, live = check_staleness(repos)
+        with self._lock:
+            self._cached_state = state
+            self._cached_live = dict(live)
+            self._cached_at = now
+        return state, live
+
+    def invalidate(self) -> None:
+        with self._lock:
+            self._cached_state = None
+            self._cached_live = {}
+            self._cached_at = 0.0

@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.logger import get_logger
+from app.services.source_catalog import source_catalog_service
 from app.settings import settings as dynamic_settings
 
 logger = get_logger(__name__)
@@ -86,46 +87,6 @@ class IntentResult:
     """Which layer determined the result: 'symbol', 'embedding', or 'fallback'."""
 
 
-# * Symbol detection (Layer 1)
-
-# MPMB identifiers that unambiguously signal intent.
-# These are code tokens - language-independent.
-_MPMB_SYMBOLS: dict[str, QueryIntent] = {
-    # Object types -> lookup
-    "SpellsList": QueryIntent.LOOKUP,
-    "ClassList": QueryIntent.LOOKUP,
-    "ClassSubList": QueryIntent.LOOKUP,
-    "RaceList": QueryIntent.LOOKUP,
-    "RaceSubList": QueryIntent.LOOKUP,
-    "FeatsList": QueryIntent.LOOKUP,
-    "MagicItemsList": QueryIntent.LOOKUP,
-    "CreatureList": QueryIntent.LOOKUP,
-    "BackgroundList": QueryIntent.LOOKUP,
-    "BackgroundFeatureList": QueryIntent.LOOKUP,
-    "WeaponsList": QueryIntent.LOOKUP,
-    "ArmourList": QueryIntent.LOOKUP,
-    "AmmoList": QueryIntent.LOOKUP,
-    "GearList": QueryIntent.LOOKUP,
-    "ToolsList": QueryIntent.LOOKUP,
-    "SourceList": QueryIntent.LOOKUP,
-    "CompanionList": QueryIntent.LOOKUP,
-    "PacksList": QueryIntent.LOOKUP,
-    "PsionicsList": QueryIntent.LOOKUP,
-    "WeaponMasteriesList": QueryIntent.LOOKUP,
-    "DefaultEvalsList": QueryIntent.LOOKUP,
-    # Add* functions -> lookup
-    "AddSubClass": QueryIntent.LOOKUP,
-    "AddFeatureChoice": QueryIntent.LOOKUP,
-    "AddRacialVariant": QueryIntent.LOOKUP,
-    "AddBackgroundVariant": QueryIntent.LOOKUP,
-    "AddWarlockInvocation": QueryIntent.LOOKUP,
-    "AddFightingStyle": QueryIntent.LOOKUP,
-    "AddWarlockPactBoon": QueryIntent.LOOKUP,
-    # Engine identifiers
-    "RequiredSheetVersion": QueryIntent.LOOKUP,
-    "iFileName": QueryIntent.LOOKUP,
-}
-
 # * Error-adjacent patterns override symbol detection -> debug
 _ERROR_CONTEXT_PATTERN = re.compile(
     r"\b(error|bug|crash|fail|broken|not\s+work|won.t\s+load|doesn.t\s+show)\b",
@@ -134,16 +95,21 @@ _ERROR_CONTEXT_PATTERN = re.compile(
 
 
 def _detect_symbol_intent(query: str) -> Optional[tuple[QueryIntent, str]]:
-    """Check if the query contains a literal MPMB code identifier.
-
-    Returns (intent, matched_symbol) or None.
     """
-    for symbol, default_intent in _MPMB_SYMBOLS.items():
-        if symbol in query:
-            # If error context is also present, override to DEBUG
+    Catalog-backed symbol detection
+
+    Returns None when the catalog is missing/malformed (Layer 1 skipped)
+    All catalog-derived symbols map to LOOKUP unless _ERROR_CONTEXT_PATTERN matches, in which case DEBUG wins
+    """
+    symbol_index = source_catalog_service.symbol_index()
+    if not symbol_index:
+        return None
+
+    for symbol in sorted(symbol_index, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(symbol)}\b", query):
             if _ERROR_CONTEXT_PATTERN.search(query):
                 return (QueryIntent.DEBUG, symbol)
-            return (default_intent, symbol)
+            return (QueryIntent.LOOKUP, symbol)
     return None
 
 

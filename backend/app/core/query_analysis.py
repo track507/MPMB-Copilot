@@ -20,6 +20,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from app.services.source_catalog import source_catalog_service
+
 
 # * Result
 @dataclass(frozen=True)
@@ -103,67 +105,23 @@ _OBJECT_TYPE_KEYWORDS: dict[str, str] = {
     # identifier SourceList still matches via the code-identifier check.
 }
 
-# Literal MPMB code identifiers, sorted longest-first so prefix
-# collisions resolve to the more specific name (ClassSubList before
-# ClassList, BackgroundFeatureList before BackgroundList).
-_CODE_IDENTIFIERS: tuple[str, ...] = tuple(
-    sorted(
-        (
-            "SpellsList",
-            "ClassList",
-            "ClassSubList",
-            "RaceList",
-            "RaceSubList",
-            "FeatsList",
-            "MagicItemsList",
-            "CreatureList",
-            "BackgroundList",
-            "BackgroundFeatureList",
-            "WeaponsList",
-            "ArmourList",
-            "AmmoList",
-            "GearList",
-            "ToolsList",
-            "SourceList",
-            "CompanionList",
-            "PacksList",
-            "PsionicsList",
-            "WeaponMasteriesList",
-            "DefaultEvalsList",
-        ),
-        key=len,
-        reverse=True,
-    )
-)
-
 # * Sorted by length descending so multi-word phrases match first
 _OBJECT_TYPE_KEYWORDS_SORTED = sorted(_OBJECT_TYPE_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
 
 
 def _infer_object_type(query: str) -> Optional[str]:
-    """Detect MPMB object type from query text.
+    """Catalog-backed registry match, then curated NL alias fallback."""
+    catalog_match = source_catalog_service.find_object_type(query)
+    if catalog_match:
+        return catalog_match.object_type
 
-    Checks literal code identifiers first (longest-first to resolve
-    prefix collisions), then multi-word phrases, then single-word
-    keywords. All matching uses word boundaries so substrings of
-    longer names don't produce false positives.
-    """
-    # Literal code identifiers - word-boundary matched so "SubClassList"
-    # in user text doesn't falsely match "ClassList".
-    for code_name in _CODE_IDENTIFIERS:
-        if re.search(rf"\b{re.escape(code_name)}\b", query):
-            return code_name
-
-    # Keyword phrases
     query_lower = query.lower()
     for keyword, obj_type in _OBJECT_TYPE_KEYWORDS_SORTED:
         if " " in keyword:
             if keyword in query_lower:
                 return obj_type
-        else:
-            if re.search(rf"\b{re.escape(keyword)}\b", query_lower):
-                return obj_type
-
+        elif re.search(rf"\b{re.escape(keyword)}\b", query_lower):
+            return obj_type
     return None
 
 

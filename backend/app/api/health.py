@@ -6,8 +6,10 @@ from fastapi import APIRouter, status
 
 from app.config import config
 from app.logger import get_logger
-from app.model.schemas.health import HealthResponse, ServiceStatus
+from app.model.schemas.health import HealthResponse, ServiceStatus, SourceCatalogHealthBlock
+from app.model.schemas.source_catalog import CatalogState
 from app.services.db import db
+from app.services.source_catalog import source_catalog_service
 from app.services.vector import get_vector_store
 
 logger = get_logger(__name__)
@@ -83,6 +85,16 @@ async def health_check():
     qdrant_status = await check_qdrant()
     llm_status = await check_llm_provider()
     embedding_status = await check_embedding_model()
+    catalog_health = await source_catalog_service.health()
+    catalog_block = SourceCatalogHealthBlock(
+        status="healthy" if catalog_health.state == CatalogState.HEALTHY else "degraded",
+        state=catalog_health.state.value,
+        message=catalog_health.message,
+        generated_at=catalog_health.generated_at,
+        symbol_count=catalog_health.symbol_count,
+        object_count=catalog_health.object_count,
+        coverage_severity_summary=catalog_health.coverage_severity_summary,
+    )
 
     # Check PostgreSQL
     db_healthy = await db.health_check()
@@ -98,6 +110,10 @@ async def health_check():
     if any(s.status in ["unavailable", "error"] for s in [qdrant_status, llm_status, embedding_status, db_status]):
         overall_status = "degraded"
 
+    # Catalog issues degrade the overall status but never produce "unhealthy"
+    if catalog_block.status == "degraded" and overall_status == "healthy":
+        overall_status = "degraded"
+
     return HealthResponse(
         status=overall_status,
         environment=config.environment,
@@ -109,6 +125,7 @@ async def health_check():
             "llm_provider": {"status": llm_status.status, "message": llm_status.message or ""},
             "embedding_model": {"status": embedding_status.status, "message": embedding_status.message or ""},
         },
+        source_catalog=catalog_block,
     )
 
 

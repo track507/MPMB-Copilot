@@ -16,6 +16,7 @@ from typing import Optional
 
 from app.core.retriever import RetrievalResult
 from app.logger import get_logger
+from app.services.source_catalog import source_catalog_service
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -36,31 +37,9 @@ CRITICAL ES5 CONSTRAINTS - violating these will cause runtime errors:
 - Use `console.println()` for console output, NOT `console.log()`.
 - All code runs in Adobe Acrobat's JavaScript engine, not Node.js or browsers.
 
-MPMB OBJECT TYPES you can create or modify:
-- SpellsList["key"] = { ... }           - Spells
-- ClassList["key"] = { ... }            - Classes
-- ClassSubList["key"] = { ... }         - Subclasses (or use AddSubClass)
-- RaceList["key"] = { ... }             - Races / Species
-- FeatsList["key"] = { ... }            - Feats
-- MagicItemsList["key"] = { ... }       - Magic items
-- CreatureList["key"] = { ... }         - Creatures / Wild shapes
-- BackgroundList["key"] = { ... }       - Backgrounds
-- BackgroundFeatureList["key"] = { ... } - Background features
-- WeaponsList["key"] = { ... }          - Weapons
-- ArmourList["key"] = { ... }           - Armor
-- AmmoList["key"] = { ... }             - Ammunition
-- GearList["key"] = { ... }             - Adventuring gear
-- SourceList["key"] = { ... }           - Source books
-- CompanionList["key"] = { ... }        - Companion templates
-- PacksList["key"] = { ... }            - Equipment packs
+<<CATALOG_REGISTRIES>>
 
-MPMB ADD FUNCTIONS (alternative to direct object assignment):
-- AddSubClass("parentClass", "subclassKey", { ... })
-- AddFeatureChoice("parentKey", "featureKey", { ... })
-- AddRacialVariant("parentRace", "variantKey", { ... })
-- AddBackgroundVariant("parentBG", "variantKey", { ... })
-- AddWarlockInvocation("invocationKey", { ... })
-- AddFightingStyle("styleKey", { ... })
+<<CATALOG_ADD_FUNCTIONS>>
 
 FILE HEADER - every import file needs:
 - var iFileName = "filename.js";
@@ -188,6 +167,16 @@ def _format_chunk_section(chunks: list[dict], section_title: str) -> str:
     return "\n\n".join(formatted)
 
 
+def _strip_placeholders(text: str) -> str:
+    """Remove the catalog placeholders cleanly when catalog is unavailable.
+    Collapses runs of blank lines that result from stripping."""
+    text = text.replace("<<CATALOG_REGISTRIES>>", "").replace("<<CATALOG_ADD_FUNCTIONS>>", "")
+    # Collapse 3+ consecutive newlines to 2
+    while "\n\n\n" in text:
+        text = text.replace("\n\n\n", "\n\n")
+    return text.strip("\n") + "\n"
+
+
 # * Prompt builder
 class PromptBuilder:
     """Builds prompt payloads for LLM calls."""
@@ -195,11 +184,24 @@ class PromptBuilder:
     def get_static_instructions(self) -> str:
         """Return the static system prompt text.
 
-        Uses the user-configured prompt from settings if available,
-        otherwise falls back to the built-in default.
+        When catalog data is available and inject_catalog_context is True,
+        placeholders are replaced with deterministic catalog blocks.
+        Otherwise placeholders are stripped cleanly.
         """
         custom = getattr(settings, "system_prompt", None)
         base = custom.strip() if custom and custom.strip() else DEFAULT_SYSTEM_PROMPT
+
+        inject = getattr(settings, "inject_catalog_context", True)
+        if inject and source_catalog_service.has_data():
+            registry_block, add_block = source_catalog_service.static_prompt_blocks()
+            if "<<CATALOG_REGISTRIES>>" in base:
+                base = base.replace("<<CATALOG_REGISTRIES>>", registry_block)
+                base = base.replace("<<CATALOG_ADD_FUNCTIONS>>", add_block)
+            else:
+                base = base + "\n\n" + registry_block + "\n\n" + add_block
+        else:
+            base = _strip_placeholders(base)
+
         if getattr(settings, "enable_tool_use", False):
             return base + TOOL_USE_ADDENDUM
         return base
@@ -246,16 +248,18 @@ class PromptBuilder:
         query: str,
         retrieval_result: Optional[RetrievalResult] = None,
         edition: Optional[str] = None,
+        catalog_hints: Optional[str] = None,
     ) -> str:
-        """Build a user-prompt string with RAG context prepended.
-
-        Returns the query as-is when there's no RAG context, or the RAG
-        context followed by a separator and the user question.
-        """
+        """Build a user-prompt string with optional catalog hints + RAG context."""
         rag_context = self.format_rag_context(retrieval_result, edition)
+        parts: list[str] = []
+        if catalog_hints:
+            parts.append(catalog_hints)
         if rag_context:
-            return f"{rag_context}\n\n---\n\nUser question: {query}"
-        return query
+            parts.append(rag_context)
+        if not parts:
+            return query
+        return f"{chr(10).join(parts)}\n\n---\n\nUser question: {query}"
 
 
 # * Global instance

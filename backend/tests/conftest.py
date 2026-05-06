@@ -1,5 +1,5 @@
 """
-Shared fixtures for source_catalog service tests
+Shared backend test fixtures.
 """
 
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture
 def fixtures_dir() -> Path:
-    return Path(__file__).parent.parent.parent / "fixtures"
+    return Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def malformed_catalog_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def wrong_shape_catalog_path(tmp_path: Path) -> Path:
-    """Top-level array — invalid shape."""
+    """Top-level array; invalid shape."""
     p = tmp_path / "wrong_shape.json"
     p.write_text('["not", "a", "catalog"]')
     return p
