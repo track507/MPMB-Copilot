@@ -1,4 +1,5 @@
 backend/.venv/
+backend/.pytest-tmp/
 backend/.pytest_cache/
 backend/.ruff_cache/
 frontend/dist/
@@ -6,8 +7,12 @@ frontend/node_modules/
 data/
 logs/
 node_modules/
+.pytest-tmp/
+.pytest_cache/
 .ruff_cache/
 .uv-cache/
+.codex-pytest*/
+scripts/analyze/reports/
 coverage/
 htmlcov/
 *.md

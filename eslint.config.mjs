@@ -8,6 +8,11 @@ export default [
 	{
 		ignores: [
 			"**/.git/**",
+			"**/.pytest_cache/**",
+			"**/.pytest-tmp/**",
+			"**/.ruff_cache/**",
+			"**/.uv-cache/**",
+			"**/.codex-pytest*/**",
 			"**/*.min.js",
 			".uv-cache/**",
 			"backend/.venv/**",
