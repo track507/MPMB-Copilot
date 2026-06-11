@@ -297,8 +297,8 @@ class RAGEngine:
                                 call_id = event.tool_call_id
                                 t0 = tool_start_times.pop(call_id, time.perf_counter())
                                 duration_ms = round((time.perf_counter() - t0) * 1000, 1)
-                                content = getattr(event.result, "content", "")
-                                name = getattr(event.result, "tool_name", "")
+                                content = getattr(event.part, "content", "")
+                                name = getattr(event.part, "tool_name", "")
                                 status = _derive_tool_status(str(content))
                                 tool_calls.append({"name": name, "status": status, "duration_ms": duration_ms})
                                 yield RAGStreamEvent(
@@ -311,7 +311,7 @@ class RAGEngine:
         total_ms = (time.perf_counter() - t_start) * 1000
 
         final_result = run.result
-        usage = _extract_usage(final_result.usage()) if final_result else {}
+        usage = _extract_usage(final_result.usage) if final_result else {}
         stop_reason = _extract_stop_reason_from_messages(final_result.all_messages() if final_result else [])
 
         tools_meta = (

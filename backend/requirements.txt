@@ -11,13 +11,14 @@ annotated-doc==0.0.4
     #   typer
 annotated-types==0.7.0
     # via pydantic
-anthropic==0.97.0
+anthropic==0.109.1
     # via pydantic-ai-slim
 anyio==4.13.0
     # via
     #   anthropic
     #   httpx
     #   httpx-ws
+    #   httpx2
     #   openai
     #   starlette
     #   watchfiles
@@ -71,7 +72,7 @@ fsspec==2026.4.0
     # via
     #   huggingface-hub
     #   torch
-genai-prices==0.0.57
+genai-prices==0.0.66
     # via pydantic-ai-slim
 greenlet==3.5.0 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
@@ -82,6 +83,7 @@ grpcio==1.80.0
 h11==0.16.0
     # via
     #   httpcore
+    #   httpcore2
     #   uvicorn
     #   wsproto
 h2==4.3.0
@@ -94,12 +96,13 @@ httpcore==1.0.9
     # via
     #   httpx
     #   httpx-ws
+httpcore2==2.3.0
+    # via httpx2
 httptools==0.7.1
     # via uvicorn
 httpx==0.28.1
     # via
     #   anthropic
-    #   genai-prices
     #   httpx-ws
     #   huggingface-hub
     #   mpmb-copilot-backend
@@ -108,6 +111,8 @@ httpx==0.28.1
     #   pydantic-graph
     #   qdrant-client
 httpx-ws==0.9.0
+httpx2==2.3.0
+    # via genai-prices
 huggingface-hub==1.13.0
     # via
     #   fastembed
@@ -120,6 +125,7 @@ idna==3.13
     # via
     #   anyio
     #   httpx
+    #   httpx2
     #   requests
 importlib-metadata==8.7.1
     # via opentelemetry-api
@@ -249,11 +255,11 @@ pydantic==2.13.3
     #   pydantic-graph
     #   pydantic-settings
     #   qdrant-client
-pydantic-ai-slim==1.89.1
+pydantic-ai-slim==1.107.0
     # via mpmb-copilot-backend
 pydantic-core==2.46.3
     # via pydantic
-pydantic-graph==1.89.1
+pydantic-graph==1.107.0
     # via pydantic-ai-slim
 pydantic-settings==2.14.0
     # via mpmb-copilot-backend
@@ -351,6 +357,10 @@ transformers==5.7.0
     # via sentence-transformers
 triton==3.6.0 ; sys_platform == 'linux'
     # via torch
+truststore==0.10.4
+    # via
+    #   httpcore2
+    #   httpx2
 typer==0.25.1
     # via
     #   huggingface-hub

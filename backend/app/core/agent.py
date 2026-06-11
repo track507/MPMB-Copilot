@@ -152,7 +152,7 @@ async def generate(
         content=result.output,
         provider=resolved_provider,
         model=resolved_model,
-        usage=_extract_usage(result.usage()),
+        usage=_extract_usage(result.usage),
         stop_reason=_extract_stop_reason_from_messages(result.new_messages()),
     )
 
@@ -197,7 +197,7 @@ async def stream(
     async with agent.run_stream(user_prompt, **run_kwargs) as s:
         async for delta in s.stream_text(delta=True):
             yield LLMStreamEvent(content=delta)
-        usage = _extract_usage(s.usage())
+        usage = _extract_usage(s.usage)
         stop_reason = _extract_stop_reason_from_messages(s.all_messages())
 
     yield LLMStreamEvent(content="", done=True, usage=usage, stop_reason=stop_reason)

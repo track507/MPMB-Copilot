@@ -32,6 +32,8 @@ updates:
           day: monday
           time: "08:45"
       open-pull-requests-limit: 5
+      ignore:
+          - dependency-name: "nvidia-*"
 
     - package-ecosystem: docker
       directory: /
