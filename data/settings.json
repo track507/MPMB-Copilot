@@ -1,6 +1,5 @@
 {
 	"enable_tool_use": true,
-	"max_tool_calls": 0,
 	"enable_extended_thinking": false,
 	"thinking_budget_tokens": 4000
 }

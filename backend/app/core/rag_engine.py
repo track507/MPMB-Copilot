@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
 
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -33,6 +34,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.usage import UsageLimits
 
 from app.core.agent import (
+    LLMResponse,
     _extract_stop_reason_from_messages,
     _extract_usage,
     build_agent,
@@ -42,7 +44,7 @@ from app.core.agent import (
 )
 from app.core.prompts import prompt_builder
 from app.core.retriever import retriever
-from app.core.tools import Deps, build_mpmb_toolset
+from app.core.tools import Deps, build_mpmb_toolset, wrap_with_budget
 from app.logger import get_logger
 from app.services.llm.messages import to_pydantic_messages
 from app.services.source_catalog import source_catalog_service
@@ -80,15 +82,25 @@ class RAGStreamEvent:
     tools: Optional[dict[str, Any]] = None
 
 
+# * Hard net for runaway loops; matches pydantic-ai's own default request_limit
+_FALLBACK_REQUEST_LIMIT = 50
+
+# ? Streamed to the user when even the hard net trips; the soft budget should fire first
+TOOL_LIMIT_NOTICE = (
+    "\n\nI hit my tool-call limit for this turn, so this answer is based on "
+    "what I gathered before the cutoff. Ask a narrower follow-up if something is missing."
+)
+
+
 # * Helpers
 def _resolve_tool_use(toolset_enabled: bool):
     if not toolset_enabled:
         return None, None
-    toolset = build_mpmb_toolset()
-    usage_limits = None
-    if settings.max_tool_calls and settings.max_tool_calls > 0:
-        usage_limits = UsageLimits(request_limit=settings.max_tool_calls)
-    return toolset, usage_limits
+    budget = settings.max_tool_calls
+    toolset = wrap_with_budget(build_mpmb_toolset(), budget=budget)
+    # ! Soft cap returns a stop notice to the model; this hard net only catches stubborn loops
+    request_limit = budget + 5 if budget and budget > 0 else _FALLBACK_REQUEST_LIMIT
+    return toolset, UsageLimits(request_limit=request_limit)
 
 
 def _derive_tool_status(result_text: str) -> str:
@@ -174,18 +186,28 @@ class RAGEngine:
         deps = Deps(session_id=session_id or "unknown", edition=resolved_edition) if toolset else None
 
         t_generate = time.perf_counter()
-        llm_response = await agent_generate(
-            instructions=prompt_builder.get_static_instructions(),
-            user_prompt=user_prompt,
-            history=conversation_history,
-            provider=provider,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            toolset=toolset,
-            deps=deps,
-            usage_limits=usage_limits,
-        )
+        try:
+            llm_response = await agent_generate(
+                instructions=prompt_builder.get_static_instructions(),
+                user_prompt=user_prompt,
+                history=conversation_history,
+                provider=provider,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                toolset=toolset,
+                deps=deps,
+                usage_limits=usage_limits,
+            )
+        except UsageLimitExceeded as e:
+            # ! Hard net tripped; return a best-effort notice instead of raising
+            logger.warning(f"Tool-call hard limit hit during generate: {e}")
+            llm_response = LLMResponse(
+                content=TOOL_LIMIT_NOTICE.strip(),
+                provider=provider or settings.default_llm_provider,
+                model=model or settings.default_model,
+                stop_reason="tool_budget_exceeded",
+            )
         generation_ms = (time.perf_counter() - t_generate) * 1000
         total_ms = (time.perf_counter() - t_start) * 1000
 
@@ -267,52 +289,68 @@ class RAGEngine:
         if usage_limits is not None:
             run_kwargs["usage_limits"] = usage_limits
 
-        async with agent.iter(user_prompt, **run_kwargs) as run:
-            async for node in run:
-                if Agent.is_model_request_node(node):
-                    async with node.stream(run.ctx) as request_stream:
-                        async for event in request_stream:
-                            text: str | None = None
-                            if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
-                                text = event.part.content
-                            elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-                                text = event.delta.content_delta
-                            if text:
-                                if needs_separator:
-                                    text = "\n\n" + text.lstrip()
-                                    needs_separator = False
-                                yield RAGStreamEvent(content=text)
-                elif Agent.is_call_tools_node(node):
-                    async with node.stream(run.ctx) as handle_stream:
-                        async for event in handle_stream:
-                            if isinstance(event, FunctionToolCallEvent):
-                                name = event.part.tool_name
-                                call_id = event.part.tool_call_id
-                                tool_start_times[call_id] = time.perf_counter()
-                                yield RAGStreamEvent(
-                                    event="tool_start",
-                                    tool={"name": name},
-                                )
-                            elif isinstance(event, FunctionToolResultEvent):
-                                call_id = event.tool_call_id
-                                t0 = tool_start_times.pop(call_id, time.perf_counter())
-                                duration_ms = round((time.perf_counter() - t0) * 1000, 1)
-                                content = getattr(event.part, "content", "")
-                                name = getattr(event.part, "tool_name", "")
-                                status = _derive_tool_status(str(content))
-                                tool_calls.append({"name": name, "status": status, "duration_ms": duration_ms})
-                                yield RAGStreamEvent(
-                                    event="tool_end",
-                                    tool={"name": name, "status": status, "duration_ms": duration_ms},
-                                )
-                                needs_separator = True
+        limit_hit = False
+        run = None
+        try:
+            async with agent.iter(user_prompt, **run_kwargs) as run:
+                async for node in run:
+                    if Agent.is_model_request_node(node):
+                        async with node.stream(run.ctx) as request_stream:
+                            async for event in request_stream:
+                                text: str | None = None
+                                if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+                                    text = event.part.content
+                                elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                                    text = event.delta.content_delta
+                                if text:
+                                    if needs_separator:
+                                        text = "\n\n" + text.lstrip()
+                                        needs_separator = False
+                                    yield RAGStreamEvent(content=text)
+                    elif Agent.is_call_tools_node(node):
+                        async with node.stream(run.ctx) as handle_stream:
+                            async for event in handle_stream:
+                                if isinstance(event, FunctionToolCallEvent):
+                                    name = event.part.tool_name
+                                    call_id = event.part.tool_call_id
+                                    tool_start_times[call_id] = time.perf_counter()
+                                    yield RAGStreamEvent(
+                                        event="tool_start",
+                                        tool={"name": name},
+                                    )
+                                elif isinstance(event, FunctionToolResultEvent):
+                                    call_id = event.tool_call_id
+                                    t0 = tool_start_times.pop(call_id, time.perf_counter())
+                                    duration_ms = round((time.perf_counter() - t0) * 1000, 1)
+                                    content = getattr(event.part, "content", "")
+                                    name = getattr(event.part, "tool_name", "")
+                                    status = _derive_tool_status(str(content))
+                                    tool_calls.append({"name": name, "status": status, "duration_ms": duration_ms})
+                                    yield RAGStreamEvent(
+                                        event="tool_end",
+                                        tool={"name": name, "status": status, "duration_ms": duration_ms},
+                                    )
+                                    needs_separator = True
+        except UsageLimitExceeded as e:
+            # ! Hard net tripped; degrade to a best-effort answer instead of an error chunk
+            logger.warning(f"Tool-call hard limit hit during stream: {e}")
+            limit_hit = True
+            yield RAGStreamEvent(content=TOOL_LIMIT_NOTICE)
 
         generation_ms = (time.perf_counter() - t_generate) * 1000
         total_ms = (time.perf_counter() - t_start) * 1000
 
-        final_result = run.result
-        usage = _extract_usage(final_result.usage) if final_result else {}
-        stop_reason = _extract_stop_reason_from_messages(final_result.all_messages() if final_result else [])
+        final_result = run.result if run is not None else None
+        if final_result:
+            usage = _extract_usage(final_result.usage)
+        elif run is not None:
+            usage = _extract_usage(run.usage)
+        else:
+            usage = {}
+        if limit_hit:
+            stop_reason = "tool_budget_exceeded"
+        else:
+            stop_reason = _extract_stop_reason_from_messages(final_result.all_messages() if final_result else [])
 
         tools_meta = (
             {

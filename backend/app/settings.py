@@ -93,8 +93,10 @@ class Settings:
     enable_tool_use: bool = False
     """Allow the LLM to call MPMB source verification tools."""
 
-    max_tool_calls: int = 0
-    """Cap on agent model requests per chat turn (each tool round-trip counts as one). 0 = unlimited."""
+    max_tool_calls: int = 12
+    """Soft budget on tool calls per chat turn. Over budget, tools return a stop notice
+    so the model answers with what it has. 0 = no soft cap (a hard net of 50 model
+    requests per turn still applies, handled gracefully)."""
 
     source_catalog_path: Optional[str] = None
     """Override path to mpmb-analysis.json. None → resolution falls through to
