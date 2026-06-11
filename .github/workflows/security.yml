@@ -105,7 +105,7 @@ jobs:
               run: npm audit --workspaces --include-workspace-root --audit-level=moderate --json > security-reports/npm-audit.json || true
 
             - name: Export backend requirements
-              run: uv export --project backend --all-groups --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt
+              run: uv export --project backend --all-groups --all-extras --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt
 
             - name: pip-audit
               run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json || true

@@ -1064,12 +1064,16 @@ dependencies = [
     { name = "python-magic" },
     { name = "python-multipart" },
     { name = "qdrant-client" },
-    { name = "sentence-transformers" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "tiktoken" },
     { name = "uuid-utils" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+sbert = [
+    { name = "sentence-transformers" },
 ]
 
 [package.dev-dependencies]
@@ -1101,13 +1105,14 @@ requires-dist = [
     { name = "python-magic", specifier = ">=0.4.27" },
     { name = "python-multipart", specifier = ">=0.0.6" },
     { name = "qdrant-client", specifier = ">=1.14.0" },
-    { name = "sentence-transformers", specifier = ">=2.3.0" },
+    { name = "sentence-transformers", marker = "extra == 'sbert'", specifier = ">=2.3.0" },
     { name = "sqlalchemy", specifier = ">=2.0.25" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "uuid-utils", specifier = ">=0.12.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
 ]
+provides-extras = ["sbert"]
 
 [package.metadata.requires-dev]
 dev = [
