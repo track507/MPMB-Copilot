@@ -304,7 +304,7 @@ requests==2.33.1
 rich==15.0.0
     # via typer
 ruff==0.15.12
-safetensors==0.7.0
+safetensors==0.8.0
     # via transformers
 scikit-learn==1.8.0
     # via sentence-transformers
