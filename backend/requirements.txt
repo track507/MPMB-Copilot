@@ -131,7 +131,7 @@ loguru==0.7.3
     # via fastembed
 mako==1.3.12
     # via alembic
-markdown-it-py==4.0.0
+markdown-it-py==4.2.0
     # via rich
 markupsafe==3.0.3
     # via mako
