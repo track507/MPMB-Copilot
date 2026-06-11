@@ -1,0 +1,4 @@
+{
+	// Working plans/specs under docs/superpowers are internal scratch docs, not published documentation
+	"ignores": ["docs/superpowers/**"],
+}
