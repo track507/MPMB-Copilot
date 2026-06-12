@@ -4,8 +4,11 @@ import pytest
 
 from app.core.tools.source_paths import (
     ALLOWED_EXTENSIONS,
+    ALLOWED_ROOTS,
     DENIED_SUBDIRS,
     PathResolution,
+    iter_searchable_files,
+    missing_root_error,
     resolve_safe_path,
 )
 
@@ -19,12 +22,15 @@ class FakeDeps:
 def _make_roots(tmp_path: Path) -> dict[str, Path]:
     mpmb = tmp_path / "mpmb_source"
     mpmb.mkdir()
+    imports = tmp_path / "imports_source"
+    imports.mkdir()
     uploads = tmp_path / "uploads"
     uploads.mkdir()
     (uploads / "sess-test").mkdir()
     (uploads / "global").mkdir()
     return {
         "./data/mpmb_source/": mpmb,
+        "./data/imports_source/": imports,
         "./data/uploads/session/": uploads / "sess-test",
         "./data/uploads/global/": uploads / "global",
     }
@@ -122,3 +128,68 @@ def test_allowed_extensions_list():
 def test_denied_subdirs_list():
     assert ".git" in DENIED_SUBDIRS
     assert "node_modules" in DENIED_SUBDIRS
+
+
+def test_imports_root_resolves(tmp_path: Path):
+    roots = _make_roots(tmp_path)
+    target = roots["./data/imports_source/"] / "ua_feats.js"
+    target.write_text("var x = 1;")
+    result = resolve_safe_path("./data/imports_source/", "ua_feats.js", FakeDeps(), roots)
+    assert result.error is None
+    assert result.resolved_path == target.resolve()
+
+
+def test_missing_upload_root_gives_friendly_message(tmp_path: Path):
+    roots = _make_roots(tmp_path)
+    roots["./data/uploads/session/"] = tmp_path / "uploads" / "never-created"
+    result = resolve_safe_path("./data/uploads/session/", "notes.md", FakeDeps(), roots)
+    assert result.error is not None
+    assert "no files uploaded" in result.error
+    assert "missing" not in result.error
+
+
+def test_missing_root_error_messages():
+    assert "chat session" in missing_root_error("./data/uploads/session/")
+    assert "shared library" in missing_root_error("./data/uploads/global/")
+    assert "root directory missing" in missing_root_error("./data/mpmb_source/")
+
+
+def test_source_root_literal_matches_allowed_roots():
+    from typing import get_args
+
+    from app.core.tools.mpmb_tools import SourceRoot
+
+    assert set(get_args(SourceRoot)) == set(ALLOWED_ROOTS)
+
+
+def test_iter_searchable_files_applies_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "tool_max_file_bytes", 100)
+    root = tmp_path / "src"
+    (root / "sub").mkdir(parents=True)
+    (root / "node_modules").mkdir()
+    (root / ".hidden").mkdir()
+    (root / "ok.js").write_text("var a = 1;")
+    (root / "sub" / "nested.js").write_text("var b = 2;")
+    (root / "skip.pdf").write_text("binary-ish")
+    (root / "big.js").write_text("x" * 500)
+    (root / "node_modules" / "dep.js").write_text("var c = 3;")
+    (root / ".hidden" / "secret.js").write_text("var d = 4;")
+
+    rels = sorted(rel.as_posix() for _, rel in iter_searchable_files(root))
+    assert rels == ["ok.js", "sub/nested.js"]
+
+
+def test_iter_searchable_files_excludes_symlink_escape(tmp_path: Path):
+    root = tmp_path / "src"
+    root.mkdir()
+    outside = tmp_path / "outside.js"
+    outside.write_text("secret")
+    link = root / "link.js"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink not supported on this platform")
+    rels = [rel.as_posix() for _, rel in iter_searchable_files(root)]
+    assert rels == []
