@@ -79,11 +79,13 @@ jobs:
                   package_version="$(node -p "require('./package.json').version")"
                   short_sha="${GITHUB_SHA::7}"
 
+                  # v* tags publish an immutable GitHub Release; branch builds only
+                  # upload workflow artifacts (tag rulesets reject moving snapshot tags).
                   if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
                       release_tag="${GITHUB_REF_NAME}"
                       release_name="MPMB-Copilot ${GITHUB_REF_NAME}"
                       release_version="${GITHUB_REF_NAME#v}"
-                      mutable_tag="false"
+                      publish_release="true"
                       if [[ "${GITHUB_REF_NAME}" == *"-"* ]]; then
                           prerelease="true"
                           latest="false"
@@ -95,14 +97,14 @@ jobs:
                       release_tag="main-latest"
                       release_name="MPMB-Copilot main latest"
                       release_version="${package_version}+main.${GITHUB_RUN_NUMBER}.${short_sha}"
-                      mutable_tag="true"
+                      publish_release="false"
                       prerelease="false"
-                      latest="true"
+                      latest="false"
                   elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
                       release_tag="develop-latest"
                       release_name="MPMB-Copilot develop snapshot"
                       release_version="${package_version}+develop.${GITHUB_RUN_NUMBER}.${short_sha}"
-                      mutable_tag="true"
+                      publish_release="false"
                       prerelease="true"
                       latest="false"
                   else
@@ -120,21 +122,11 @@ jobs:
                       echo "release_version=${release_version}"
                       echo "asset_prefix=${asset_prefix}"
                       echo "bundle_name=${bundle_name}"
-                      echo "mutable_tag=${mutable_tag}"
+                      echo "publish_release=${publish_release}"
                       echo "prerelease=${prerelease}"
                       echo "latest=${latest}"
                       echo "short_sha=${short_sha}"
                   } >> "$GITHUB_OUTPUT"
-
-            - name: Move mutable branch tag
-              if: steps.meta.outputs.mutable_tag == 'true'
-              shell: bash
-              run: |
-                  set -euo pipefail
-                  git config user.name "github-actions[bot]"
-                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  git tag -f "${{ steps.meta.outputs.release_tag }}" "$GITHUB_SHA"
-                  git push --force origin "refs/tags/${{ steps.meta.outputs.release_tag }}"
 
             - name: Build self-contained release bundle
               shell: bash
@@ -249,6 +241,7 @@ jobs:
                   retention-days: 30
 
             - name: Publish GitHub Release
+              if: steps.meta.outputs.publish_release == 'true'
               env:
                   GH_TOKEN: ${{ github.token }}
               shell: bash
