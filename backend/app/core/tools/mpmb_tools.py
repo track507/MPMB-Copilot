@@ -1,8 +1,11 @@
-"""The three read-only MPMB source tools.
+"""The four read-only MPMB source tools.
+
+`mpmb_search` queries the indexed corpus via the retriever; the other
+three (`mpmb_read`, `mpmb_grep`, `mpmb_function`) read the cloned
+source trees through the `source_paths` access policy.
 
 `Deps` carries per-request state (`session_id`, `edition`) that the
-LLM cannot forge. Every tool takes `ctx: RunContext[Deps]` and
-delegates path resolution to `source_paths.resolve_safe_path`.
+LLM cannot forge. Every tool takes `ctx: RunContext[Deps]`.
 
 All tools return `str`. Errors are `[error] <reason>` prefixes;
 truncation is tagged inline with `[truncated: showing N of M ...]`.
@@ -12,18 +15,33 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets.function import FunctionToolset
 
-from app.core.tools.source_paths import _build_default_roots, resolve_safe_path
+from app.core.tools.source_paths import (
+    _build_default_roots,
+    iter_searchable_files,
+    missing_root_error,
+    resolve_safe_path,
+)
 from app.logger import get_logger
 from app.settings import settings
 
 logger = get_logger(__name__)
 
 DEFAULT_READ_LINES = 500
+
+# ! Must stay in sync with source_paths.ALLOWED_ROOTS (asserted in tests)
+# ? Literal puts the valid roots in the tool JSON schema itself, where the model is least likely to invent paths
+SourceRoot = Literal[
+    "./data/mpmb_source/",
+    "./data/mpmb_source_2024/",
+    "./data/imports_source/",
+    "./data/uploads/session/",
+    "./data/uploads/global/",
+]
 
 
 @dataclass
@@ -82,7 +100,6 @@ def _mpmb_grep_impl(
     root: str,
     pattern: str,
     path_glob: Optional[str] = None,
-    edition: Optional[str] = None,
 ) -> str:
     if len(pattern) > settings.tool_grep_pattern_max_len:
         return f"[error] pattern too long: {len(pattern)} chars (max {settings.tool_grep_pattern_max_len})"
@@ -96,27 +113,13 @@ def _mpmb_grep_impl(
         return f"[error] unknown root: {root}"
     root_dir = roots[root]
     if not root_dir.exists():
-        return f"[error] root directory missing: {root}"
-
-    glob_pattern = path_glob or "**/*"
-    from app.core.tools.source_paths import ALLOWED_EXTENSIONS, DENIED_SUBDIRS
+        return missing_root_error(root)
 
     matches: list[str] = []
     max_matches = settings.tool_grep_max_matches
     total_matches = 0
 
-    for file_path in sorted(root_dir.glob(glob_pattern)):
-        if not file_path.is_file():
-            continue
-        if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-            continue
-        try:
-            rel = file_path.resolve().relative_to(root_dir.resolve())
-        except ValueError:
-            continue
-        if any(p in DENIED_SUBDIRS or p.startswith(".") for p in rel.parts[:-1]):
-            continue
-
+    for file_path, rel in iter_searchable_files(root_dir, path_glob or "**/*"):
         try:
             text = file_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -132,12 +135,59 @@ def _mpmb_grep_impl(
                     matches.append(f"{rel.as_posix()}:{lineno}: {line.rstrip()}")
 
     if not matches:
-        return f"[error] no matches for pattern: {pattern}"
+        # ? Zero matches is a valid answer, not a failure - an [error] prefix would tell the model not to trust the result and paint an error pill
+        return (
+            f'No matches for pattern "{pattern}" under {root}. '
+            "The pattern does not occur in this source tree; try a broader pattern or a different root."
+        )
 
     body = "\n".join(matches)
     if total_matches > max_matches:
         body += f"\n[truncated: showing {max_matches} of {total_matches} matches]"
     return body
+
+
+async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = None) -> str:
+    # ? Lazy import keeps the tool module importable without the retrieval stack
+    from app.core.retriever import retriever
+
+    try:
+        result = await retriever.retrieve(query=query, edition=edition)
+    except Exception as e:
+        return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."
+
+    if result.is_empty:
+        return (
+            f'No indexed chunks matched "{query}"'
+            + (f" (edition={edition})" if edition else "")
+            + ". Rephrase the query, or use mpmb_grep for exact symbols."
+        )
+
+    sections: list[str] = []
+    section_specs = (
+        ("AUTHORITATIVE (trust these for correctness)", result.authoritative),
+        ("EXAMPLES (implementation patterns)", result.examples),
+    )
+    for title, chunks in section_specs:
+        if not chunks:
+            continue
+        sections.append(f"## {title}")
+        for i, chunk in enumerate(chunks, start=1):
+            loc = str(chunk.get("source_file", "?"))
+            start = chunk.get("start_line")
+            end = chunk.get("end_line")
+            if start and end:
+                loc = f"{loc}:{start}-{end}"
+            sections.append(
+                f"[{i}] {loc} (edition={chunk.get('edition', '?')}, "
+                f"tier={chunk.get('source_tier', '?')}, score={float(chunk.get('score', 0.0)):.2f})\n"
+                f"{chunk.get('content', '')}"
+            )
+
+    intent_name = result.intent.primary.value if result.intent else "unknown"
+    resolved_edition = (result.query_analysis.edition if result.query_analysis else None) or edition or "both"
+    sections.append(f"[retrieval: intent={intent_name}, edition={resolved_edition}, chunks={result.total_chunks}]")
+    return "\n\n".join(sections)
 
 
 _FUNCTION_PATTERN_TEMPLATES = (
@@ -152,7 +202,6 @@ def _mpmb_function_impl(
     deps: Deps,
     root: str,
     name: str,
-    edition: Optional[str] = None,
 ) -> str:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         return f"[error] invalid identifier: {name}"
@@ -161,15 +210,11 @@ def _mpmb_function_impl(
         return f"[error] unknown root: {root}"
     root_dir = roots[root]
     if not root_dir.exists():
-        return f"[error] root directory missing: {root}"
-
-    from app.core.tools.source_paths import ALLOWED_EXTENSIONS
+        return missing_root_error(root)
 
     patterns = [re.compile(tmpl.format(name=re.escape(name))) for tmpl in _FUNCTION_PATTERN_TEMPLATES]
 
-    for file_path in sorted(root_dir.glob("**/*.js")):
-        if file_path.suffix.lower() not in ALLOWED_EXTENSIONS:
-            continue
+    for file_path, rel in iter_searchable_files(root_dir, "**/*.js"):
         try:
             text = file_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -179,10 +224,6 @@ def _mpmb_function_impl(
             if any(p.search(line) for p in patterns):
                 end_idx = _find_block_end(lines, idx)
                 body = "\n".join(lines[idx : end_idx + 1])
-                try:
-                    rel = file_path.resolve().relative_to(root_dir.resolve())
-                except ValueError:
-                    rel = Path(file_path.name)
                 return f"// {rel.as_posix()}:{idx + 1}\n{body}"
 
     return f"[error] function/variable not found: {name}"
@@ -218,14 +259,37 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
     toolset: FunctionToolset[Deps] = FunctionToolset()
 
     @toolset.tool
+    async def mpmb_search(
+        ctx: RunContext[Deps],
+        query: str,
+        edition: Optional[Literal["2014", "2024"]] = None,
+    ) -> str:
+        """
+        Search the indexed MPMB sources for code chunks relevant to a query
+
+        Use for any MPMB question about identifiers, registries (SpellsList, ClassList, FeatsList, ...), object types (race, subclass, spell, feat, item, background, source),
+        or how to write or fix MPMB content
+        Phrase the query in English
+        Returns ranked chunks grouped into AUTHORITATIVE rules and EXAMPLES, cited as file:start-end
+        Omit `edition` to let retrieval infer it from the query. Follow up with mpmb_read or mpmb_function when you need exact verbatim code
+        """
+        logger.info(f"tool.mpmb_search query={query!r} edition={edition}")
+        return await _mpmb_search_impl(ctx.deps, query, edition)
+
+    @toolset.tool
     def mpmb_read(
         ctx: RunContext[Deps],
-        root: str,
+        root: SourceRoot,
         path: str,
         start_line: Optional[int] = None,
         end_line: Optional[int] = None,
     ) -> str:
-        """Read a file from the MPMB source. Returns text or an `[error] ...` string."""
+        """
+        Read a file (or a line range) verbatim from an MPMB source root
+
+        Use when you need exact code from a known path, typically after mpmb_grep or mpmb_function located the file `path` is relative to `root`
+        Returns the text, ending with `[truncated: ...]` when capped; `[error] ...` means the call failed - try a different path or tool
+        """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_read root={root} path={path} range={start_line}-{end_line}")
         return _mpmb_read_impl(roots, ctx.deps, root, path, start_line, end_line)
@@ -233,26 +297,35 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
     @toolset.tool
     def mpmb_grep(
         ctx: RunContext[Deps],
-        root: str,
+        root: SourceRoot,
         pattern: str,
         path_glob: Optional[str] = None,
-        edition: Optional[str] = None,
     ) -> str:
-        """Search files under `root` for `pattern`. Returns matches or `[error] ...`."""
+        """
+        Regex-search every file under a root, returning `file:line: text` matches
+
+        Use to find symbols, attributes, or conventions across files
+        `path_glob` narrows the file set (e.g. `**/*.js`)
+        A "No matches" response is a valid result meaning the pattern is absent - do not retry the identical call
+        """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_grep root={root} pattern={pattern!r} glob={path_glob}")
-        return _mpmb_grep_impl(roots, ctx.deps, root, pattern, path_glob, edition)
+        return _mpmb_grep_impl(roots, ctx.deps, root, pattern, path_glob)
 
     @toolset.tool
     def mpmb_function(
         ctx: RunContext[Deps],
-        root: str,
+        root: SourceRoot,
         name: str,
-        edition: Optional[str] = None,
     ) -> str:
-        """Fetch the full body of a function or variable by name. Returns source or `[error] ...`."""
+        """
+        Fetch the complete body of a named function or `var` declaration
+
+        Use when the user names a specific engine function or registry variable and you need its exact definition
+        Returns the source prefixed with a `// file:line` comment, or `[error] ... not found` if the identifier is not declared under this root
+        """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_function root={root} name={name}")
-        return _mpmb_function_impl(roots, ctx.deps, root, name, edition)
+        return _mpmb_function_impl(roots, ctx.deps, root, name)
 
     return toolset

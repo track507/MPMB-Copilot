@@ -93,6 +93,7 @@ def test_tool_use_addendum_present_when_enabled(monkeypatch):
     assert "mpmb_grep" in text
     assert "mpmb_function" in text
     assert "./data/uploads/session/" in text
+    assert "./data/imports_source/" in text
 
 
 @pytest.fixture

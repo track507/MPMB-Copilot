@@ -16,7 +16,7 @@ class SBERTProvider:
         except ImportError as e:
             raise ImportError(
                 "sentence-transformers is not installed, but embedding_backend='sbert' was selected. "
-                "Install it (and its deps) or switch embedding_backend."
+                "Install the optional extra (uv sync --extra sbert) or switch embedding_backend."
             ) from e
 
         self._model = SentenceTransformer(self.model_name)

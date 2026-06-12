@@ -14,6 +14,8 @@ class FakeCtx:
 def _setup_roots(tmp_path: Path) -> tuple[dict, Deps]:
     mpmb = tmp_path / "mpmb_source"
     mpmb.mkdir()
+    imports = tmp_path / "imports_source"
+    imports.mkdir()
     uploads = tmp_path / "uploads"
     (uploads / "sess-1").mkdir(parents=True)
     (uploads / "global").mkdir()
@@ -21,6 +23,7 @@ def _setup_roots(tmp_path: Path) -> tuple[dict, Deps]:
     roots = {
         "./data/mpmb_source/": mpmb,
         "./data/mpmb_source_2024/": mpmb,  # reuse for test
+        "./data/imports_source/": imports,
         "./data/uploads/session/": uploads / "sess-1",
         "./data/uploads/global/": uploads / "global",
     }
@@ -118,3 +121,56 @@ def test_mpmb_function_not_found(tmp_path: Path):
     (roots["./data/mpmb_source/"] / "a.js").write_text("var X = 1;")
     out = _mpmb_function_impl(roots, deps, "./data/mpmb_source/", "NotThere")
     assert out.startswith("[error]") and "not found" in out
+
+
+def test_mpmb_grep_no_matches_is_not_an_error(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "a.js").write_text("var SpellsList = {};")
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", "DoesNotOccurAnywhere")
+    assert not out.startswith("[error]")
+    assert "No matches" in out
+    assert "DoesNotOccurAnywhere" in out
+
+
+def test_mpmb_grep_reads_imports_root(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/imports_source/"] / "ua.js").write_text("FeatsList['lucky'] = {};")
+    out = _mpmb_grep_impl(roots, deps, "./data/imports_source/", "FeatsList")
+    assert "ua.js" in out and "FeatsList" in out
+
+
+def test_mpmb_grep_missing_upload_root_friendly(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    roots["./data/uploads/session/"] = tmp_path / "uploads" / "never-created"
+    out = _mpmb_grep_impl(roots, deps, "./data/uploads/session/", "anything")
+    assert "no files uploaded" in out
+
+
+def test_mpmb_grep_skips_denied_subdirs(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    nm = roots["./data/mpmb_source/"] / "node_modules"
+    nm.mkdir()
+    (nm / "dep.js").write_text("var SpellsList = {};")
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", "SpellsList")
+    assert "No matches" in out
+
+
+def test_mpmb_function_skips_denied_subdirs(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    nm = roots["./data/mpmb_source/"] / "node_modules"
+    nm.mkdir()
+    (nm / "dep.js").write_text("var Hidden = { a: 1 };")
+    out = _mpmb_function_impl(roots, deps, "./data/mpmb_source/", "Hidden")
+    assert out.startswith("[error]") and "not found" in out
+
+
+def test_mpmb_grep_skips_oversized_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "tool_max_file_bytes", 100)
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "big.js").write_text("SpellsList " * 100)
+    (roots["./data/mpmb_source/"] / "small.js").write_text("var SpellsList = {};")
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", "SpellsList")
+    assert "small.js" in out
+    assert "big.js" not in out

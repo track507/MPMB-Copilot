@@ -87,7 +87,11 @@ matters — not as a fallback.
 
 ### When to call each tool
 
-- `mpmb_function(root, name, edition)` — Call when the user names a
+- `mpmb_search(query, edition=)` — Search the indexed MPMB corpus
+  for relevant rules and examples. Call when the provided context
+  does not cover the user's question. Phrase the query in English.
+
+- `mpmb_function(root, name)` — Call when the user names a
   specific function or variable and you need its exact body.
   Triggers: "how does ClassList work?", "show me the full
   CompanionList entry", "what does AbilityScores do?".
@@ -97,7 +101,7 @@ matters — not as a fallback.
   Triggers: "quote the SpellsList entry for Fireball", "what's on
   line 42 of Functions0.js?".
 
-- `mpmb_grep(root, pattern, edition, path_glob=)` — Call when the
+- `mpmb_grep(root, pattern, path_glob=)` — Call when the
   user asks about a pattern or convention across files.
   Triggers: "which classes define a spellcasting feature?", "find
   all usages of toUni".
@@ -118,11 +122,13 @@ The `root` argument must be one of:
 
 - `./data/mpmb_source/`        — D&D 2014 official content
 - `./data/mpmb_source_2024/`   — D&D 2024 official content
+- `./data/imports_source/`     — official WotC / UA / homebrew import examples
 - `./data/uploads/session/`    — files uploaded to this chat
-- `./data/uploads/global/`     — the user's shared library
+- `./data/uploads/global/`     — the user's shared library, available in every chat
 
 `./data/uploads/session/` is auto-scoped to the current chat; you
-never need to know the session id.
+never need to know the session id. The upload roots may be empty —
+a "no files uploaded" response just means nothing is there yet.
 
 ### Return format
 
@@ -130,6 +136,9 @@ never need to know the session id.
 - Truncation: content ends with `[truncated: showing N of M ...]`.
   If truncated, narrow your query (line range, tighter pattern,
   different root) rather than asking for more.
+- A "No matches" response from `mpmb_grep` is a normal result: the
+  pattern does not occur under that root. Broaden the pattern or
+  switch roots instead of repeating the call.
 - Errors: responses starting with `[error]` indicate a failed call.
   Read the message and try a *different* path/tool — do not retry
   the same call."""
