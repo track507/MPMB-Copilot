@@ -1,0 +1,18 @@
+# Normalize all text files to LF in the repo and on checkout.
+# Prettier enforces endOfLine "lf", so CRLF checkouts (Windows core.autocrlf=true default) fail npm run check on fresh clones
+* text=auto eol=lf
+
+# Binary assets - never normalize
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
