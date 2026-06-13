@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
-import { MessageSquarePlus, Settings, Trash2 } from "lucide-react";
+import { Check, MessageSquarePlus, Pencil, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useSessions, useDeleteSession } from "@/hooks/use-sessions";
+import { useSessions, useDeleteSession, useUpdateSession } from "@/hooks/use-sessions";
+import type { Session } from "@/types/session";
 import type { ReactElement } from "react";
 
 export function SidebarNav(): ReactElement {
@@ -61,25 +62,7 @@ export function SidebarNav(): ReactElement {
 			{/* Session list */}
 			<nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-3">
 				{sessions.map((session) => (
-					<NavLink
-						key={session.id}
-						to={`/chat/${session.id}`}
-						className={cn(
-							"group flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors",
-							activeSessionId === session.id
-								? "bg-sidebar-accent text-sidebar-accent-foreground"
-								: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-						)}>
-						<span className="truncate">{session.title}</span>
-						<button
-							type="button"
-							onClick={(e) => {
-								handleDelete(e, session.id);
-							}}
-							className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
-							<Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
-						</button>
-					</NavLink>
+					<SessionRow key={session.id} session={session} isActive={activeSessionId === session.id} onDelete={handleDelete} />
 				))}
 			</nav>
 
@@ -100,5 +83,106 @@ export function SidebarNav(): ReactElement {
 				</NavLink>
 			</div>
 		</aside>
+	);
+}
+
+interface SessionRowProps {
+	readonly session: Session;
+	readonly isActive: boolean;
+	readonly onDelete: (e: React.MouseEvent, sessionId: string) => void;
+}
+
+function SessionRow({ session, isActive, onDelete }: SessionRowProps): ReactElement {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState(session.title);
+	const update = useUpdateSession(session.id);
+
+	// * Seed the draft from the current title each time editing begins, so a server-side title change (e.g. auto-title landing) is never stale
+	const startEditing = useCallback(() => {
+		setDraft(session.title);
+		setEditing(true);
+	}, [session.title]);
+
+	const save = useCallback(() => {
+		setEditing(false);
+		const trimmed = draft.trim();
+		if (trimmed.length === 0 || trimmed === session.title) {
+			setDraft(session.title);
+			return;
+		}
+		update.mutate(
+			{ title: trimmed },
+			{
+				onError: () => {
+					toast.error("Failed to rename session");
+					setDraft(session.title);
+				},
+			}
+		);
+	}, [draft, session.title, update]);
+
+	const rowClass = cn(
+		"group flex items-center rounded-md text-sm transition-colors",
+		isActive
+			? "bg-sidebar-accent text-sidebar-accent-foreground"
+			: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+	);
+
+	if (editing) {
+		return (
+			<div className={rowClass}>
+				<input
+					autoFocus
+					value={draft}
+					maxLength={255}
+					onChange={(e) => {
+						setDraft(e.target.value);
+					}}
+					onBlur={save}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") {
+							e.preventDefault();
+							save();
+						} else if (e.key === "Escape") {
+							setEditing(false);
+							setDraft(session.title);
+						}
+					}}
+					className="min-w-0 flex-1 bg-transparent px-3 py-2 focus:outline-none"
+				/>
+				<div className="flex shrink-0 items-center gap-1 pr-2">
+					<button
+						type="button"
+						onMouseDown={(e) => {
+							e.preventDefault();
+						}}
+						onClick={save}
+						title="Save">
+						<Check className="size-3.5 text-muted-foreground hover:text-primary" />
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className={rowClass}>
+			<NavLink to={`/chat/${session.id}`} className="min-w-0 flex-1 truncate px-3 py-2">
+				{session.title}
+			</NavLink>
+			<div className="flex shrink-0 items-center gap-1 pr-2 opacity-0 transition-opacity group-hover:opacity-100">
+				<button type="button" onClick={startEditing} title="Rename">
+					<Pencil className="size-3.5 text-muted-foreground hover:text-foreground" />
+				</button>
+				<button
+					type="button"
+					onClick={(e) => {
+						onDelete(e, session.id);
+					}}
+					title="Delete">
+					<Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+				</button>
+			</div>
+		</div>
 	);
 }
