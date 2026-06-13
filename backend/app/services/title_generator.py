@@ -13,8 +13,11 @@ from uuid import UUID
 from app.core.agent import generate as agent_generate
 from app.logger import get_logger
 from app.services.db.session_service import session_service
+from app.settings import settings
 
 logger = get_logger(__name__)
+
+_DEFAULT_TITLE = "New Conversation"
 
 _TITLE_INSTRUCTIONS = (
     "You generate concise titles for chat conversations. "
@@ -54,10 +57,13 @@ async def generate_session_title(session_id: UUID, user_message: str) -> None:
 
     Runs in a background task; logs and swallows errors so a failure here cannot break the chat response that already finished streaming
     """
+    provider = settings.default_llm_provider
     try:
         response = await agent_generate(
             instructions=_TITLE_INSTRUCTIONS,
             user_prompt=user_message,
+            provider=provider,
+            model=settings.cheap_model_for(provider),
             temperature=0.3,
             max_tokens=32,
         )
@@ -69,6 +75,11 @@ async def generate_session_title(session_id: UUID, user_message: str) -> None:
         title = _fallback_title(user_message)
 
     try:
+        # ? Don't clobber a title the user renamed before this background task ran
+        current = await session_service.get_session(session_id)
+        if current is not None and current.title != _DEFAULT_TITLE:
+            logger.info(f"Skipping auto-title for {session_id}; user already set {current.title!r}")
+            return
         await session_service.update_session(session_id, title=title)
         logger.info(f"Session {session_id} titled: {title!r}")
     except Exception as e:

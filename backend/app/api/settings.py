@@ -24,6 +24,9 @@ class SettingsUpdate(BaseModel):
     default_model: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
+    anthropic_cheap_model: str | None = None
+    openai_cheap_model: str | None = None
+    ollama_cheap_model: str | None = None
     default_edition: str | None = None
     top_k_results: int | None = None
     similarity_threshold: float | None = None

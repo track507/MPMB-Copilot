@@ -62,6 +62,12 @@ class Settings:
     temperature: float = 0.2
     max_tokens: int = 4000
 
+    # Cheap model aliases for non-generation tasks (titles, future routing)
+    # Per provider so switching default_llm_provider keeps a sensible cheap model
+    anthropic_cheap_model: str = "claude-haiku-4-5-20251001"
+    openai_cheap_model: str = "gpt-4o-mini"
+    ollama_cheap_model: str = ""  # ? empty falls back to default_model
+
     # RAG tuning
     default_edition: str = "2014"
     top_k_results: int = 8
@@ -263,6 +269,17 @@ class Settings:
         Excludes internal fields (prefixed with `_`).
         """
         return {f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values() if not f.name.startswith("_")}
+
+    def cheap_model_for(self, provider: Optional[str] = None) -> str:
+        """Resolve the cheap-model alias for the given (or default) provider."""
+        provider = provider or self.default_llm_provider
+        if provider == "anthropic":
+            return self.anthropic_cheap_model
+        if provider == "openai":
+            return self.openai_cheap_model
+        if provider == "ollama":
+            return self.ollama_cheap_model or self.default_model
+        return self.default_model
 
     def get_tier_budget(self, intent: str) -> dict[str, int]:
         """Return the tier budget for a given intent.
