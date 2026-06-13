@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Send, Square } from "lucide-react";
 import { toast } from "sonner";
-import { useSearchParams } from "react-router";
+import { useParams } from "react-router";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/hooks/use-sessions";
 import { useChatStore } from "@/stores/chat-store";
@@ -10,8 +10,8 @@ import { cn } from "@/lib/utils";
 import type { KeyboardEventHandler, ReactElement, SubmitEventHandler } from "react";
 
 export function ChatWindow(): ReactElement {
-	const [searchParams] = useSearchParams();
-	const sessionId = searchParams.get("session");
+	const { sessionId: sessionIdParam } = useParams();
+	const sessionId = sessionIdParam ?? null;
 
 	const [input, setInput] = useState("");
 	const messagesEndRef = useRef<HTMLDivElement>(null);

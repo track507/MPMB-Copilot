@@ -1,11 +1,16 @@
 import { Circle, Moon, Sun } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router";
 import { useIndexStatus } from "@/hooks/use-settings";
+import { useSession } from "@/hooks/use-sessions";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
 
 export function TopBar(): ReactElement {
 	const { data: indexStatus } = useIndexStatus();
+	const { sessionId } = useParams();
+	const { data: session } = useSession(sessionId ?? null);
+	const title = session?.title ?? "MPMB Copilot";
 	const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 
 	const toggleTheme = useCallback(() => {
@@ -39,9 +44,12 @@ export function TopBar(): ReactElement {
 
 	return (
 		<header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-6">
-			<div className="flex items-center gap-2 text-xs text-muted-foreground">
-				<Circle className={cn("size-2.5 fill-current", statusColor)} />
-				{statusLabel}
+			<div className="flex min-w-0 flex-col justify-center">
+				<span className="truncate text-sm font-semibold leading-tight">{title}</span>
+				<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<Circle className={cn("size-2 shrink-0 fill-current", statusColor)} />
+					{statusLabel}
+				</span>
 			</div>
 
 			<button

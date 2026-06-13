@@ -42,6 +42,14 @@ export default function App(): ReactElement {
 							}
 						/>
 						<Route
+							path="chat/:sessionId"
+							element={
+								<Suspense fallback={<PageLoader />}>
+									<HomePage />
+								</Suspense>
+							}
+						/>
+						<Route
 							path="settings"
 							element={
 								<Suspense fallback={<PageLoader />}>

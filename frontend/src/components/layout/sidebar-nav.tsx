@@ -1,33 +1,23 @@
 import { useCallback } from "react";
-import { NavLink, useNavigate, useSearchParams } from "react-router";
+import { NavLink, useNavigate, useParams } from "react-router";
 import { MessageSquarePlus, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useSessions, useCreateSession, useDeleteSession } from "@/hooks/use-sessions";
+import { useSessions, useDeleteSession } from "@/hooks/use-sessions";
 import type { ReactElement } from "react";
 
 export function SidebarNav(): ReactElement {
 	const navigate = useNavigate();
-	const [searchParams] = useSearchParams();
-	const activeSessionId = searchParams.get("session");
+	const { sessionId: activeSessionId } = useParams();
 
 	const { data: sessionList } = useSessions();
-	const createSession = useCreateSession();
 	const deleteSession = useDeleteSession();
 
+	// ? New Chat just opens a blank window
+	// ? The session is created by the backend on the first message (see use-chat), avoiding empty throwaway sessions
 	const handleNewChat = useCallback(() => {
-		createSession.mutate(
-			{ title: "New Conversation" },
-			{
-				onSuccess: (session) => {
-					void navigate(`/?session=${session.id}`);
-				},
-				onError: () => {
-					toast.error("Failed to create session");
-				},
-			}
-		);
-	}, [createSession, navigate]);
+		void navigate("/");
+	}, [navigate]);
 
 	const handleDelete = useCallback(
 		(e: React.MouseEvent, sessionId: string) => {
@@ -62,7 +52,6 @@ export function SidebarNav(): ReactElement {
 				<button
 					type="button"
 					onClick={handleNewChat}
-					disabled={createSession.isPending}
 					className="flex w-full items-center gap-2 rounded-md border border-sidebar-border px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent">
 					<MessageSquarePlus className="size-4" />
 					New Chat
@@ -74,7 +63,7 @@ export function SidebarNav(): ReactElement {
 				{sessions.map((session) => (
 					<NavLink
 						key={session.id}
-						to={`/?session=${session.id}`}
+						to={`/chat/${session.id}`}
 						className={cn(
 							"group flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors",
 							activeSessionId === session.id
