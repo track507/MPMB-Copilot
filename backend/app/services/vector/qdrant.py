@@ -26,6 +26,7 @@ from qdrant_client.models import (
     Filter,
     Fusion,
     FusionQuery,
+    MatchAny,
     MatchValue,
     Modifier,
     PayloadSchemaType,
@@ -324,9 +325,9 @@ class QdrantStore:
             field_path = field_map.get(key, key)
 
             if isinstance(value, list):
-                # OR match: any of the values
-                for v in value:
-                    conditions.append(FieldCondition(key=field_path, match=MatchValue(value=v)))
+                # ! OR semantics: one condition matching ANY of the values
+                # ! One must-condition per value would demand ALL of them at once, which can never match a single-valued payload field
+                conditions.append(FieldCondition(key=field_path, match=MatchAny(any=list(value))))
             else:
                 conditions.append(FieldCondition(key=field_path, match=MatchValue(value=value)))
 

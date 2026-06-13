@@ -208,7 +208,9 @@ class Retriever:
         ex_limit = budget.get("examples", 5)
 
         # Authoritative search
-        auth_filters = {**base_filters, "source_tier": "authoritative"}
+        # ? Authoritative chunks (syntax templates, engine functions) carry no object_type tag - filtering on it would always return zero rows
+        auth_filters = {k: v for k, v in base_filters.items() if k != "object_type"}
+        auth_filters["source_tier"] = "authoritative"
         authoritative = await store.hybrid_search(
             query_text=query,
             query_embedding=query_embedding,
@@ -227,6 +229,15 @@ class Retriever:
             filters=ex_filters,
             limit=ex_limit,
         )
+        if not examples and "object_type" in ex_filters:
+            # ! Over-filtering fallback: thin object_type+edition combinations (e.g. RaceList in 2024) degrade to broader examples, not zero
+            relaxed = {k: v for k, v in ex_filters.items() if k != "object_type"}
+            examples = await store.hybrid_search(
+                query_text=query,
+                query_embedding=query_embedding,
+                filters=relaxed,
+                limit=ex_limit,
+            )
 
         # Deduplicate (shouldn't happen with tier filters, but defensive)
         examples = self._deduplicate(examples, seen_ids={r["id"] for r in authoritative})
@@ -253,6 +264,15 @@ class Retriever:
             filters=base_filters,
             limit=total_limit,
         )
+        if not all_results and "object_type" in base_filters:
+            # ! Over-filtering fallback: drop object_type rather than return zero
+            relaxed = {k: v for k, v in base_filters.items() if k != "object_type"}
+            all_results = await store.hybrid_search(
+                query_text=query,
+                query_embedding=query_embedding,
+                filters=relaxed,
+                limit=total_limit,
+            )
 
         # Split by tier
         authoritative = [r for r in all_results if r.get("source_tier") == "authoritative"]
