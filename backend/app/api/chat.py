@@ -112,7 +112,6 @@ async def _save_assistant_message(
             timing = rag_response.timing if hasattr(rag_response, "timing") else {}
             tools_meta = getattr(rag_response, "tools", None)
             meta_data = {
-                "retrieval": getattr(rag_response, "retrieval_info", None),
                 "timing": timing,
             }
             if tools_meta:
@@ -135,10 +134,6 @@ async def _save_assistant_message(
             kwargs["meta_data"] = meta_data
 
         assistant_content_dict: dict[str, Any] = {"text": assistant_content}
-        if rag_response and getattr(rag_response, "retrieval_info", None):
-            sources = _build_sources_from_rag(rag_response)
-            if sources:
-                assistant_content_dict["sources"] = sources
 
         await session_service.add_message(
             session_id=session_uuid,
@@ -155,60 +150,24 @@ def _build_metadata(
     provider: str = "",
     model: str = "",
     usage: dict | None = None,
-    retrieval_info: dict | None = None,
     timing: dict | None = None,
     tools: dict | None = None,
 ) -> dict:
-    """Build nested metadata matching the frontend `ChatMetadata` type.
+    """
+    Build nested metadata matching the frontend `ChatMetadata` type
 
-    Groups are passed through as-is so Phase B can add `tool_events`
-    without another metadata refactor.
+    Retrieval is agent-driven via mpmb_search; per-turn retrieval metadata no longer exists, so the `retrieval` group is omitted (the frontend type marks it optional)
     """
     meta = {
         "session_id": session_id,
         "provider": provider,
         "model": model,
         "usage": usage or {},
-        "retrieval": retrieval_info or {},
         "timing": timing or {},
     }
     if tools:
         meta["tools"] = tools
     return meta
-
-
-def _build_sources_from_rag(rag_response) -> list[dict]:
-    """Build per-chunk source citations from a RAG response.
-
-    Returns a list of SourceReference-shaped dicts that the frontend
-    renders in the source citation panel. Each entry identifies the
-    chunk's file, edition, tier, score, and line range.
-    """
-    sources: list[dict] = []
-
-    retrieval = rag_response.retrieval_info or {}
-    chunks = retrieval.get("chunks") or []
-
-    for chunk in chunks:
-        content = chunk.get("content", "")
-        preview = content if len(content) <= 400 else content[:400] + "..."
-
-        sources.append(
-            {
-                "file": chunk.get("source_file", "unknown"),
-                "content": preview,
-                "score": float(chunk.get("score", 0.0)),
-                "line_range": [
-                    int(chunk.get("start_line", 0)),
-                    int(chunk.get("end_line", 0)),
-                ],
-                "edition": chunk.get("edition"),
-                "source_tier": chunk.get("source_tier"),
-                "chunk_type": chunk.get("chunk_type"),
-            }
-        )
-
-    return sources
 
 
 # * POST /chat - complete response
@@ -251,23 +210,18 @@ async def chat(request: ChatRequest):
 
         await _save_assistant_message(session_uuid, rag_response.content, rag_response)
 
-        sources = None
-        if request.include_source and rag_response.retrieval_info:
-            sources = _build_sources_from_rag(rag_response)
-
         metadata = _build_metadata(
             session_id=session_id,
             provider=rag_response.provider,
             model=rag_response.model,
             usage=rag_response.usage,
-            retrieval_info=rag_response.retrieval_info,
             timing=rag_response.timing,
         )
 
         return ChatResponse(
             response=rag_response.content,
             session_id=session_id,
-            sources=sources,
+            sources=None,
             metadata=metadata,
         )
 
@@ -337,7 +291,6 @@ async def chat_stream(request: ChatRequest):
                                 provider=event.provider or "",
                                 model=event.model or "",
                                 usage=event.usage,
-                                retrieval_info=event.retrieval_info,
                                 timing=event.timing,
                                 tools=event.tools,
                             ),

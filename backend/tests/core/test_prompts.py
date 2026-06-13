@@ -3,7 +3,6 @@ Catalog-derived system prompt blocks + per-query hints
 """
 
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -12,53 +11,25 @@ from app.core.prompts import PromptBuilder
 from app.services.source_catalog import SourceCatalogService
 
 
-def _make_retrieval_result() -> SimpleNamespace:
-    return SimpleNamespace(
-        authoritative=[
-            {
-                "source_file": "_functions\\SpellsList.js",
-                "edition": "2014",
-                "chunk_type": "function_definition",
-                "score": 0.99,
-                "content": "function ParseSpell() { return true; }",
-            }
-        ],
-        examples=[
-            {
-                "source_file": "imports\\sample_spell.js",
-                "edition": "2014",
-                "chunk_type": "object_literal",
-                "score": 0.87,
-                "content": 'SpellsList["acid splash"] = { name : "Acid Splash" };',
-            }
-        ],
-        is_empty=False,
-    )
-
-
-def test_build_user_prompt_includes_rag_context_and_query():
+def test_build_user_prompt_includes_edition_and_query():
     builder = PromptBuilder()
 
     prompt = builder.build_user_prompt(
         query="How do I add a spell?",
-        retrieval_result=_make_retrieval_result(),
         edition="2014",
     )
 
     assert "The user is working with the **2014** edition." in prompt
-    assert "## Syntax rules and engine behavior" in prompt
-    assert "## Implementation examples" in prompt
     assert "User question: How do I add a spell?" in prompt
+    # No pre-injected retrieval sections - the agent fetches via mpmb_search
+    assert "## Syntax rules and engine behavior" not in prompt
+    assert "## Implementation examples" not in prompt
 
 
-def test_build_user_prompt_without_retrieval_returns_plain_query():
+def test_build_user_prompt_bare_query_passes_through():
     builder = PromptBuilder()
 
-    prompt = builder.build_user_prompt(
-        query="What is AddSubClass?",
-        retrieval_result=None,
-        edition="2014",
-    )
+    prompt = builder.build_user_prompt(query="What is AddSubClass?")
 
     assert prompt == "What is AddSubClass?"
 
@@ -73,13 +44,16 @@ def test_get_static_instructions_returns_default_when_settings_empty():
     assert "## Syntax rules and engine behavior" not in instructions
 
 
-def test_tool_use_addendum_absent_when_disabled(monkeypatch):
+def test_no_tools_addendum_when_disabled(monkeypatch):
     from app.core.prompts import prompt_builder
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", False)
     text = prompt_builder.get_static_instructions()
-    assert "Code Verification Tools" not in text
+    assert "MPMB Source Tools" not in text
+    # Honest fallback: the prompt must not promise retrieval that never happens
+    assert "No Tool Access" in text
+    assert "never\ninvent function bodies" in text or "never invent function bodies" in text
 
 
 def test_tool_use_addendum_present_when_enabled(monkeypatch):
@@ -88,12 +62,14 @@ def test_tool_use_addendum_present_when_enabled(monkeypatch):
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
     text = prompt_builder.get_static_instructions()
-    assert "Code Verification Tools" in text
+    assert "MPMB Source Tools" in text
+    assert "mpmb_search" in text
     assert "mpmb_read" in text
     assert "mpmb_grep" in text
     assert "mpmb_function" in text
     assert "./data/uploads/session/" in text
     assert "./data/imports_source/" in text
+    assert "FIRST move" in text
 
 
 @pytest.fixture
@@ -182,7 +158,6 @@ def test_user_prompt_includes_catalog_hints(healthy_pb_service) -> None:
     hints = "// Resolved object type: SpellsList (matched via code_identifier)"
     user_prompt = builder.build_user_prompt(
         query="how do I add a spell?",
-        retrieval_result=None,
         edition=None,
         catalog_hints=hints,
     )
@@ -194,7 +169,6 @@ def test_user_prompt_no_hints_when_none() -> None:
     builder = PromptBuilder()
     user_prompt = builder.build_user_prompt(
         query="raw query",
-        retrieval_result=None,
         edition=None,
         catalog_hints=None,
     )
@@ -207,4 +181,4 @@ def test_tool_use_addendum_still_concatenated(healthy_pb_service, monkeypatch) -
     monkeypatch.setattr(settings_module.settings, "enable_tool_use", True)
     text = _instructions(healthy_pb_service)
     assert "MPMB OBJECT TYPES" in text  # catalog blocks present
-    assert "Code Verification Tools" in text  # tool-use addendum present
+    assert "MPMB Source Tools" in text  # tool-use addendum present

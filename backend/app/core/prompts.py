@@ -1,11 +1,12 @@
-"""Prompt construction for MPMB-Copilot's RAG pipeline.
+"""Prompt construction for MPMB-Copilot's agent pipeline.
 
 Separates:
     1. **Static instructions** - the stable system prompt passed to
                 `Agent(instructions=...)` so provider-side instruction caching
                 stays warm across turns.
-    2. **Dynamic RAG context** - per-turn retrieved chunks injected
-                into the user prompt so they don't invalidate that cache.
+    2. **Per-turn user prompt** - the user's question plus lightweight
+                catalog hints and the resolved edition. Retrieval is agent-driven
+                via the `mpmb_search` tool; nothing is pre-injected.
 
 The static instructions text is stored in `settings.system_prompt`.
 When that field is None/empty, the built-in default is used. The
@@ -14,7 +15,6 @@ frontend can edit this via `PATCH /api/settings`.
 
 from typing import Optional
 
-from app.core.retriever import RetrievalResult
 from app.logger import get_logger
 from app.services.source_catalog import source_catalog_service
 from app.settings import settings
@@ -53,68 +53,65 @@ WHEN WRITING CODE:
 5. Cite which source files your examples come from when relevant.
 6. Match the user's edition (2014 or 2024) for attribute syntax.
 
-GROUNDING IN PROVIDED CONTEXT:
-The chat backend retrieves relevant MPMB source code, syntax templates, \
-and engine function definitions on every turn and injects them into your \
-prompt context under "Syntax rules and engine behavior" and "Implementation \
-examples" sections.
-
-- Treat that retrieved context as your primary source of truth.  When the \
-user asks about an engine function (e.g. CreateSpellList, ParseSpell, \
-AddSubClass, etc.) or about valid attributes, look in the retrieved \
-sections FIRST and quote / cite from them directly.
-- If the user asks for a specific function's implementation and that \
-function IS present in the retrieved context, reproduce it from the \
-context.  Do not claim you lack access.
-- If the requested function or attribute is NOT in the retrieved context, \
-say exactly that ("That function isn't in my retrieved context for this \
-query") rather than refusing in general terms or guessing.  You may then \
-suggest the user re-ask with a more specific phrasing or point them to \
-the upstream MPMB repository.
-- Never describe yourself as an LLM that lacks access to MPMB internals - \
-the engine source IS indexed and retrievable; missing results mean the \
-retriever didn't surface a match for this particular query, not that the \
-source is unavailable."""
+GROUNDING:
+The real MPMB source code is available to you - never describe yourself \
+as an LLM that lacks access to MPMB internals.  Ground every claim about \
+engine functions, registries, and valid attributes in actual source you \
+have seen this conversation; never guess at function bodies or attribute \
+names.  If you could not find something, say exactly that rather than \
+refusing in general terms."""
 
 
 TOOL_USE_ADDENDUM = """\
 
-## Code Verification Tools
+## MPMB Source Tools
 
-You have three tools for reading the MPMB source directly:
-`mpmb_read`, `mpmb_grep`, `mpmb_function`. Use them when precision
-matters — not as a fallback.
+You have four read-only tools over the real MPMB source. Retrieval is
+YOUR job: nothing is pre-fetched for you.
 
-### When to call each tool
+### Workflow
 
-- `mpmb_search(query, edition=)` — Search the indexed MPMB corpus
-  for relevant rules and examples. Call when the provided context
-  does not cover the user's question. Phrase the query in English.
+1. `mpmb_search(query, edition=)` — your FIRST move for any MPMB
+   question. Returns ranked source chunks grouped into AUTHORITATIVE
+   rules and EXAMPLES, with file:line citations. Phrase the query in
+   English regardless of the user's language.
+2. Verify before quoting: when you need a verbatim function body or
+   exact attribute list, follow up with `mpmb_function` or
+   `mpmb_read` — do not reconstruct code from memory.
+3. `mpmb_grep` for symbol or convention sweeps across files.
 
-- `mpmb_function(root, name)` — Call when the user names a
-  specific function or variable and you need its exact body.
-  Triggers: "how does ClassList work?", "show me the full
-  CompanionList entry", "what does AbilityScores do?".
+### WHEN to call mpmb_search
 
-- `mpmb_read(root, path, start_line=, end_line=)` — Call when you
-  need to quote code verbatim from a known file.
-  Triggers: "quote the SpellsList entry for Fireball", "what's on
-  line 42 of Functions0.js?".
-
-- `mpmb_grep(root, pattern, path_glob=)` — Call when the
-  user asks about a pattern or convention across files.
-  Triggers: "which classes define a spellcasting feature?", "find
-  all usages of toUni".
+Call it when the user mentions any of:
+- MPMB identifiers (AddSubClass, SourceList, RequiredSheetVersion,
+  iFileName, ...)
+- registries (SpellsList, ClassList, RaceList, FeatsList,
+  MagicItemsList, BackgroundList, CreatureList, ...)
+- object types (race, subclass, spell, feat, magic item, background,
+  class, source)
+- editions (2014, 2024, 5e, 5.5e)
+- any "how do I write / add / modify / fix a [thing]" request
+- debugging an import file or sheet error
 
 ### When NOT to call tools
 
-- The retrieved context already shows the answer verbatim → cite
-  it, don't re-read.
-- The question is conceptual ("how do I add a new spell?") and
-  retrieved examples are sufficient → write the answer from the
-  examples.
-- Never call tools to "explore." Each call must have a named
-  target (specific function, file, or pattern).
+- Greetings, thanks, small talk.
+- General programming questions unrelated to MPMB.
+- Follow-ups your previous tool results already answer — cite what
+  you found, don't re-fetch.
+- Never call tools to "explore" without a target.
+- If a tool returns a `[budget]` notice, stop calling tools and
+  answer with what you have.
+
+### Other tools
+
+- `mpmb_function(root, name)` — full body of a named function or
+  `var` ("how does ClassList work?", "what does AbilityScores do?").
+- `mpmb_read(root, path, start_line=, end_line=)` — quote a known
+  file verbatim ("what's on line 42 of Functions0.js?").
+- `mpmb_grep(root, pattern, path_glob=)` — regex across files
+  ("which classes define a spellcasting feature?", "find all usages
+  of toUni").
 
 ### Roots
 
@@ -136,44 +133,24 @@ a "no files uploaded" response just means nothing is there yet.
 - Truncation: content ends with `[truncated: showing N of M ...]`.
   If truncated, narrow your query (line range, tighter pattern,
   different root) rather than asking for more.
-- A "No matches" response from `mpmb_grep` is a normal result: the
-  pattern does not occur under that root. Broaden the pattern or
-  switch roots instead of repeating the call.
+- "No matches" / "No indexed chunks matched" responses are normal
+  results: the thing is absent. Broaden the query or switch roots
+  instead of repeating the call.
 - Errors: responses starting with `[error]` indicate a failed call.
   Read the message and try a *different* path/tool — do not retry
   the same call."""
 
 
-# RAG context formatting
-def _format_chunk(chunk: dict, index: int) -> str:
-    """Format a single retrieval result for prompt injection."""
-    source = chunk.get("source_file", "unknown")
-    edition = chunk.get("edition", "?")
-    chunk_type = chunk.get("chunk_type", "")
-    score = chunk.get("score", 0.0)
-    content = chunk.get("content", "")
+NO_TOOLS_ADDENDUM = """\
 
-    meta_parts = [f"[{index}]", f"({edition})"]
-    if chunk_type:
-        meta_parts.append(chunk_type)
-    meta_parts.append(f"from {source}")
-    meta_parts.append(f"relevance={score:.2f}")
+## No Tool Access
 
-    header = " ".join(meta_parts)
-
-    return f"// {header}\n{content}"
-
-
-def _format_chunk_section(chunks: list[dict], section_title: str) -> str:
-    """Format a list of chunks into a labeled prompt section."""
-    if not chunks:
-        return ""
-
-    formatted = [f"## {section_title}"]
-    for i, chunk in enumerate(chunks, 1):
-        formatted.append(_format_chunk(chunk, i))
-
-    return "\n\n".join(formatted)
+Source tools are disabled in this configuration, so you cannot read
+or search the MPMB source directly. Answer from your general MPMB
+knowledge, clearly flag anything you are not certain of, and never
+invent function bodies or attribute names. For verbatim code,
+point the user at the upstream MPMB repository or suggest enabling
+tool use in settings."""
 
 
 def _strip_placeholders(text: str) -> str:
@@ -213,59 +190,27 @@ class PromptBuilder:
 
         if getattr(settings, "enable_tool_use", False):
             return base + TOOL_USE_ADDENDUM
-        return base
-
-    def format_rag_context(
-        self,
-        retrieval_result: Optional[RetrievalResult],
-        edition: Optional[str] = None,
-    ) -> str:
-        """Format retrieval results into labeled RAG context sections.
-
-        Returns a string with authoritative and example sections,
-        or empty string if no results.
-        """
-        if not retrieval_result or retrieval_result.is_empty:
-            return ""
-
-        sections = []
-
-        if edition:
-            sections.append(
-                f"The user is working with the **{edition}** edition. "
-                f"Provide syntax and examples matching this edition."
-            )
-
-        auth_section = _format_chunk_section(
-            retrieval_result.authoritative,
-            "Syntax rules and engine behavior (authoritative - trust these for correctness)",
-        )
-        if auth_section:
-            sections.append(auth_section)
-
-        ex_section = _format_chunk_section(
-            retrieval_result.examples,
-            "Implementation examples (use these as patterns, but follow the rules above)",
-        )
-        if ex_section:
-            sections.append(ex_section)
-
-        return "\n\n".join(sections)
+        return base + NO_TOOLS_ADDENDUM
 
     def build_user_prompt(
         self,
         query: str,
-        retrieval_result: Optional[RetrievalResult] = None,
         edition: Optional[str] = None,
         catalog_hints: Optional[str] = None,
     ) -> str:
-        """Build a user-prompt string with optional catalog hints + RAG context."""
-        rag_context = self.format_rag_context(retrieval_result, edition)
+        """
+        Build the per-turn user prompt: catalog hints + edition note + question
+
+        No retrieved context is injected - the agent fetches source via `mpmb_search` when it needs it
+        """
         parts: list[str] = []
         if catalog_hints:
             parts.append(catalog_hints)
-        if rag_context:
-            parts.append(rag_context)
+        if edition:
+            parts.append(
+                f"The user is working with the **{edition}** edition. "
+                f"Provide syntax and examples matching this edition."
+            )
         if not parts:
             return query
         return f"{chr(10).join(parts)}\n\n---\n\nUser question: {query}"

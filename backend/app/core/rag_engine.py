@@ -1,8 +1,9 @@
-"""RAG engine - orchestrates retrieval, prompt construction, and LLM generation.
+"""Agent engine - orchestrates prompt construction and the tool-using agent loop.
 
-Entry point for the chat pipeline. When tool use is enabled, the MPMB
-toolset is attached to the agent and `Deps(session_id, edition)` is
-injected so tools can scope file access per request.
+Entry point for the chat pipeline. Retrieval is agent-driven: the MPMB
+toolset (including `mpmb_search`) is attached when tool use is enabled,
+and `Deps(session_id, edition)` is injected so tools can scope file
+access per request. Nothing is pre-fetched on the request path.
 
 Usage:
     response = await rag_engine.generate(
@@ -43,7 +44,7 @@ from app.core.agent import (
     generate as agent_generate,
 )
 from app.core.prompts import prompt_builder
-from app.core.retriever import retriever
+from app.core.query_analysis import analyze_query
 from app.core.tools import Deps, build_mpmb_toolset, wrap_with_budget
 from app.logger import get_logger
 from app.services.llm.messages import to_pydantic_messages
@@ -62,7 +63,6 @@ class RAGResponse:
     model: str = ""
     usage: dict[str, Any] = field(default_factory=dict)
     stop_reason: Optional[str] = None
-    retrieval_info: dict[str, Any] = field(default_factory=dict)
     timing: dict[str, float] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
 
@@ -75,7 +75,6 @@ class RAGStreamEvent:
     model: str = ""
     stop_reason: Optional[str] = None
     usage: Optional[dict[str, Any]] = None
-    retrieval_info: Optional[dict[str, Any]] = None
     timing: Optional[dict[str, float]] = None
     event: Optional[str] = None
     tool: Optional[dict[str, Any]] = None
@@ -111,9 +110,8 @@ def _derive_tool_status(result_text: str) -> str:
     return "success"
 
 
-def _build_catalog_hints(retrieval_result, settings_ref) -> Optional[str]:
-    """Construct per-query catalog hints from a RetrievalResult."""
-    qa = getattr(retrieval_result, "query_analysis", None)
+def _build_catalog_hints(qa, settings_ref) -> Optional[str]:
+    """Construct per-query catalog hints from a QueryAnalysis."""
     object_type_match = None
     if qa is not None and qa.object_type:
         match = source_catalog_service.find_object_type(qa.object_type)
@@ -164,20 +162,13 @@ class RAGEngine:
     ) -> RAGResponse:
         t_start = time.perf_counter()
 
-        t_retrieve = time.perf_counter()
-        retrieval_result = await retriever.retrieve(query=query, edition=edition)
-        retrieval_ms = (time.perf_counter() - t_retrieve) * 1000
+        # ! No pre-retrieval - the agent calls mpmb_search itself when needed
+        analysis = analyze_query(query)
+        resolved_edition = edition or analysis.edition or settings.default_edition
 
-        resolved_edition = (
-            edition
-            or (retrieval_result.query_analysis.edition if retrieval_result.query_analysis else None)
-            or settings.default_edition
-        )
-
-        catalog_hints = _build_catalog_hints(retrieval_result, settings)
+        catalog_hints = _build_catalog_hints(analysis, settings)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
-            retrieval_result=retrieval_result,
             edition=resolved_edition,
             catalog_hints=catalog_hints,
         )
@@ -212,9 +203,8 @@ class RAGEngine:
         total_ms = (time.perf_counter() - t_start) * 1000
 
         logger.info(
-            f"RAG complete: {retrieval_result.total_chunks} chunks, "
-            f"{llm_response.usage.get('total_tokens', '?')} tokens, "
-            f"retrieve={retrieval_ms:.0f}ms gen={generation_ms:.0f}ms total={total_ms:.0f}ms"
+            f"Agent complete: {llm_response.usage.get('total_tokens', '?')} tokens, "
+            f"gen={generation_ms:.0f}ms total={total_ms:.0f}ms"
         )
 
         return RAGResponse(
@@ -223,9 +213,7 @@ class RAGEngine:
             model=llm_response.model,
             usage=llm_response.usage,
             stop_reason=llm_response.stop_reason,
-            retrieval_info=retrieval_result.to_dict(),
             timing={
-                "retrieval_ms": round(retrieval_ms, 1),
                 "generation_ms": round(generation_ms, 1),
                 "total_ms": round(total_ms, 1),
             },
@@ -245,19 +233,12 @@ class RAGEngine:
         t_start = time.perf_counter()
         resolved_provider = provider or settings.default_llm_provider
 
-        t_retrieve = time.perf_counter()
-        retrieval_result = await retriever.retrieve(query=query, edition=edition)
-        retrieval_ms = (time.perf_counter() - t_retrieve) * 1000
-
-        resolved_edition = (
-            edition
-            or (retrieval_result.query_analysis.edition if retrieval_result.query_analysis else None)
-            or settings.default_edition
-        )
-        catalog_hints = _build_catalog_hints(retrieval_result, settings)
+        # ! No pre-retrieval - the agent calls mpmb_search itself when needed
+        analysis = analyze_query(query)
+        resolved_edition = edition or analysis.edition or settings.default_edition
+        catalog_hints = _build_catalog_hints(analysis, settings)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
-            retrieval_result=retrieval_result,
             edition=resolved_edition,
             catalog_hints=catalog_hints,
         )
@@ -367,9 +348,7 @@ class RAGEngine:
             model=model or settings.default_model,
             stop_reason=stop_reason,
             usage=usage,
-            retrieval_info=retrieval_result.to_dict(),
             timing={
-                "retrieval_ms": round(retrieval_ms, 1),
                 "generation_ms": round(generation_ms, 1),
                 "total_ms": round(total_ms, 1),
             },
