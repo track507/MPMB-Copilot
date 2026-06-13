@@ -9,34 +9,38 @@ There are currently some outstanding items I need to implement. I want this be m
 
 I have not tested this with OpenAI since I started this project. Testing has been exclusively with Anthropic since that my model of choice. Please keep this in mind that as of 5/03/2025, everything is working as intended with Anthropic. If you encounter issues with other providers please let me know.
 
+Also, I'm a native english speaker and it's my only language. All of the existing intent examples under `./data/intent_examples.json` is produced by AI. If any of these examples should be written differently, please open an issue. If you also don't mind adding a brief explanation for me to learn, please add that too :\).
+
 ## TODO's
 
-- Eliminate pre-retrieval path
-- New `mpmb_search` tool with `query`, `edition`, `top_k?`
+Most of these have now shipped. See [What's next](#whats-next) for the live roadmap.
+
+- ✅ **Eliminate pre-retrieval path** — questions go straight to the LLM; retrieval is no longer forced on every turn.
+- ✅ **`mpmb_search` tool** (`query`, `edition`) — `top_k` was dropped in favor of intent-based tier budgets, but the LLM still decides when to search
     - This trusts the LLM will make the right call on when to search
-- Prompt caching using Anthropic break points
+- ✅ **Prompt caching using Anthropic break points** — verified live (turn 2 reads ~87% of its input tokens from cache)
     - Anthropic allows up to 4 break points on a query. We set one on the system prompt since that never changes, and then n-1 on the chat history so that a new question doesn't always invoke a new cache miss.
     - The cache window ~5 minutes, but on a cache hit, you'll only consume ~%10 of the cost you'd normally would if you didn't use caching.
     - This does not seem like a lot, but may I remind you, that your entire chat history will be sent to the LLM so it is compounding and an exponential savings on money when this is enabled.
         - Why send the entire chat history to the LLM? This is how most chat agents currently work. This is no different especially the fact that I have allowed people to pick their poison of choice. If you switch from Anthropic to OpenAI, it's a simple configuration change and it just works as intended.
-- Per-tool pill text on the frontend.
+- ✅ **Per-provider cheap model configuration** — used for title generation today, routing later
+- ⬜ **Per-tool pill text on the frontend**
     - More descriptive design for all the tool the LLM is using
-- Per provider cheap model configuration. Mostly for things like title generation, future routing, etc.
-- Editable titles & auto-titles are deferred if manual exists.
-- I have to add screen shots of it actually working. I'll do that after my in-depth analysis of the MPMB repo and source repo's.
+- ◐ **Editable titles** — auto-titles already defer when a manual title exists; the in-sidebar rename UI is still pending
+- ⬜ I have to add screen shots of it actually working. I'll do that after my in-depth analysis of the MPMB repo and source repo's.
 
 <!-- TODO: add screenshot of chat UI showing a tool-use response with the "Used 2 tools" footer expanded -->
 
 ## What it does
 
-MPMB-Copilot is a chat interface, like ChatGPT or Claude, but specialized for [MorePurpleMoreBetter's D&D 5e Character Record Sheet](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet). When you ask a question, it:
+MPMB-Copilot is a chat interface, like ChatGPT or Claude, but specialized for [MorePurpleMoreBetter's D&D 5e Character Record Sheet](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet). When you ask a question, your message goes straight to the model, which then:
 
-1. Searches the actual MPMB source code (8,700+ chunks across 2014 + 2024 editions plus the WotC Imports repo)
-2. Retrieves the most relevant code snippets, syntax templates, and examples
-3. Sends them as context to Claude (Anthropic), GPT (OpenAI), or a local Ollama model
-4. Streams the answer back, with citations, so you can copy-paste working code
+1. Decides whether it even needs the MPMB source (a greeting or a general JavaScript question doesn't)
+2. Calls `mpmb_search` to pull the most relevant code snippets, syntax templates, and examples from the indexed source (9,000+ chunks across the 2014 + 2024 editions plus the WotC Imports repo)
+3. Optionally follows up with `mpmb_read`, `mpmb_grep`, or `mpmb_function` to verify an exact signature or function body instead of guessing
+4. Streams the answer back — through Claude (Anthropic), GPT (OpenAI), or a local Ollama model — citing the source files it used so you can copy-paste working code
 
-It also has **tool use**: the model can read specific files, search by pattern, or look up a specific function's body when it needs to verify an exact signature instead of guessing. You'll see a "🔍 Verifying code…" indicator when it does, and a "Used N tools" footer below the answer.
+This is a deliberate shift away from the older "retrieve on every turn" RAG flow: retrieval is now a tool the model invokes only when it decides it needs it, not a forced step on every message. You'll see a "🔍 Verifying code…" indicator while it works, and a "Used N tools" footer below the answer.
 
 ## Who this is for
 
@@ -93,11 +97,11 @@ flowchart LR
     Browser["Browser<br/>React UI (Vite)"]
 
     subgraph Backend["FastAPI backend (Python)"]
-        QA["Query analysis<br/>+ intent detection"]
+        QA["Query analysis<br/>(edition + catalog hints)"]
+        Prompt["Prompt builder<br/>(static instructions)"]
+        Agent["PydanticAI agent loop"]
+        Tools["MPMB tools<br/>(mpmb_search / mpmb_read /<br/>mpmb_grep / mpmb_function)"]
         Retriever["Tier-aware retriever"]
-        Prompt["Prompt builder"]
-        Agent["PydanticAI agent"]
-        Tools["MPMB tools<br/>(mpmb_read / mpmb_grep / mpmb_function)"]
     end
 
     Qdrant[("Qdrant<br/>dense + BM25 (RRF)")]
@@ -105,13 +109,13 @@ flowchart LR
     LLM(["LLM provider<br/>Anthropic / OpenAI / Ollama"])
     Sources[("MPMB source files<br/>2014 + 2024 + Imports")]
 
-    Browser <-- SSE --> QA
-    QA --> Retriever
-    Retriever <--> Qdrant
-    Retriever --> Prompt
+    Browser <-- SSE --> Agent
+    QA --> Prompt
     Prompt --> Agent
     Agent <--> LLM
     Agent <--> Tools
+    Tools -- mpmb_search --> Retriever
+    Retriever <--> Qdrant
     Tools -. read-only .-> Sources
     Backend <--> Postgres
 ```
@@ -172,23 +176,28 @@ npm run check:full         # also runs mypy + tsc
 
 ## Features
 
+- ✅ **Agentic retrieval** — the model calls `mpmb_search` when it decides it needs source, instead of every question forcing an embed + query
 - ✅ **Hybrid retrieval** — dense embeddings (BAAI/bge-small-en-v1.5) + BM25 sparse, RRF-fused for relevance even on rare identifier names
 - ✅ **Tier-aware ranking** — authoritative sources (`_functions/`, `_variables/`, `additional content syntax/`) score above community examples
 - ✅ **Edition-aware** — auto-detects whether your question is about 2014 or 2024 rules and filters accordingly
-- ✅ **Tool use** — the model can read specific files, grep across the source, or fetch a function's body when it needs verbatim code
+- ✅ **Tool use** — `mpmb_search` (indexed search), `mpmb_read` (exact file ranges), `mpmb_grep` (regex across source), and `mpmb_function` (a named function/variable body)
+- ✅ **Prompt caching** — Anthropic cache breakpoints on the system prompt, tool definitions, and chat history; later turns read most of their input from cache
 - ✅ **Streaming** — Server-Sent Events stream tokens as they generate, with intermediate tool-use indicators
-- ✅ **Session persistence** — every conversation is saved to Postgres and resumes on refresh
-- ✅ **Auto-titled sessions** — first message generates a 4-6 word title (like Claude web)
-- ✅ **Source citations** — every answer attaches the file paths it pulled from
+- ✅ **Session persistence** — every conversation is saved to Postgres, lives at its own `/chat/<id>` route, and resumes on refresh
+- ✅ **Auto-titled sessions** — the first message generates a 4-6 word title via a cheap per-provider model, and auto-titling steps aside once you rename a chat
+- ✅ **Inline citations** — answers reference the source files (path + line range) the model pulled from via its tools
 
 ## What's next
 
-Phase B (read-only tool use) is shipped. Future work:
+Read-only tool use **and** the agentic-retrieval migration (no forced pre-retrieval, `mpmb_search`, prompt caching, per-provider cheap models, `/chat/:id` routes) are shipped. Ahead:
 
-- **Phase C** — write tools that can apply edits or generate diff patches against MPMB source files
-- **Phase D** — upload API for user-supplied source bundles (e.g. private homebrew collections)
-- **Phase E** — adaptive thinking + auto-tuned tool-call limits per query type
-- **Polish** — improved retriever speed, richer source UI, in-chat code execution sandbox
+- **Frontend polish** — per-tool pill text and an in-sidebar rename UI for sessions
+- **Upload API** — endpoints for the existing session/global upload roots, so the model can read user-supplied source bundles (e.g. private homebrew collections)
+- **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs
+- **Embedding-model identity** — stamp provider/model/dimension into the index and refuse mismatched queries; a prerequisite for swapping to a multilingual embedding model and for adding cloud embedding providers
+- **Evaluation harness** — retrieval + answer benchmarks across beginner how-to, lookup, generation, and debugging
+- **Write tools** — apply edits or generate diff patches against MPMB source files
+- **Tooling** — migrate the npm workspace to pnpm
 
 ## Troubleshooting
 
