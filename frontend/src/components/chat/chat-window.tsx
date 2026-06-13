@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Square } from "lucide-react";
+import { Loader2, Send, Square } from "lucide-react";
 import { toast } from "sonner";
 import { useParams } from "react-router";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/hooks/use-sessions";
+import { useSmoothText } from "@/hooks/use-smooth-text";
 import { useChatStore } from "@/stores/chat-store";
 import { MessageBubble } from "./message-bubble";
 import { cn } from "@/lib/utils";
 import type { KeyboardEventHandler, ReactElement, SubmitEventHandler } from "react";
+
+// Per-tool status text shown in the streaming pill while a tool runs
+const TOOL_PILL_TEXT: Record<string, string> = {
+	mpmb_search: "Searching MPMB sources...",
+	mpmb_read: "Reading source file...",
+	mpmb_grep: "Searching for a pattern...",
+	mpmb_function: "Looking up a function...",
+};
+const DEFAULT_PILL_TEXT = "Verifying code...";
 
 export function ChatWindow(): ReactElement {
 	const { sessionId: sessionIdParam } = useParams();
@@ -35,8 +45,13 @@ export function ChatWindow(): ReactElement {
 	const pendingUserMessage = useChatStore((s) => s.pendingUserMessage);
 	const streamedText = useChatStore((s) => s.streamedText);
 	const sawToolThisStream = useChatStore((s) => s.sawToolThisStream);
+	const activeTool = useChatStore((s) => s.activeTool);
 	const metadata = useChatStore((s) => s.metadata);
 	const isStreaming = useChatStore((s) => s.isStreaming);
+
+	// Reveal streamed text at a steady pace instead of in network-chunk bursts
+	const smoothStreamedText = useSmoothText(streamedText);
+	const isVisuallyStreaming = isStreaming || smoothStreamedText !== streamedText;
 
 	// Server-confirmed messages from React Query
 	const serverMessages = session?.messages ?? [];
@@ -57,7 +72,7 @@ export function ChatWindow(): ReactElement {
 		if (shouldAutoScrollRef.current) {
 			messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 		}
-	}, [serverMessages.length, streamedText, showPendingUser]);
+	}, [serverMessages.length, smoothStreamedText, showPendingUser]);
 
 	// Auto-resize textarea
 	useEffect(() => {
@@ -117,13 +132,18 @@ export function ChatWindow(): ReactElement {
 					{showPendingUser && <MessageBubble role="user" content={pendingUserMessage.text} />}
 
 					{showStreamedText && (
-						<MessageBubble role="assistant" content={streamedText} isStreaming={isStreaming} tools={!isStreaming ? metadata?.tools : undefined} />
+						<MessageBubble
+							role="assistant"
+							content={smoothStreamedText}
+							isStreaming={isVisuallyStreaming}
+							tools={!isVisuallyStreaming ? metadata?.tools : undefined}
+						/>
 					)}
 
 					{isStreaming && sawToolThisStream && (
 						<div className="mt-1 inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-							<span className="animate-pulse">🔍</span>
-							<span>Verifying code…</span>
+							<Loader2 className="size-3.5 animate-spin" />
+							<span>{(activeTool !== null ? TOOL_PILL_TEXT[activeTool] : undefined) ?? DEFAULT_PILL_TEXT}</span>
 						</div>
 					)}
 					<div ref={messagesEndRef} />

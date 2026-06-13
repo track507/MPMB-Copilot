@@ -13,6 +13,7 @@ interface ChatStoreState {
 	isStreaming: boolean;
 	metadata: ChatMetadata | null;
 	activeToolCount: number;
+	activeTool: string | null;
 	sawToolThisStream: boolean;
 }
 
@@ -34,6 +35,7 @@ const initialState: ChatStoreState = {
 	isStreaming: false,
 	metadata: null,
 	activeToolCount: 0,
+	activeTool: null,
 	sawToolThisStream: false,
 };
 
@@ -51,6 +53,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 			streamedText: "",
 			metadata: null,
 			activeToolCount: 0,
+			activeTool: null,
 			sawToolThisStream: false,
 		});
 	},
@@ -59,25 +62,28 @@ export const useChatStore = create<ChatStore>((set) => ({
 		set((state) => ({ streamedText: state.streamedText + chunk }));
 	},
 
-	onToolStart: () => {
+	onToolStart: (tool: ToolEventPayload) => {
 		set((state) => ({
 			activeToolCount: state.activeToolCount + 1,
+			activeTool: tool.name,
 			sawToolThisStream: true,
 		}));
 	},
 
 	onToolEnd: () => {
-		set((state) => ({
-			activeToolCount: Math.max(0, state.activeToolCount - 1),
-		}));
+		set((state) => {
+			const activeToolCount = Math.max(0, state.activeToolCount - 1);
+			// ? Clear the label only once no tool is in flight; tools run mostly sequentially
+			return { activeToolCount, activeTool: activeToolCount === 0 ? null : state.activeTool };
+		});
 	},
 
 	completeStream: (metadata: ChatMetadata | null) => {
-		set({ isStreaming: false, metadata, activeToolCount: 0 });
+		set({ isStreaming: false, metadata, activeToolCount: 0, activeTool: null });
 	},
 
 	clearOptimistic: () => {
-		set({ pendingUserMessage: null, streamedText: "", activeToolCount: 0, sawToolThisStream: false });
+		set({ pendingUserMessage: null, streamedText: "", activeToolCount: 0, activeTool: null, sawToolThisStream: false });
 	},
 
 	reset: () => {
