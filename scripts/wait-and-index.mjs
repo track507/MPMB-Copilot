@@ -38,7 +38,7 @@ async function waitForHealth(maxAttempts = 60, delayMs = 2000) {
 		} catch (error) {
 			console.log(`Waiting for backend... (${attempt}/${maxAttempts})`);
 			if (attempt === maxAttempts) {
-				throw new Error(`Backend did not become ready: ${error.message}`);
+				throw new Error(`Backend did not become ready: ${error.message}`, { cause: error });
 			}
 			await sleep(delayMs);
 		}

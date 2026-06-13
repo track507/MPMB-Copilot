@@ -3,7 +3,7 @@
 	"version": "0.1.0",
 	"private": true,
 	"description": "Tooling and quality gates for the MPMB-Copilot monorepo",
-	"packageManager": "npm@11.12.1",
+	"packageManager": "npm@11.17.0",
 	"engines": {
 		"node": ">=24.0.0"
 	},
@@ -69,14 +69,15 @@
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^21.0.2",
-		"@commitlint/config-conventional": "^20.5.3",
-		"@commitlint/types": "^20.5.0",
-		"@eslint/js": "^9.39.1",
-		"concurrently": "^9.2.1",
-		"eslint": "^9.39.1",
+		"@commitlint/config-conventional": "^21.0.2",
+		"@commitlint/types": "^21.0.1",
+		"@eslint/js": "^10.0.1",
+		"concurrently": "^10.0.3",
+		"eslint": "^10.5.0",
+		"globals": "^17.6.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^17.0.7",
 		"markdownlint-cli2": "^0.22.0",
-		"prettier": "^3.8.3"
+		"prettier": "^3.8.4"
 	}
 }
