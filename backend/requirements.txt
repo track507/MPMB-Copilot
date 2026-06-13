@@ -109,7 +109,7 @@ huggingface-hub==1.13.0
     #   tokenizers
 hyperframe==6.1.0
     # via h2
-idna==3.13
+idna==3.18
     # via
     #   anyio
     #   httpx
