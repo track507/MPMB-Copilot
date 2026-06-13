@@ -43,7 +43,7 @@ export const useChatStore = create<ChatStore>((set) => ({
 	addUserMessage: (text: string) => {
 		set({
 			pendingUserMessage: {
-				id: `pending-${String(Date.now())}`,
+				id: `pending-${String(Temporal.Now.instant().epochMilliseconds)}`,
 				role: "user",
 				text,
 			},

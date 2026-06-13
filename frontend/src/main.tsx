@@ -1,3 +1,6 @@
+// Temporal API polyfill: installs globalThis.Temporal + ambient types until native support is universal (Safari pending)
+// ! This will be dropped when Safari adds full support for Temporal API; see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Temporal
+import "temporal-polyfill/global";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
