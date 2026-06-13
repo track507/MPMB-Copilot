@@ -46,6 +46,7 @@ def build_model(
             max_tokens=max_tokens,
             anthropic_cache_instructions=settings.anthropic_cache_instructions,
             anthropic_cache_messages=settings.anthropic_cache_messages,
+            anthropic_cache_tool_definitions=settings.anthropic_cache_tool_definitions,
         )
         return anthropic_model, model_settings
 

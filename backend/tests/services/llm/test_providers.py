@@ -24,6 +24,7 @@ def test_build_model_anthropic(monkeypatch: pytest.MonkeyPatch):
     assert model_settings["max_tokens"] == 1234
     assert "anthropic_cache_instructions" in model_settings
     assert "anthropic_cache_messages" in model_settings
+    assert "anthropic_cache_tool_definitions" in model_settings
 
 
 def test_build_model_openai(monkeypatch: pytest.MonkeyPatch):

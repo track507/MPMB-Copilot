@@ -91,7 +91,7 @@ def _extract_usage(usage: Any) -> dict[str, Any]:
         "output_tokens": output_tokens,
         "total_tokens": input_tokens + output_tokens,
         "cache_read_tokens": getattr(usage, "cache_read_tokens", 0) or 0,
-        "cache_creation_tokens": getattr(usage, "cache_creation_tokens", 0) or 0,
+        "cache_write_tokens": getattr(usage, "cache_write_tokens", 0) or 0,
     }
 
 

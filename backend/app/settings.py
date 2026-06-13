@@ -135,6 +135,9 @@ class Settings:
     anthropic_cache_messages: bool = True
     """Cache the latest message in conversation history."""
 
+    anthropic_cache_tool_definitions: bool = True
+    """Cache the tool definitions block. Covers the toolset even when instruction caching is disabled"""
+
     # Extended thinking (Anthropic only)
     enable_extended_thinking: bool = False
     """Enable deeper reasoning (uses more tokens, better for complex queries)."""

@@ -82,3 +82,19 @@ async def test_stream_returns_text_then_final_event(monkeypatch: pytest.MonkeyPa
     assert isinstance(final, LLMStreamEvent)
     assert final.done is True
     assert final.usage is not None
+
+
+def test_extract_usage_maps_cache_write_tokens():
+    from app.core.agent import _extract_usage
+
+    class FakeUsage:
+        input_tokens = 100
+        output_tokens = 50
+        cache_read_tokens = 70
+        cache_write_tokens = 30
+
+    usage = _extract_usage(FakeUsage())
+    assert usage["input_tokens"] == 100
+    assert usage["total_tokens"] == 150
+    assert usage["cache_read_tokens"] == 70
+    assert usage["cache_write_tokens"] == 30
