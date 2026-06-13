@@ -1,10 +1,13 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import path from "path";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-	plugins: [react(), tailwindcss()],
+	// * React Compiler via the official preset (rolldown babel runner) auto-memoizes components at build time
+	// * Targets React 19; the eslint-plugin-react-hooks recommended config enforces the Rules of React the compiler relies on
+	plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
