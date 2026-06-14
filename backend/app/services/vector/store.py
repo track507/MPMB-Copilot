@@ -106,6 +106,28 @@ class VectorStore(Protocol):
         """
         ...
 
+    async def write_identity(self, identity: dict) -> None:
+        """Stamp the embedding-model identity (provider/model/dimension) onto the index.
+
+        Called after (re)indexing so stored vectors record the model that built them.
+        """
+        ...
+
+    async def identity_health(self) -> tuple[str, str]:
+        """Return (health_status, message) for the stored embedding-model stamp.
+
+        "unavailable" signals a model/dimension mismatch that requires a re-index.
+        """
+        ...
+
+    async def adopt_identity(self) -> tuple[bool, str]:
+        """Stamp an existing unstamped index with the current model in place (no re-embed).
+
+        Returns (stamped, message). Refuses if the stored vector dimension doesn't
+        match the configured model.
+        """
+        ...
+
     async def delete_collection(self) -> bool:
         """Delete and recreate the collection. Returns True on success."""
         ...

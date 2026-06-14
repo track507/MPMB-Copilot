@@ -1,6 +1,6 @@
-from qdrant_client.models import MatchAny, MatchValue
+from qdrant_client.models import HasIdCondition, MatchAny, MatchValue
 
-from app.services.vector.qdrant import QdrantStore
+from app.services.vector.qdrant import _IDENTITY_POINT_ID, QdrantStore
 
 
 def test_scalar_filter_uses_match_value():
@@ -28,7 +28,19 @@ def test_object_type_maps_to_metadata_path():
     assert f.must[0].key == "metadata.object_type"
 
 
-def test_empty_filters_return_none():
+def test_empty_filters_still_exclude_identity_point():
+    """No metadata filter still yields a filter that hides the reserved stamp point."""
     store = QdrantStore()
-    assert store._build_qdrant_filter(None) is None
-    assert store._build_qdrant_filter({}) is None
+    for f in (store._build_qdrant_filter(None), store._build_qdrant_filter({})):
+        assert f is not None
+        assert f.must is None
+        assert len(f.must_not) == 1
+        assert isinstance(f.must_not[0], HasIdCondition)
+        assert f.must_not[0].has_id == [_IDENTITY_POINT_ID]
+
+
+def test_real_filters_also_exclude_identity_point():
+    store = QdrantStore()
+    f = store._build_qdrant_filter({"edition": "2024"})
+    assert len(f.must) == 1
+    assert any(isinstance(c, HasIdCondition) for c in f.must_not)

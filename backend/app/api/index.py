@@ -156,9 +156,14 @@ async def trigger_indexing(request: IndexRequest = IndexRequest()):
         # Check if indexing already exists and force_reindex is False
         if not request.force_reindex:
             if points_count > 0:
+                message = f"Index already populated with {points_count} vectors. Use force_reindex=true to re-index."
+                # Upgrade a legacy unstamped index in place (no re-embed) so model verification works
+                _, note = await store.adopt_identity()
+                if note:
+                    message = f"{message} {note}."
                 return IndexResponse(
                     status="completed",
-                    message=f"Index already populated with {points_count} vectors. Use force_reindex=true to re-index.",
+                    message=message,
                     files_processed=0,
                     chunks_created=0,
                     vectors_uploaded=points_count,

@@ -26,6 +26,7 @@ from qdrant_client.models import (
     Filter,
     Fusion,
     FusionQuery,
+    HasIdCondition,
     MatchAny,
     MatchValue,
     Modifier,
@@ -41,6 +42,11 @@ from app.config import config
 from app.logger import get_logger
 
 logger = get_logger(__name__)
+
+# * Reserved point holding the embedding-model stamp
+# The nil UUID never collides with chunk ids (uuid4) and is excluded from every search via a must_not HasId condition in _build_qdrant_filter
+_IDENTITY_POINT_ID = "00000000-0000-0000-0000-000000000000"
+_IDENTITY_PAYLOAD_KEY = "_embedding_identity"
 
 # Payload fields we create keyword indexes on for fast filtering
 INDEXED_PAYLOAD_FIELDS = {
@@ -78,6 +84,10 @@ class QdrantStore:
         self._sparse_model = None  # Lazy-loaded BM25 model
         self._connected = False
         self._warned_missing_source_tier = False
+        # Embedding-model stamp state, populated on connect() and after (re)indexing
+        self._identity_status = "unknown"  # unknown | ok | missing | mismatch
+        self._identity_message = ""
+        self._has_identity_point = False
 
     # BM25 sparse vector generation (lazy-loaded)
 
@@ -157,6 +167,7 @@ class QdrantStore:
 
             await self._ensure_collection()
             await self._ensure_payload_indexes()
+            await self._load_identity_state()
             self._connected = True
             return True
 
@@ -217,6 +228,148 @@ class QdrantStore:
             f"Payload indexes ensured for {len(INDEXED_PAYLOAD_FIELDS)} keyword fields "
             f"+ {len(FULLTEXT_PAYLOAD_FIELDS)} text fields"
         )
+
+    # * Embedding-model identity stamp
+
+    def read_identity(self) -> Optional[dict]:
+        """Return the embedding stamp stored on the collection, or None if unstamped"""
+        if not self.client:
+            return None
+        try:
+            points = self.client.retrieve(
+                collection_name=self.collection_name,
+                ids=[_IDENTITY_POINT_ID],
+                with_payload=True,
+            )
+        except Exception:
+            return None
+        if not points:
+            return None
+        identity = (points[0].payload or {}).get(_IDENTITY_PAYLOAD_KEY)
+        return identity if isinstance(identity, dict) else None
+
+    async def write_identity(self, identity: dict) -> None:
+        """
+        Stamp the embedding-model identity onto the collection (reserved point)
+
+        Called after (re)indexing so the stored vectors carry the model that built them
+        """
+        if not self.client:
+            raise RuntimeError("Not connected. Call connect() first.")
+        dim = int(identity.get("dimension") or self.dense_dim)
+        # ? Cosine rejects the zero vector; a unit vector is fine since this point is never returned by search
+        marker_vector = [1.0] + [0.0] * (dim - 1)
+        self.client.upsert(
+            collection_name=self.collection_name,
+            points=[
+                PointStruct(
+                    id=_IDENTITY_POINT_ID,
+                    vector={"dense": marker_vector},
+                    payload={_IDENTITY_PAYLOAD_KEY: identity},
+                )
+            ],
+        )
+        self._has_identity_point = True
+        self._identity_status = "ok"
+        self._identity_message = f"{identity.get('provider')}/{identity.get('model')} ({dim}d)"
+        logger.info(f"Stamped embedding identity on '{self.collection_name}': {self._identity_message}")
+
+    def _collection_dense_dim(self) -> Optional[int]:
+        """Return the dimension the collection's dense vectors were created with, if readable"""
+        try:
+            vectors = self.client.get_collection(self.collection_name).config.params.vectors
+            dense = vectors["dense"] if isinstance(vectors, dict) else vectors
+            return getattr(dense, "size", None)
+        except Exception:
+            return None
+
+    async def adopt_identity(self) -> tuple[bool, str]:
+        """
+        Stamp an existing collection with the current model in place, without re-embedding
+
+        Used to upgrade a legacy (unstamped) index
+        Only stamps when the stored vectors' dimension matches the configured model, so we never record a stamp that contradicts the actual vectors
+        No-op if already stamped; refuses on a real mismatch
+        """
+        from app.services.embedding.service import embedding_service
+
+        if not self.client:
+            return False, "vector store not connected"
+
+        if self.read_identity() is not None:
+            if self._identity_status == "mismatch":
+                return False, self._identity_message
+            return True, "index already stamped"
+
+        identity = embedding_service.identity()
+        actual_dim = self._collection_dense_dim()
+        if actual_dim is not None and actual_dim != identity["dimension"]:
+            return False, (
+                f"collection vectors are {actual_dim}d but configured model "
+                f"{identity['provider']}/{identity['model']} is {identity['dimension']}d - force_reindex required"
+            )
+        await self.write_identity(identity)
+        return (
+            True,
+            f"stamped existing index with {identity['provider']}/{identity['model']} ({identity['dimension']}d)",
+        )
+
+    async def _load_identity_state(self) -> None:
+        """
+        Compare the collection's embedding stamp against current config and cache the result
+
+        Status: ok (match or empty/fresh), missing (populated but unstamped, legacy), mismatch (different model/dimension - stored vectors are incompatible)
+        """
+        from app.services.embedding.service import embedding_service
+
+        current = embedding_service.identity()
+        stored = self.read_identity()
+        self._has_identity_point = stored is not None
+
+        if stored is None:
+            count = 0
+            try:
+                count = self.client.get_collection(self.collection_name).points_count or 0
+            except Exception:
+                pass
+            if count == 0:
+                self._identity_status = "ok"
+                self._identity_message = "empty collection"
+            else:
+                self._identity_status = "missing"
+                self._identity_message = "index predates identity stamping; re-index to enable model verification"
+                logger.warning(
+                    f"Qdrant collection '{self.collection_name}' is unstamped ({count} points). {self._identity_message}"
+                )
+            return
+
+        stored_key = (stored.get("provider"), stored.get("model"), stored.get("dimension"))
+        current_key = (current["provider"], current["model"], current["dimension"])
+        if stored_key != current_key:
+            self._identity_status = "mismatch"
+            self._identity_message = (
+                f"index built with {stored.get('provider')}/{stored.get('model')} ({stored.get('dimension')}d), "
+                f"config is {current['provider']}/{current['model']} ({current['dimension']}d) - re-index required"
+            )
+            logger.error(f"Embedding model mismatch for '{self.collection_name}': {self._identity_message}")
+            return
+
+        self._identity_status = "ok"
+        self._identity_message = f"{current['provider']}/{current['model']} ({current['dimension']}d)"
+
+    def _raise_if_identity_mismatch(self) -> None:
+        """Refuse dense/hybrid queries when stored vectors were built by a different model"""
+        if self._identity_status == "mismatch":
+            raise RuntimeError(f"Embedding model mismatch: {self._identity_message}")
+
+    async def identity_health(self) -> tuple[str, str]:
+        """Map the cached embedding-stamp state to a (health_status, message) pair"""
+        if self._identity_status == "mismatch":
+            return "unavailable", self._identity_message
+        if self._identity_status == "missing":
+            return "ready", self._identity_message
+        message = self._identity_message or f"{config.embedding_provider}/{config.embedding_model}"
+        return "ready", message
 
     # * Upsert
 
@@ -302,10 +455,9 @@ class QdrantStore:
         Supports top-level fields and nested metadata fields:
                 {"edition": "2014", "source_tier": "authoritative"}
                 {"object_type": "SpellsList"}  ->  metadata.object_type
-        """
-        if not filters:
-            return None
 
+        Always excludes the reserved embedding-identity point, so it returns a filter even when `filters` is empty
+        """
         conditions = []
 
         # Map shorthand filter keys to actual payload paths
@@ -321,7 +473,7 @@ class QdrantStore:
             "attribute_name": "metadata.attribute_name",
         }
 
-        for key, value in filters.items():
+        for key, value in (filters or {}).items():
             field_path = field_map.get(key, key)
 
             if isinstance(value, list):
@@ -331,10 +483,8 @@ class QdrantStore:
             else:
                 conditions.append(FieldCondition(key=field_path, match=MatchValue(value=value)))
 
-        if not conditions:
-            return None
-
-        return Filter(must=conditions)
+        # ! Never return the reserved embedding-identity stamp as a search result
+        return Filter(must=conditions or None, must_not=[HasIdCondition(has_id=[_IDENTITY_POINT_ID])])
 
     def _format_results(self, scored_points) -> list[dict]:
         """Convert Qdrant ScoredPoint objects to plain dicts."""
@@ -387,6 +537,7 @@ class QdrantStore:
         """
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
+        self._raise_if_identity_mismatch()
 
         # Generate BM25 sparse vector for the query
         sparse_vectors = self._generate_sparse_vectors([query_text])
@@ -426,6 +577,7 @@ class QdrantStore:
         """Dense-only vector search (no BM25 component)."""
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
+        self._raise_if_identity_mismatch()
 
         qdrant_filter = self._build_qdrant_filter(filters)
 
@@ -452,6 +604,7 @@ class QdrantStore:
             logger.warning(f"Deleted collection '{self.collection_name}'")
             await self._ensure_collection()
             await self._ensure_payload_indexes()
+            await self._load_identity_state()
             return True
         except Exception as e:
             logger.error(f"Failed to delete collection: {e}")
@@ -464,10 +617,12 @@ class QdrantStore:
 
         try:
             info = self.client.get_collection(self.collection_name)
+            # ? Don't count the reserved identity stamp as a chunk
+            chunk_count = max((info.points_count or 0) - (1 if self._has_identity_point else 0), 0)
             return {
                 "name": self.collection_name,
-                "points_count": info.points_count or 0,
-                "vectors_count": info.points_count or 0,
+                "points_count": chunk_count,
+                "vectors_count": chunk_count,
                 "indexed_vectors_count": info.indexed_vectors_count or 0,
                 "segments_count": info.segments_count,
                 "status": str(info.status),

@@ -51,5 +51,18 @@ class EmbeddingService:
 
         return self.provider.embed_texts(texts)
 
+    def identity(self) -> dict:
+        """
+        Identity of the embedding model that builds and queries the index
+
+        Sourced from config (no model load) so it is cheap to call at startup and in the health check
+        Used to stamp the vector collection and to detect a model change that would invalidate stored vectors
+        """
+        return {
+            "provider": config.embedding_provider,
+            "model": config.embedding_model,
+            "dimension": config.embedding_dimension,
+        }
+
 
 embedding_service = EmbeddingService()

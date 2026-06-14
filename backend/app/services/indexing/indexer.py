@@ -146,6 +146,8 @@ class IndexingService:
                     raise RuntimeError("Vector store is not available")
 
             points_uploaded = loop.run_until_complete(store.upsert_chunks(chunks, all_embeddings))
+            # Stamp the index with the embedding model that built these vectors
+            loop.run_until_complete(store.write_identity(embedding_service.identity()))
         finally:
             loop.close()
 

@@ -58,13 +58,18 @@ async def check_llm_provider() -> ServiceStatus:
 
 
 async def check_embedding_model() -> ServiceStatus:
-    """Check embedding model availability"""
+    """
+    Verify the index was built by the currently-configured embedding model
+
+    Compares the embedding stamp on the Qdrant collection against config
+    A mismatch (different model/dimension) means stored vectors are incompatible and dense queries are refused until a re-index, so it reports "unavailable"
+    """
     try:
-        # TODO: Actually load and test the model
-        return ServiceStatus(
-            status="ready",
-            message=f"{config.embedding_provider}/{config.embedding_model}",
-        )
+        store = get_vector_store()
+        if not await store.health_check() and not await store.connect():
+            return ServiceStatus(status="unavailable", message="Vector store unreachable")
+        status, message = await store.identity_health()
+        return ServiceStatus(status=status, message=message)
     except Exception as e:
         logger.error(f"Embedding model check failed: {e}")
         return ServiceStatus(status="unavailable", message=str(e))
