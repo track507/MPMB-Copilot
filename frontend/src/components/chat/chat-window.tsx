@@ -126,7 +126,15 @@ export function ChatWindow(): ReactElement {
 					)}
 
 					{serverMessages.map((msg) => (
-						<MessageBubble key={msg.id} role={msg.role} content={msg.content.text} sources={msg.content.sources} tools={msg.meta_data.tools} />
+						<MessageBubble
+							key={msg.id}
+							role={msg.role}
+							content={msg.content.text}
+							sources={msg.content.sources}
+							tools={msg.meta_data.tools}
+							cacheReadTokens={msg.meta_data.usage?.cache_read_tokens}
+							stopReason={msg.stop_reason ?? undefined}
+						/>
 					))}
 
 					{showPendingUser && <MessageBubble role="user" content={pendingUserMessage.text} />}
@@ -137,6 +145,8 @@ export function ChatWindow(): ReactElement {
 							content={smoothStreamedText}
 							isStreaming={isVisuallyStreaming}
 							tools={!isVisuallyStreaming ? metadata?.tools : undefined}
+							cacheReadTokens={!isVisuallyStreaming ? metadata?.usage?.cache_read_tokens : undefined}
+							stopReason={!isVisuallyStreaming ? metadata?.stop_reason : undefined}
 						/>
 					)}
 

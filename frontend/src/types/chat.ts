@@ -74,6 +74,7 @@ export interface ChatMetadata {
 	readonly timing?: ChatTiming | undefined;
 	readonly retrieval?: ChatRetrieval | undefined;
 	readonly tools?: ChatToolsMetadata | undefined;
+	readonly stop_reason?: string | undefined;
 }
 
 export interface SourceReference {

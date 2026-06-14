@@ -1,10 +1,11 @@
 /** Mirrors backend SessionOut / SessionDetailOut / MessageOut schemas. */
-import type { ChatToolsMetadata } from "@/types/chat";
+import type { ChatToolsMetadata, ChatUsage } from "@/types/chat";
 
 export interface MessageMetadata {
 	readonly retrieval?: Record<string, unknown> | null;
 	readonly timing?: Record<string, unknown>;
 	readonly tools?: ChatToolsMetadata;
+	readonly usage?: ChatUsage;
 	readonly [key: string]: unknown;
 }
 

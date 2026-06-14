@@ -1,4 +1,4 @@
-import { Bot, User } from "lucide-react";
+import { Bot, TriangleAlert, User, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./code-block";
@@ -14,11 +14,13 @@ interface MessageBubbleProps {
 	readonly sources?: SourceReference[] | undefined;
 	readonly isStreaming?: boolean | undefined;
 	readonly tools?: ChatToolsMetadata | undefined;
+	readonly cacheReadTokens?: number | undefined;
+	readonly stopReason?: string | undefined;
 }
 
 type CodeProps = ComponentPropsWithoutRef<"code">;
 
-export function MessageBubble({ role, content, sources, isStreaming = false, tools }: MessageBubbleProps): ReactElement {
+export function MessageBubble({ role, content, sources, isStreaming = false, tools, cacheReadTokens, stopReason }: MessageBubbleProps): ReactElement {
 	const isUser = role === "user";
 
 	return (
@@ -94,6 +96,22 @@ export function MessageBubble({ role, content, sources, isStreaming = false, too
 				</div>
 
 				{sources !== undefined && sources.length > 0 && <SourceCitation sources={sources} />}
+
+				{!isUser && stopReason === "length" && (
+					<div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+						<TriangleAlert className="size-3.5 shrink-0" />
+						<span>Response cut off at the token limit. Raise Max Tokens in settings, or ask it to continue.</span>
+					</div>
+				)}
+
+				{!isUser && cacheReadTokens !== undefined && cacheReadTokens > 0 && (
+					<div
+						className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+						title={`${cacheReadTokens.toLocaleString()} input tokens read from cache`}>
+						<Zap className="size-3" />
+						cached
+					</div>
+				)}
 
 				{!isUser && tools !== undefined && tools.total_calls > 0 && (
 					<details className="mt-2 text-xs text-muted-foreground">

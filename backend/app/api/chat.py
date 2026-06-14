@@ -114,6 +114,8 @@ async def _save_assistant_message(
             meta_data = {
                 "timing": timing,
             }
+            if usage:
+                meta_data["usage"] = usage
             if tools_meta:
                 meta_data["tools"] = tools_meta
             kwargs.update(
@@ -152,6 +154,7 @@ def _build_metadata(
     usage: dict | None = None,
     timing: dict | None = None,
     tools: dict | None = None,
+    stop_reason: str | None = None,
 ) -> dict:
     """
     Build nested metadata matching the frontend `ChatMetadata` type
@@ -167,6 +170,8 @@ def _build_metadata(
     }
     if tools:
         meta["tools"] = tools
+    if stop_reason:
+        meta["stop_reason"] = stop_reason
     return meta
 
 
@@ -293,6 +298,7 @@ async def chat_stream(request: ChatRequest):
                                 usage=event.usage,
                                 timing=event.timing,
                                 tools=event.tools,
+                                stop_reason=event.stop_reason,
                             ),
                         )
                         yield f"data: {final_chunk.model_dump_json()}\n\n"
