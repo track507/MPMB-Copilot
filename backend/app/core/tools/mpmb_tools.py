@@ -13,7 +13,7 @@ truncation is tagged inline with `[truncated: showing N of M ...]`.
 
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -50,6 +50,8 @@ class Deps:
 
     session_id: str
     edition: str
+    # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
+    seen_chunks: set[str] = field(default_factory=set)
 
 
 # * Implementations (testable without PydanticAI)
@@ -163,7 +165,23 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
             + ". Rephrase the query, or use mpmb_grep for exact symbols."
         )
 
+    def _chunk_key(chunk: dict) -> str:
+        return f"{chunk.get('source_file', '?')}:{chunk.get('start_line')}-{chunk.get('end_line')}"
+
+    all_chunks = [*result.authoritative, *result.examples]
+    keys = {_chunk_key(c) for c in all_chunks}
+    # ? Nudge the model to stop searching once results mostly repeat earlier ones
+    overlap = len(keys & deps.seen_chunks) / len(keys) if keys else 0.0
+    repeated = bool(deps.seen_chunks) and overlap >= 0.7
+    deps.seen_chunks |= keys
+
     sections: list[str] = []
+    if repeated:
+        sections.append(
+            "[note] These results largely repeat earlier searches this turn. "
+            "You likely have enough context - answer now, or use mpmb_read/mpmb_function "
+            "for an exact symbol instead of searching again."
+        )
     section_specs = (
         ("AUTHORITATIVE (trust these for correctness)", result.authoritative),
         ("EXAMPLES (implementation patterns)", result.examples),

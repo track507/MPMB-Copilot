@@ -117,6 +117,39 @@ async def test_search_missing_intent_reports_unknown(monkeypatch):
     assert "intent=unknown" in out
 
 
+@pytest.mark.asyncio
+async def test_search_flags_repeated_overlapping_results(monkeypatch):
+    """A second search that mostly returns already-seen chunks gets a stop nudge."""
+    from app.core.retriever import retriever
+
+    chunks = [_chunk("a.js", "x"), _chunk("b.js", "y")]
+    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=_result(authoritative=chunks)))
+
+    deps = _deps()
+    first = await _mpmb_search_impl(deps, "spell list class")
+    assert "[note]" not in first
+
+    second = await _mpmb_search_impl(deps, "class spell list variations")
+    assert "[note]" in second
+    assert "repeat earlier searches" in second
+
+
+@pytest.mark.asyncio
+async def test_search_no_nudge_for_fresh_results(monkeypatch):
+    """Distinct results on the second search do not trigger the nudge."""
+    from app.core.retriever import retriever
+
+    fake = AsyncMock(
+        side_effect=[_result(authoritative=[_chunk("a.js", "x")]), _result(authoritative=[_chunk("c.js", "z")])]
+    )
+    monkeypatch.setattr(retriever, "retrieve", fake)
+
+    deps = _deps()
+    await _mpmb_search_impl(deps, "first")
+    second = await _mpmb_search_impl(deps, "second")
+    assert "[note]" not in second
+
+
 def test_mpmb_search_registered_on_toolset():
     from app.core.tools import build_mpmb_toolset
 
