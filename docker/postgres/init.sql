@@ -219,7 +219,7 @@ BEGIN
         SELECT COALESCE(MAX(sequence_number), 0) + 1
         INTO NEW.sequence_number
         FROM messages
-        WHERE session_id = NEW.sequence_id;
+        WHERE session_id = NEW.session_id;
     END IF;
     RETURN NEW;
 END;
