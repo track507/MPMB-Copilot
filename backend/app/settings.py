@@ -58,14 +58,20 @@ class Settings:
 
     # LLM behavior
     default_llm_provider: str = "anthropic"
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-4-6"
     temperature: float = 0.2
-    max_tokens: int = 4000
+    max_tokens: int = 8000
+
+    default_effort: str = "high"
+    """
+    Reasoning effort for the main model (low/medium/high/xhigh/max on Anthropic, minimal/low/medium/high on OpenAI)
+    Applied only when the selected model supports it; ignored otherwise. 'high' is the provider default
+    """
 
     # Cheap model aliases for non-generation tasks (titles, future routing)
     # Per provider so switching default_llm_provider keeps a sensible cheap model
-    anthropic_cheap_model: str = "claude-haiku-4-5-20251001"
-    openai_cheap_model: str = "gpt-4o-mini"
+    anthropic_cheap_model: str = "claude-haiku-4-5"
+    openai_cheap_model: str = "gpt-5.4-mini"
     ollama_cheap_model: str = ""  # ? empty falls back to default_model
 
     # RAG tuning
@@ -146,10 +152,8 @@ class Settings:
 
     # Extended thinking (Anthropic only)
     enable_extended_thinking: bool = False
-    """Enable deeper reasoning (uses more tokens, better for complex queries)."""
-
-    thinking_budget_tokens: int = 4000
-    """Max tokens the model can use for internal reasoning."""
+    """Enable adaptive thinking (the model decides reasoning depth)
+    On newer models depth is governed by `default_effort`; the legacy numeric thinking budget is no longer used"""
 
     # System prompt
     system_prompt: Optional[str] = None
@@ -182,7 +186,6 @@ class Settings:
             enable_tool_use=getattr(config_module, "enable_tool_use", cls.enable_tool_use),
             max_tool_calls=getattr(config_module, "max_tool_calls", cls.max_tool_calls),
             enable_extended_thinking=getattr(config_module, "enable_extended_thinking", cls.enable_extended_thinking),
-            thinking_budget_tokens=getattr(config_module, "thinking_budget_tokens", cls.thinking_budget_tokens),
             tool_search_limit=getattr(config_module, "tool_search_limit", cls.tool_search_limit),
             system_prompt=getattr(config_module, "system_prompt", cls.system_prompt),
             source_catalog_path=getattr(config_module, "source_catalog_path", cls.source_catalog_path),

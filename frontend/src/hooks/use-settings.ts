@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { Settings, SettingsUpdate, IndexStatus, HealthResponse } from "@/types/settings";
+import type { Settings, SettingsUpdate, IndexStatus, HealthResponse, ModelCatalog } from "@/types/settings";
 
 const SETTINGS_KEY = ["settings"] as const;
+const MODELS_KEY = ["models"] as const;
 const INDEX_KEY = ["index-status"] as const;
 const HEALTH_KEY = ["health"] as const;
 
@@ -10,6 +11,15 @@ export function useSettings(): ReturnType<typeof useQuery<Settings>> {
 	return useQuery({
 		queryKey: SETTINGS_KEY,
 		queryFn: async () => apiClient.get<Settings>("/api/settings"),
+	});
+}
+
+export function useModelCatalog(): ReturnType<typeof useQuery<ModelCatalog>> {
+	return useQuery({
+		queryKey: MODELS_KEY,
+		queryFn: async () => apiClient.get<ModelCatalog>("/api/models"),
+		// ? Model lists change rarely and the backend caches for an hour; keep it fresh-ish across mounts
+		staleTime: 30 * 60_000,
 	});
 }
 

@@ -1,25 +1,30 @@
-import { useCallback, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex } from "@/hooks/use-settings";
+import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useModelCatalog } from "@/hooks/use-settings";
+import { ModelSelect } from "@/components/settings/model-select";
 import { cn } from "@/lib/utils";
-import type { ReactElement } from "react";
+import type { ChangeEvent, ReactElement } from "react";
+import type { ModelOption, Settings } from "@/types/settings";
 
 const settingsSchema = z.object({
 	default_llm_provider: z.string().min(1),
 	default_model: z.string().min(1),
 	temperature: z.number().min(0).max(2),
-	max_tokens: z.number().int().min(1).max(8000),
+	max_tokens: z.number().int().min(1).max(32000),
+	default_effort: z.string(),
+	anthropic_cheap_model: z.string(),
+	openai_cheap_model: z.string(),
+	ollama_cheap_model: z.string(),
 	default_edition: z.string(),
 	top_k_results: z.number().int().min(1).max(50),
 	similarity_threshold: z.number().min(0).max(1),
 	retrieval_mode: z.enum(["single", "dual", "auto"]),
 	enable_tool_use: z.boolean(),
 	enable_extended_thinking: z.boolean(),
-	thinking_budget_tokens: z.number().int().min(1000).max(32000),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -35,48 +40,133 @@ const EDITIONS = [
 	{ value: "2024", label: "D&D 2024" },
 ] as const;
 
+// Keep the selected effort valid for the current model's advertised levels (data-driven, no hardcoded list)
+// Prefers the current value, then "high" (both providers expose it), then the highest available
+function clampEffort(current: string, levels: readonly string[]): string {
+	if (levels.length === 0 || levels.includes(current)) return current;
+	if (levels.includes("high")) return "high";
+	return levels[levels.length - 1] ?? current;
+}
+
+function titleCase(value: string): string {
+	return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function FieldLabel({ label, description }: { readonly label: string; readonly description?: string }): ReactElement {
+	// ? Always render the description line (blank when absent) so paired grid cells stay the same height and their inputs align
 	return (
 		<div>
 			<span className="text-sm font-medium">{label}</span>
-			{description !== undefined && <p className="text-xs text-muted-foreground">{description}</p>}
+			<p className="text-xs text-muted-foreground">{description ?? " "}</p>
 		</div>
 	);
 }
 
 export function SettingsPanel(): ReactElement {
 	const { data: settings, isLoading } = useSettings();
+
+	// Gate on load so the inner form always has defined settings - lets `values` stay non-optional
+	if (isLoading || settings === undefined) {
+		return (
+			<div className="flex items-center justify-center py-12">
+				<Loader2 className="size-6 animate-spin text-muted-foreground" />
+			</div>
+		);
+	}
+
+	return <SettingsForm settings={settings} />;
+}
+
+function SettingsForm({ settings }: { readonly settings: Settings }): ReactElement {
+	const { data: catalog } = useModelCatalog();
 	const updateSettings = useUpdateSettings();
 	const { data: indexStatus } = useIndexStatus();
 	const triggerIndex = useTriggerIndex();
+	const inputClass = cn("w-full rounded-md border border-input bg-background px-3 py-2 text-sm", "focus:outline-none focus:ring-2 focus:ring-ring");
+
+	// RHF's `values` keeps the form synced to server state (and resets dirty after each save)
+	// settings is guaranteed defined here, so values never falls back to undefined
+	const values = useMemo<SettingsFormData>(
+		() => ({
+			default_llm_provider: settings.default_llm_provider,
+			default_model: settings.default_model,
+			temperature: settings.temperature,
+			max_tokens: settings.max_tokens,
+			default_effort: settings.default_effort,
+			anthropic_cheap_model: settings.anthropic_cheap_model,
+			openai_cheap_model: settings.openai_cheap_model,
+			ollama_cheap_model: settings.ollama_cheap_model,
+			default_edition: settings.default_edition,
+			top_k_results: settings.top_k_results,
+			similarity_threshold: settings.similarity_threshold,
+			retrieval_mode: settings.retrieval_mode,
+			enable_tool_use: settings.enable_tool_use,
+			enable_extended_thinking: settings.enable_extended_thinking,
+		}),
+		[settings]
+	);
 
 	const {
 		register,
 		handleSubmit,
-		reset,
+		control,
+		getValues,
+		setValue,
 		formState: { isDirty },
 	} = useForm<SettingsFormData>({
 		resolver: zodResolver(settingsSchema),
+		values,
 	});
 
-	// Populate form when settings load
-	useEffect(() => {
-		if (settings !== undefined) {
-			reset({
-				default_llm_provider: settings.default_llm_provider,
-				default_model: settings.default_model,
-				temperature: settings.temperature,
-				max_tokens: settings.max_tokens,
-				default_edition: settings.default_edition,
-				top_k_results: settings.top_k_results,
-				similarity_threshold: settings.similarity_threshold,
-				retrieval_mode: settings.retrieval_mode,
-				enable_tool_use: settings.enable_tool_use,
-				enable_extended_thinking: settings.enable_extended_thinking,
-				thinking_budget_tokens: settings.thinking_budget_tokens,
-			});
-		}
-	}, [settings, reset]);
+	// * Reactive reads via useWatch (Compiler-compatible, unlike watch())
+	// All lists come from the backend catalog
+	const provider = useWatch({ control, name: "default_llm_provider" });
+	const model = useWatch({ control, name: "default_model" });
+	const effort = useWatch({ control, name: "default_effort" });
+	const anthropicCheap = useWatch({ control, name: "anthropic_cheap_model" });
+	const openaiCheap = useWatch({ control, name: "openai_cheap_model" });
+
+	// ? Remember the last model chosen per provider so switching providers restores the right one (Ollama keeps its own id, not Anthropic's)
+	const [lastModelByProvider, setLastModelByProvider] = useState<Record<string, string>>({
+		[settings.default_llm_provider]: settings.default_model,
+	});
+
+	const optionsByProvider = useCallback(
+		(prov: string): readonly ModelOption[] => {
+			if (catalog === undefined) return [];
+			if (prov === "anthropic") return catalog.anthropic;
+			if (prov === "openai") return catalog.openai;
+			if (prov === "ollama") return catalog.ollama;
+			return [];
+		},
+		[catalog]
+	);
+
+	const providerOptions = useMemo(() => optionsByProvider(provider), [optionsByProvider, provider]);
+	const effortLevels = useMemo(() => providerOptions.find((o) => o.id === model)?.effort ?? [], [providerOptions, model]);
+
+	const handleProviderChange = useCallback(
+		(e: ChangeEvent<HTMLSelectElement>) => {
+			const nextProvider = e.target.value;
+			const opts = optionsByProvider(nextProvider);
+			// Restore the last model used for this provider, else the first curated option, else blank (Ollama with no history)
+			const nextModel = lastModelByProvider[nextProvider] ?? opts[0]?.id ?? "";
+			setValue("default_model", nextModel, { shouldDirty: true, shouldValidate: true });
+			const levels = opts.find((o) => o.id === nextModel)?.effort ?? [];
+			setValue("default_effort", clampEffort(getValues("default_effort"), levels), { shouldDirty: true });
+		},
+		[optionsByProvider, setValue, getValues, lastModelByProvider]
+	);
+
+	const handleModelChange = useCallback(
+		(next: string) => {
+			setLastModelByProvider((prev) => ({ ...prev, [getValues("default_llm_provider")]: next }));
+			setValue("default_model", next, { shouldDirty: true, shouldValidate: true });
+			const levels = providerOptions.find((o) => o.id === next)?.effort ?? [];
+			setValue("default_effort", clampEffort(getValues("default_effort"), levels), { shouldDirty: true });
+		},
+		[providerOptions, setValue, getValues]
+	);
 
 	const onSubmit = useCallback(
 		(data: SettingsFormData) => {
@@ -103,16 +193,6 @@ export function SettingsPanel(): ReactElement {
 		});
 	}, [triggerIndex]);
 
-	if (isLoading) {
-		return (
-			<div className="flex items-center justify-center py-12">
-				<Loader2 className="size-6 animate-spin text-muted-foreground" />
-			</div>
-		);
-	}
-
-	const inputClass = cn("w-full rounded-md border border-input bg-background px-3 py-2 text-sm", "focus:outline-none focus:ring-2 focus:ring-ring");
-
 	return (
 		<form
 			onSubmit={(e) => {
@@ -126,7 +206,7 @@ export function SettingsPanel(): ReactElement {
 				<div className="grid gap-4 sm:grid-cols-2">
 					<div className="space-y-2">
 						<FieldLabel label="Provider" />
-						<select {...register("default_llm_provider")} className={inputClass}>
+						<select {...register("default_llm_provider", { onChange: handleProviderChange })} className={inputClass}>
 							{PROVIDERS.map((p) => (
 								<option key={p.value} value={p.value}>
 									{p.label}
@@ -136,8 +216,8 @@ export function SettingsPanel(): ReactElement {
 					</div>
 
 					<div className="space-y-2">
-						<FieldLabel label="Model" description="Provider-specific model identifier" />
-						<input {...register("default_model")} className={inputClass} />
+						<FieldLabel label="Model" description="Pick from the provider's models or choose Custom..." />
+						<ModelSelect value={model} onChange={handleModelChange} options={providerOptions} placeholder="Enter model id" />
 					</div>
 
 					<div className="space-y-2">
@@ -147,8 +227,26 @@ export function SettingsPanel(): ReactElement {
 
 					<div className="space-y-2">
 						<FieldLabel label="Max Tokens" />
-						<input {...register("max_tokens", { valueAsNumber: true })} type="number" min="1" max="8000" className={inputClass} />
+						<input {...register("max_tokens", { valueAsNumber: true })} type="number" min="1" max="32000" className={inputClass} />
 					</div>
+
+					{effortLevels.length > 0 && (
+						<div className="space-y-2">
+							<FieldLabel label="Reasoning effort" description="Deeper reasoning uses more tokens" />
+							<select
+								value={clampEffort(effort, effortLevels)}
+								onChange={(e) => {
+									setValue("default_effort", e.target.value, { shouldDirty: true });
+								}}
+								className={inputClass}>
+								{effortLevels.map((level) => (
+									<option key={level} value={level}>
+										{titleCase(level)}
+									</option>
+								))}
+							</select>
+						</div>
+					)}
 				</div>
 
 				<div className="flex items-center gap-3">
@@ -163,6 +261,38 @@ export function SettingsPanel(): ReactElement {
 					<label htmlFor="tool-use" className="text-sm">
 						Enable tool use
 					</label>
+				</div>
+
+				<div className="space-y-3">
+					<FieldLabel label="Cheap models" description="Lighter models for auxiliary tasks like title generation. Used per provider." />
+					<div className="grid gap-4 sm:grid-cols-3">
+						<div className="space-y-2">
+							<span className="text-xs text-muted-foreground">Anthropic</span>
+							<ModelSelect
+								value={anthropicCheap}
+								onChange={(v) => {
+									setValue("anthropic_cheap_model", v, { shouldDirty: true });
+								}}
+								options={optionsByProvider("anthropic")}
+								placeholder="claude-haiku-4-5"
+							/>
+						</div>
+						<div className="space-y-2">
+							<span className="text-xs text-muted-foreground">OpenAI</span>
+							<ModelSelect
+								value={openaiCheap}
+								onChange={(v) => {
+									setValue("openai_cheap_model", v, { shouldDirty: true });
+								}}
+								options={optionsByProvider("openai")}
+								placeholder="gpt-5.4-mini"
+							/>
+						</div>
+						<div className="space-y-2">
+							<span className="text-xs text-muted-foreground">Ollama</span>
+							<input {...register("ollama_cheap_model")} className={inputClass} placeholder="(falls back to model)" />
+						</div>
+					</div>
 				</div>
 			</section>
 

@@ -5,6 +5,10 @@ export interface Settings {
 	readonly default_model: string;
 	readonly temperature: number;
 	readonly max_tokens: number;
+	readonly default_effort: string;
+	readonly anthropic_cheap_model: string;
+	readonly openai_cheap_model: string;
+	readonly ollama_cheap_model: string;
 	readonly default_edition: string;
 	readonly top_k_results: number;
 	readonly similarity_threshold: number;
@@ -18,7 +22,6 @@ export interface Settings {
 	readonly max_tool_calls: number;
 	readonly tool_search_limit: number;
 	readonly enable_extended_thinking: boolean;
-	readonly thinking_budget_tokens: number;
 	readonly system_prompt: string | null;
 }
 
@@ -28,6 +31,24 @@ export interface TierBudget {
 }
 
 export type SettingsUpdate = Partial<Settings>;
+
+/**
+ * One selectable model from the backend catalog
+ * Shapes are intentionally open (`string`, `string[]`) so new models or effort tiers flow through from the
+ * backend with no frontend changes - never enumerate these as literal unions
+ */
+export interface ModelOption {
+	readonly id: string;
+	readonly label: string;
+	readonly effort: readonly string[];
+}
+
+/** Per-provider model lists from `GET /api/models`. Empty list = free-form input. */
+export interface ModelCatalog {
+	readonly anthropic: readonly ModelOption[];
+	readonly openai: readonly ModelOption[];
+	readonly ollama: readonly ModelOption[];
+}
 
 export interface IndexStatus {
 	readonly collection_name: string;

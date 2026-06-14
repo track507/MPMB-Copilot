@@ -24,6 +24,7 @@ class SettingsUpdate(BaseModel):
     default_model: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
+    default_effort: str | None = None
     anthropic_cheap_model: str | None = None
     openai_cheap_model: str | None = None
     ollama_cheap_model: str | None = None
@@ -42,7 +43,6 @@ class SettingsUpdate(BaseModel):
     anthropic_cache_instructions: bool | None = None
     anthropic_cache_messages: bool | None = None
     enable_extended_thinking: bool | None = None
-    thinking_budget_tokens: int | None = None
     system_prompt: str | None = None
     source_catalog_path: Optional[str] = None
     source_catalog_enabled: Optional[bool] = None
@@ -57,6 +57,26 @@ class SettingsUpdate(BaseModel):
 async def get_settings() -> dict[str, Any]:
     """Return the current hot-reloadable settings as a dict."""
     return settings.to_dict()
+
+
+@router.get(
+    "/models",
+    status_code=status.HTTP_200_OK,
+    summary="List selectable models per provider",
+)
+async def get_models() -> dict[str, list[dict[str, Any]]]:
+    """
+    Return `{provider: [{id, label, effort}]}` for the settings model pickers
+
+    `effort` is the list of supported effort levels (empty = no effort control)
+    Anthropic/OpenAI are fetched live with a curated fallback
+    Ollama is empty (free-form)
+
+    Never raises - falls back to curated lists on any failure
+    """
+    from app.core.model_catalog import get_model_catalog
+
+    return await get_model_catalog()
 
 
 @router.patch(

@@ -43,13 +43,12 @@ class Config(BaseSettings):
 
     # LLM Provider Settings
     default_llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
-    default_model: str = "claude-sonnet-4-20250514"
-    max_tokens: int = 4000
+    default_model: str = "claude-sonnet-4-6"
+    max_tokens: int = 8000
     temperature: float = 0.2
     enable_tool_use: bool = False
     max_tool_calls: int = 0
     enable_extended_thinking: bool = False
-    thinking_budget_tokens: int = 4000
 
     # API Keys
     anthropic_api_key: Optional[str] = None

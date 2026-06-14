@@ -5,12 +5,12 @@ from app.settings import Settings
 
 def test_cheap_model_for_anthropic_default():
     s = Settings(default_llm_provider="anthropic")
-    assert s.cheap_model_for() == "claude-haiku-4-5-20251001"
+    assert s.cheap_model_for() == "claude-haiku-4-5"
 
 
 def test_cheap_model_for_openai_default():
     s = Settings(default_llm_provider="openai")
-    assert s.cheap_model_for() == "gpt-4o-mini"
+    assert s.cheap_model_for() == "gpt-5.4-mini"
 
 
 def test_cheap_model_for_ollama_falls_back_to_default_model_when_blank():
