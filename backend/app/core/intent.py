@@ -196,8 +196,8 @@ class _CentroidStore:
             if not examples:
                 continue
 
-            # Embed all examples for this intent
-            embeddings = embedding_service.embed_texts(examples)
+            # Embed all examples for this intent (query prefix, to match the query embedding they're compared against)
+            embeddings = [embedding_service.embed_query(example) for example in examples]
 
             # Compute mean (centroid)
             dim = len(embeddings[0])

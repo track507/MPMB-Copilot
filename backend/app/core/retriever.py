@@ -282,9 +282,8 @@ class Retriever:
 
     # * Helpers
     def _embed_query(self, query: str) -> list[float]:
-        """Embed the query text using the configured embedding service."""
-        embeddings = embedding_service.embed_texts([query])
-        return embeddings[0]
+        """Embed the query text using the configured embedding service (applies any query prefix)."""
+        return embedding_service.embed_query(query)
 
     def _build_filters(
         self,

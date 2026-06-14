@@ -129,7 +129,7 @@ class IndexingService:
             batch_end = min(batch_start + EMBED_BATCH_SIZE, len(texts))
             batch_texts = texts[batch_start:batch_end]
 
-            batch_embeddings = embedding_service.embed_texts(batch_texts)
+            batch_embeddings = embedding_service.embed_documents(batch_texts)
             all_embeddings.extend(batch_embeddings)
 
             progress = 0.1 + 0.5 * (batch_end / len(texts))

@@ -42,3 +42,13 @@ def test_settings_update_schema_accepts_cheap_model_fields():
     body = SettingsUpdate(anthropic_cheap_model="claude-haiku-pinned")
     updates = body.model_dump(exclude_none=True)
     assert updates == {"anthropic_cheap_model": "claude-haiku-pinned"}
+
+
+def test_embedding_dim_derives_from_catalog():
+    s = Settings(embedding_provider="fastembed", embedding_model="intfloat/multilingual-e5-large")
+    assert s.embedding_dim() == 1024
+
+
+def test_embedding_dim_defaults_for_unknown_model():
+    s = Settings(embedding_provider="fastembed", embedding_model="nope")
+    assert s.embedding_dim() == 384

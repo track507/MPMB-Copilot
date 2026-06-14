@@ -68,6 +68,11 @@ class Settings:
     Applied only when the selected model supports it; ignored otherwise. 'high' is the provider default
     """
 
+    # Embedding selection (the model that builds and queries the vector index)
+    # Dimension is derived from the catalog via embedding_dim(), not stored here
+    embedding_provider: str = "fastembed"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+
     # Cheap model aliases for non-generation tasks (titles, future routing)
     # Per provider so switching default_llm_provider keeps a sensible cheap model
     anthropic_cheap_model: str = "claude-haiku-4-5"
@@ -179,6 +184,8 @@ class Settings:
             default_model=getattr(config_module, "default_model", cls.default_model),
             temperature=getattr(config_module, "temperature", cls.temperature),
             max_tokens=getattr(config_module, "max_tokens", cls.max_tokens),
+            embedding_provider=getattr(config_module, "embedding_provider", cls.embedding_provider),
+            embedding_model=getattr(config_module, "embedding_model", cls.embedding_model),
             default_edition=getattr(config_module, "default_edition", cls.default_edition),
             top_k_results=getattr(config_module, "top_k_results", cls.top_k_results),
             similarity_threshold=getattr(config_module, "similarity_threshold", cls.similarity_threshold),
@@ -272,6 +279,12 @@ class Settings:
         Excludes internal fields (prefixed with `_`).
         """
         return {f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values() if not f.name.startswith("_")}
+
+    def embedding_dim(self) -> int:
+        """Dimension of the selected embedding model, sourced from the catalog"""
+        from app.core.embedding_catalog import dimension_for
+
+        return dimension_for(self.embedding_provider, self.embedding_model)
 
     def cheap_model_for(self, provider: Optional[str] = None) -> str:
         """Resolve the cheap-model alias for the given (or default) provider."""

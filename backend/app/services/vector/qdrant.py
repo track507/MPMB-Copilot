@@ -78,9 +78,12 @@ class QdrantStore:
     """
 
     def __init__(self):
+        from app.settings import settings
+
         self.client: Optional[QdrantClient] = None
         self.collection_name = config.qdrant_collection
-        self.dense_dim = config.embedding_dimension
+        # Dimension follows the selected embedding model (catalog-derived); refreshed in _ensure_collection
+        self.dense_dim = settings.embedding_dim()
         self._sparse_model = None  # Lazy-loaded BM25 model
         self._connected = False
         self._warned_missing_source_tier = False
@@ -178,6 +181,10 @@ class QdrantStore:
 
     async def _ensure_collection(self):
         """Create the collection if it doesn't exist."""
+        from app.settings import settings
+
+        # ! Refresh so a reindex after an embedding-model change creates the collection with the new dimension
+        self.dense_dim = settings.embedding_dim()
         try:
             self.client.get_collection(self.collection_name)
             logger.info(f"Collection '{self.collection_name}' exists")

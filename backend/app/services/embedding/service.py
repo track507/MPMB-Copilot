@@ -16,10 +16,13 @@ class EmbeddingProvider(Protocol):
 @dataclass
 class EmbeddingService:
     provider: Optional[EmbeddingProvider] = None
+    _selection: Optional[tuple[str, str]] = None
 
     def _load_provider(self) -> EmbeddingProvider:
-        backend = config.embedding_provider  # "openai" | "ollama" | "fastembed" | "sbert"
-        model = config.embedding_model
+        from app.settings import settings
+
+        backend = settings.embedding_provider  # "openai" | "ollama" | "fastembed" | "sbert"
+        model = settings.embedding_model
 
         if backend == "openai":
             from app.services.embedding.providers.openai import OpenAIEmbeddingProvider
@@ -44,24 +47,55 @@ class EmbeddingService:
 
         raise ValueError(f"Unknown embedding backend: {backend}")
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
-        if self.provider is None:
-            self.provider = self._load_provider()
-            logger.info(f"Embedding backend loaded: {type(self.provider).__name__} ({config.embedding_model})")
+    def _ensure_provider(self) -> EmbeddingProvider:
+        from app.settings import settings
 
-        return self.provider.embed_texts(texts)
+        # ? Reload when the embedding selection changes so a settings switch takes effect
+        selection = (settings.embedding_provider, settings.embedding_model)
+        if self.provider is None or self._selection != selection:
+            self.provider = self._load_provider()
+            self._selection = selection
+            logger.info(f"Embedding backend loaded: {type(self.provider).__name__} ({selection[1]})")
+        return self.provider
+
+    def _prefixes(self) -> tuple[str, str]:
+        # (query_prefix, doc_prefix) for the current model; empty for non-prefix models
+        from app.core.embedding_catalog import get_entry
+        from app.settings import settings
+
+        entry = get_entry(settings.embedding_provider, settings.embedding_model)
+        return (entry.query_prefix, entry.doc_prefix) if entry else ("", "")
+
+    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        # Raw passthrough (no prefixes); kept for internal callers
+        return self._ensure_provider().embed_texts(texts)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        _, doc_prefix = self._prefixes()
+        payload = [doc_prefix + t for t in texts] if doc_prefix else texts
+        return self._ensure_provider().embed_texts(payload)
+
+    def embed_query(self, text: str) -> List[float]:
+        query_prefix, _ = self._prefixes()
+        payload = query_prefix + text if query_prefix else text
+        return self._ensure_provider().embed_texts([payload])[0]
 
     def identity(self) -> dict:
         """
-        Identity of the embedding model that builds and queries the index
+        Identity of the selected embedding model
 
-        Sourced from config (no model load) so it is cheap to call at startup and in the health check
+        Provider/model come from settings, dimension from the catalog (no model load) so it is cheap to call at startup and in the health check
         Used to stamp the vector collection and to detect a model change that would invalidate stored vectors
         """
+        from app.core.embedding_catalog import dimension_for
+        from app.settings import settings
+
+        provider = settings.embedding_provider
+        model = settings.embedding_model
         return {
-            "provider": config.embedding_provider,
-            "model": config.embedding_model,
-            "dimension": config.embedding_dimension,
+            "provider": provider,
+            "model": model,
+            "dimension": dimension_for(provider, model),
         }
 
 
