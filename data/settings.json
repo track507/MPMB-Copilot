@@ -1,5 +1,52 @@
 {
-	"enable_tool_use": true,
-	"enable_extended_thinking": false,
-	"thinking_budget_tokens": 4000
+  "default_llm_provider": "anthropic",
+  "default_model": "claude-sonnet-4-6",
+  "temperature": 0.2,
+  "max_tokens": 4000,
+  "default_effort": "high",
+  "anthropic_cheap_model": "claude-haiku-4-5-20251001",
+  "openai_cheap_model": "gpt-5.4-mini",
+  "ollama_cheap_model": "",
+  "default_edition": "2014",
+  "top_k_results": 8,
+  "similarity_threshold": 0.5,
+  "context_window_size": 8000,
+  "retrieval_mode": "dual",
+  "intent_method": "hybrid",
+  "intent_confidence_threshold": 0.35,
+  "intent_confidence_margin": 0.05,
+  "tier_budgets": {
+    "how_to": {
+      "authoritative": 3,
+      "examples": 5
+    },
+    "generate": {
+      "authoritative": 2,
+      "examples": 5
+    },
+    "debug": {
+      "authoritative": 4,
+      "examples": 2
+    },
+    "lookup": {
+      "authoritative": 4,
+      "examples": 2
+    }
+  },
+  "enable_tool_use": true,
+  "max_tool_calls": 0,
+  "source_catalog_path": null,
+  "source_catalog_enabled": true,
+  "inject_catalog_context": true,
+  "tool_search_limit": 5,
+  "tool_grep_max_matches": 50,
+  "tool_max_file_bytes": 1048576,
+  "tool_read_max_lines": 2000,
+  "tool_grep_pattern_max_len": 500,
+  "tool_grep_file_timeout_sec": 1.0,
+  "anthropic_cache_instructions": true,
+  "anthropic_cache_messages": true,
+  "anthropic_cache_tool_definitions": true,
+  "enable_extended_thinking": false,
+  "system_prompt": null
 }
