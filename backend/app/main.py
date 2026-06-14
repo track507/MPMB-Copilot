@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=config.app_name,
     description="RAG-powered assistant for MPMB character sheet development using Adobe Acrobat JavaScript (ES5)",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
     docs_url=f"{config.api_prefix}/docs",
     redoc_url=f"{config.api_prefix}/redoc",
@@ -125,7 +125,7 @@ async def root():
     """Root endpoint - redirect to docs"""
     return {
         "name": config.app_name,
-        "version": "0.1.0",
+        "version": "0.2.0",
         "status": "running",
         "docs": f"{config.api_prefix}/docs",
         "health": f"{config.api_prefix}/health",

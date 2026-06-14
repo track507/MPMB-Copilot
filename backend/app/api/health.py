@@ -122,7 +122,7 @@ async def health_check():
     return HealthResponse(
         status=overall_status,
         environment=config.environment,
-        version="0.1.0",
+        version="0.2.0",
         timestamp=datetime.now(timezone.utc),
         services={
             "database": {"status": db_status.status, "message": db_status.message or ""},

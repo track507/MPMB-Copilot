@@ -24,9 +24,10 @@ Most of these have now shipped. See [What's next](#whats-next) for the live road
     - This does not seem like a lot, but may I remind you, that your entire chat history will be sent to the LLM so it is compounding and an exponential savings on money when this is enabled.
         - Why send the entire chat history to the LLM? This is how most chat agents currently work. This is no different especially the fact that I have allowed people to pick their poison of choice. If you switch from Anthropic to OpenAI, it's a simple configuration change and it just works as intended.
 - ✅ **Per-provider cheap model configuration** — used for title generation today, routing later
-- ⬜ **Per-tool pill text on the frontend**
-    - More descriptive design for all the tool the LLM is using
-- ◐ **Editable titles** — auto-titles already defer when a manual title exists; the in-sidebar rename UI is still pending
+- ✅ **Per-tool pill text on the frontend** — the streaming pill now names the tool the LLM is using
+- ✅ **Editable titles** — in-sidebar rename shipped; auto-titles defer once you rename a chat
+- ✅ **Provider-driven model + effort selection** — Settings has dynamic model and reasoning-effort dropdowns sourced from the backend, no hardcoded lists
+- ✅ **Embedding-model identity** — the index records its provider/model/dimension and refuses mismatched queries
 - ⬜ I have to add screen shots of it actually working. I'll do that after my in-depth analysis of the MPMB repo and source repo's.
 
 <!-- TODO: add screenshot of chat UI showing a tool-use response with the "Used 2 tools" footer expanded -->
@@ -186,17 +187,19 @@ npm run check:full         # also runs mypy + tsc
 - ✅ **Session persistence** — every conversation is saved to Postgres, lives at its own `/chat/<id>` route, and resumes on refresh
 - ✅ **Auto-titled sessions** — the first message generates a 4-6 word title via a cheap per-provider model, and auto-titling steps aside once you rename a chat
 - ✅ **Inline citations** — answers reference the source files (path + line range) the model pulled from via its tools
+- ✅ **Model + effort picker** — Settings dropdowns list each provider's models and their supported reasoning-effort levels, fetched live from the backend (no hardcoded lists), with a Custom escape hatch and free-form Ollama input
+- ✅ **Embedding-model identity** — the index is stamped with its embedding provider/model/dimension; on a mismatch the app refuses dense queries and reports "re-index required" instead of returning garbage similarities
 
 ## What's next
 
-Read-only tool use **and** the agentic-retrieval migration (no forced pre-retrieval, `mpmb_search`, prompt caching, per-provider cheap models, `/chat/:id` routes) are shipped. Ahead:
+The agentic-retrieval migration (no forced pre-retrieval, `mpmb_search`, prompt caching, per-provider cheap models, `/chat/:id` routes), the provider-driven model + effort picker, and embedding-model identity stamping are all shipped. Ahead:
 
-- **Frontend polish** — per-tool pill text and an in-sidebar rename UI for sessions
 - **Upload API** — endpoints for the existing session/global upload roots, so the model can read user-supplied source bundles (e.g. private homebrew collections)
 - **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs
-- **Embedding-model identity** — stamp provider/model/dimension into the index and refuse mismatched queries; a prerequisite for swapping to a multilingual embedding model and for adding cloud embedding providers
+- **Multilingual / cloud embeddings** — now that the index records its embedding identity, swap bge for a multilingual model or a cloud provider without silently corrupting similarities
 - **Evaluation harness** — retrieval + answer benchmarks across beginner how-to, lookup, generation, and debugging
 - **Write tools** — apply edits or generate diff patches against MPMB source files
+- **History compaction** — a reliability safety net near the model's context limit (not a cost optimization, given prompt caching)
 - **Tooling** — migrate the npm workspace to pnpm
 
 ## Troubleshooting
