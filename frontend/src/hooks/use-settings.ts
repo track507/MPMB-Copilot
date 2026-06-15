@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { Settings, SettingsUpdate, IndexStatus, HealthResponse, ModelCatalog } from "@/types/settings";
+import type { Settings, SettingsUpdate, IndexStatus, HealthResponse, ModelCatalog, EmbeddingCatalog } from "@/types/settings";
 
 const SETTINGS_KEY = ["settings"] as const;
 const MODELS_KEY = ["models"] as const;
+const EMBEDDING_MODELS_KEY = ["embedding-models"] as const;
 const INDEX_KEY = ["index-status"] as const;
 const HEALTH_KEY = ["health"] as const;
 
@@ -19,6 +20,14 @@ export function useModelCatalog(): ReturnType<typeof useQuery<ModelCatalog>> {
 		queryKey: MODELS_KEY,
 		queryFn: async () => apiClient.get<ModelCatalog>("/api/models"),
 		// ? Model lists change rarely and the backend caches for an hour; keep it fresh-ish across mounts
+		staleTime: 30 * 60_000,
+	});
+}
+
+export function useEmbeddingCatalog(): ReturnType<typeof useQuery<EmbeddingCatalog>> {
+	return useQuery({
+		queryKey: EMBEDDING_MODELS_KEY,
+		queryFn: async () => apiClient.get<EmbeddingCatalog>("/api/embedding-models"),
 		staleTime: 30 * 60_000,
 	});
 }

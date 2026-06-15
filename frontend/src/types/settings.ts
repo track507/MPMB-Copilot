@@ -6,6 +6,8 @@ export interface Settings {
 	readonly temperature: number;
 	readonly max_tokens: number;
 	readonly default_effort: string;
+	readonly embedding_provider: string;
+	readonly embedding_model: string;
 	readonly anthropic_cheap_model: string;
 	readonly openai_cheap_model: string;
 	readonly ollama_cheap_model: string;
@@ -48,6 +50,23 @@ export interface ModelCatalog {
 	readonly anthropic: readonly ModelOption[];
 	readonly openai: readonly ModelOption[];
 	readonly ollama: readonly ModelOption[];
+}
+
+/** One selectable embedding model from `GET /api/embedding-models` */
+export interface EmbeddingModelOption {
+	readonly provider: string;
+	readonly id: string;
+	readonly label: string;
+	readonly dimension: number;
+	readonly multilingual: boolean;
+	readonly pinned: boolean;
+	readonly status: "ready" | "needs_key" | "installable";
+}
+
+/** Embedding catalog + current selection from `GET /api/embedding-models` */
+export interface EmbeddingCatalog {
+	readonly models: readonly EmbeddingModelOption[];
+	readonly current: { readonly provider: string; readonly model: string };
 }
 
 export interface IndexStatus {

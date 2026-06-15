@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useModelCatalog } from "@/hooks/use-settings";
+import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useModelCatalog, useEmbeddingCatalog } from "@/hooks/use-settings";
 import { ModelSelect } from "@/components/settings/model-select";
 import { cn } from "@/lib/utils";
 import type { ChangeEvent, ReactElement } from "react";
@@ -16,6 +16,8 @@ const settingsSchema = z.object({
 	temperature: z.number().min(0).max(2),
 	max_tokens: z.number().int().min(1).max(32000),
 	default_effort: z.string(),
+	embedding_provider: z.string(),
+	embedding_model: z.string(),
 	anthropic_cheap_model: z.string(),
 	openai_cheap_model: z.string(),
 	ollama_cheap_model: z.string(),
@@ -79,6 +81,7 @@ export function SettingsPanel(): ReactElement {
 
 function SettingsForm({ settings }: { readonly settings: Settings }): ReactElement {
 	const { data: catalog } = useModelCatalog();
+	const { data: embeddingCatalog } = useEmbeddingCatalog();
 	const updateSettings = useUpdateSettings();
 	const { data: indexStatus } = useIndexStatus();
 	const triggerIndex = useTriggerIndex();
@@ -93,6 +96,8 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 			temperature: settings.temperature,
 			max_tokens: settings.max_tokens,
 			default_effort: settings.default_effort,
+			embedding_provider: settings.embedding_provider,
+			embedding_model: settings.embedding_model,
 			anthropic_cheap_model: settings.anthropic_cheap_model,
 			openai_cheap_model: settings.openai_cheap_model,
 			ollama_cheap_model: settings.ollama_cheap_model,
@@ -125,6 +130,8 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 	const effort = useWatch({ control, name: "default_effort" });
 	const anthropicCheap = useWatch({ control, name: "anthropic_cheap_model" });
 	const openaiCheap = useWatch({ control, name: "openai_cheap_model" });
+	const embeddingModel = useWatch({ control, name: "embedding_model" });
+	const embeddingChanged = embeddingCatalog !== undefined && embeddingCatalog.current.model !== embeddingModel;
 
 	// ? Remember the last model chosen per provider so switching providers restores the right one (Ollama keeps its own id, not Anthropic's)
 	const [lastModelByProvider, setLastModelByProvider] = useState<Record<string, string>>({
@@ -360,6 +367,32 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 						{triggerIndex.isPending ? "Starting..." : "Re-index"}
 					</button>
 				</div>
+
+				{embeddingCatalog && (
+					<div className="space-y-2">
+						<FieldLabel label="Embedding model" description="Builds and queries the vector index" />
+						<select
+							value={embeddingModel}
+							onChange={(e) => {
+								const next = embeddingCatalog.models.find((m) => m.id === e.target.value);
+								if (next) {
+									setValue("embedding_provider", next.provider, { shouldDirty: true });
+									setValue("embedding_model", next.id, { shouldDirty: true });
+								}
+							}}
+							className={inputClass}>
+							{embeddingCatalog.models.map((m) => (
+								<option key={`${m.provider}:${m.id}`} value={m.id} disabled={m.status !== "ready"}>
+									{m.label} - {m.dimension}d{m.multilingual ? " - multilingual" : ""}
+									{m.status === "needs_key" ? " (set API key)" : m.status === "installable" ? " (install via add-ons)" : ""}
+								</option>
+							))}
+						</select>
+						{embeddingChanged && (
+							<p className="text-xs text-amber-600">Changing the embedding model requires a full re-index (use Re-index above).</p>
+						)}
+					</div>
+				)}
 			</section>
 
 			{/* Save */}
