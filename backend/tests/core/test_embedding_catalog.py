@@ -40,3 +40,24 @@ def test_e5_carries_prefixes():
     assert e.query_prefix == "query: "
     assert e.doc_prefix == "passage: "
     assert e.multilingual is True
+
+
+@pytest.mark.asyncio
+async def test_embedding_models_endpoint_serializes(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api import settings as settings_api
+    from app.config import config
+
+    monkeypatch.setattr(config, "openai_api_key", None)
+    app = FastAPI()
+    app.include_router(settings_api.router)
+    client = TestClient(app)
+
+    resp = client.get("/embedding-models")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "models" in body and "current" in body
+    entry = body["models"][0]
+    assert set(entry) == {"provider", "id", "label", "dimension", "multilingual", "pinned", "status"}

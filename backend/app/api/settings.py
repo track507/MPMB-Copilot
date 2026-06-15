@@ -25,6 +25,8 @@ class SettingsUpdate(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     default_effort: str | None = None
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
     anthropic_cheap_model: str | None = None
     openai_cheap_model: str | None = None
     ollama_cheap_model: str | None = None
@@ -77,6 +79,26 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
     from app.core.model_catalog import get_model_catalog
 
     return await get_model_catalog()
+
+
+@router.get(
+    "/embedding-models",
+    status_code=status.HTTP_200_OK,
+    summary="List selectable embedding models with availability",
+)
+async def get_embedding_models() -> dict[str, Any]:
+    """
+    Return `{models: [...], current: {provider, model}}` for the embedding picker
+
+    Each model carries its fixed dimension, multilingual flag, pinned flag, and a status of ready/needs_key/installable
+    Never raise
+    """
+    from app.core.embedding_catalog import serialize
+
+    return {
+        "models": serialize(),
+        "current": {"provider": settings.embedding_provider, "model": settings.embedding_model},
+    }
 
 
 @router.patch(
