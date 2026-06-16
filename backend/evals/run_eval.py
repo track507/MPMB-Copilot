@@ -1,10 +1,11 @@
-"""Run the retrieval eval against the live index. Requires Qdrant + an index.
+"""
+Run the retrieval eval against the live index
+Requires Qdrant + an index
 
 Usage:
     cd backend && uv run --no-sync python -m evals.run_eval
 
-Treat the first run as a baseline: per-case MISS results are signal (a retrieval gap
-or a too-strict expectation), not test failures.
+Treat the first run as a baseline: per-case MISS results are signal (a retrieval gap or a too-strict expectation), not test failures
 """
 
 import asyncio
