@@ -527,8 +527,9 @@ __marimo__/
 .claude/
 .copilot/
 
-# Don't ignore the lib under frontend
+# Don't ignore the lib under frontend or tests
 !frontend/src/lib/
+!frontend/test/lib/
 # Runtime logs
 /logs/
 /backend/logs/
