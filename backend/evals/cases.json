@@ -1,0 +1,10 @@
+[
+	{ "id": "spell-lookup", "query": "how does the fireball spell work", "expect": { "object_type": "SpellsList" } },
+	{ "id": "race-2024", "query": "how do I make a 2024 race", "edition": "2024", "expect": { "object_type": "RaceList", "edition": "2024" } },
+	{ "id": "feat-syntax", "query": "how do I define a feat", "expect": { "object_type": "FeatsList" } },
+	{ "id": "subclass", "query": "how do I add a subclass to a class", "expect": { "source_substring": "subclass" } },
+	{ "id": "magic-item", "query": "create a homebrew magic item", "expect": { "object_type": "MagicItemsList" } },
+	{ "id": "required-sheet-version", "query": "what does RequiredSheetVersion do", "expect": { "source_substring": "_functions" } },
+	{ "id": "weapon-mastery-2024", "query": "how do weapon masteries work in 2024", "edition": "2024", "expect": { "source_substring": "WeaponMasteries" } },
+	{ "id": "source-book", "query": "how do I register a new source book", "expect": { "object_type": "SourceList" } }
+]
