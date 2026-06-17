@@ -32,11 +32,14 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
             - name: Setup Node.js
               uses: actions/setup-node@v6
               with:
                   node-version-file: ".nvmrc"
-                  cache: npm
+                  cache: pnpm
 
             - name: Setup Python
               uses: actions/setup-python@v6
@@ -50,16 +53,16 @@ jobs:
                   cache-dependency-glob: backend/uv.lock
 
             - name: Install Node dependencies
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Sync backend dependencies
               run: uv sync --project backend --group dev --frozen
 
             - name: Run tests
-              run: npm run test
+              run: pnpm run test
 
             - name: Build frontend
-              run: npm run frontend:build
+              run: pnpm run frontend:build
 
             - name: Create CI env file for Compose validation
               run: cp .env.example .env
@@ -172,7 +175,7 @@ jobs:
                   - cloned MPMB source repositories under data/
                   - generated Qdrant/Postgres/runtime data
 
-                  Run scripts/setup.ps1 or npm run setup to clone/update the external MPMB sources.
+                  Run scripts/setup.ps1 or pnpm run setup to clone/update the external MPMB sources.
                   INFO
 
                   {

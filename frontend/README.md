@@ -56,14 +56,14 @@ frontend/
 
 ## Running
 
-The frontend normally launches via the root `npm run dev` (concurrent with the backend). Standalone:
+The frontend normally launches via the root `pnpm run dev` (concurrent with the backend). Standalone:
 
 ```bash
 # from repo root
-npm run dev:frontend
+pnpm run dev:frontend
 
 # or directly
-cd frontend && npm run dev
+cd frontend && pnpm run dev
 ```
 
 Dev server runs at <http://localhost:5173/>. Vite proxies `/api/*` → `http://127.0.0.1:8000` so there's no CORS to worry about.
@@ -71,9 +71,9 @@ Dev server runs at <http://localhost:5173/>. Vite proxies `/api/*` → `http://1
 ## Build
 
 ```bash
-npm run build              # production build → frontend/dist/
-npm run preview            # serve the built bundle locally
-npm run typecheck          # tsc --noEmit (also runs as part of root npm run check:full)
+pnpm run build              # production build → frontend/dist/
+pnpm run preview            # serve the built bundle locally
+pnpm run typecheck          # tsc --noEmit (also runs as part of root pnpm run check:full)
 ```
 
 There is **no production Dockerfile yet** for the frontend — the published-image story is not implemented. For now, run dev locally or build static assets and serve them however you like.
@@ -140,13 +140,13 @@ sequenceDiagram
 ESLint flat config in `eslint.config.mjs` (extends from the shared root config). Prettier handles formatting. Both run via the root `lint-staged` hook on commit.
 
 ```bash
-npm run lint               # frontend lint via root config (eslint --config frontend/eslint.config.mjs)
-npm run typecheck          # tsc --noEmit
+pnpm run lint               # frontend lint via root config (eslint --config frontend/eslint.config.mjs)
+pnpm run typecheck          # tsc --noEmit
 ```
 
 ## Common gotchas
 
 - **`localhost` proxy fails on Windows.** Vite's proxy target is pinned to `http://127.0.0.1:8000` in `vite.config.ts` to avoid Node's IPv6 happy-eyeballs timeout. Don't change it back to `localhost`.
-- **HMR doesn't pick up new `.env` values.** Frontend `.env` (if you add one) is read at Vite startup; restart `npm run dev:frontend` after edits.
+- **HMR doesn't pick up new `.env` values.** Frontend `.env` (if you add one) is read at Vite startup; restart `pnpm run dev:frontend` after edits.
 - **TanStack devtools** are mounted in `main.tsx` in dev mode — use them to inspect cache state when something looks wrong.
 - **Zustand store doesn't persist.** State is fully transient; resets on page reload. Server state is the source of truth — TanStack refetches handle reload correctness.

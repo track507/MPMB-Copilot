@@ -15,4 +15,5 @@ node_modules/
 scripts/analyze/reports/
 coverage/
 htmlcov/
+pnpm-lock.yaml
 *.md

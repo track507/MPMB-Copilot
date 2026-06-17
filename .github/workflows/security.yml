@@ -78,11 +78,14 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v6
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
             - name: Setup Node.js
               uses: actions/setup-node@v6
               with:
                   node-version-file: ".nvmrc"
-                  cache: npm
+                  cache: pnpm
 
             - name: Setup Python
               uses: actions/setup-python@v6
@@ -96,13 +99,13 @@ jobs:
                   cache-dependency-glob: backend/uv.lock
 
             - name: Install Node dependencies
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Create security report directory
               run: mkdir -p security-reports
 
-            - name: npm audit
-              run: npm audit --workspaces --include-workspace-root --audit-level=moderate --json > security-reports/npm-audit.json || true
+            - name: pnpm audit
+              run: pnpm audit --audit-level moderate --json > security-reports/npm-audit.json || true
 
             - name: Export backend requirements
               run: uv export --project backend --all-groups --all-extras --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt

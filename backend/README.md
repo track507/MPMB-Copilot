@@ -53,13 +53,13 @@ backend/
 
 ## Running
 
-The backend is normally launched via the root `npm run dev` (which starts both backend and frontend with concurrent logging). Two other ways:
+The backend is normally launched via the root `pnpm run dev` (which starts both backend and frontend with concurrent logging). Two other ways:
 
 **Local dev only:**
 
 ```bash
 # from repo root, NOT from backend/
-npm run dev:backend
+pnpm run dev:backend
 ```
 
 Runs the port pre-flight check, then `uvicorn app.main:app --reload --reload-dir backend/app --host 0.0.0.0 --port 8000`.
@@ -67,10 +67,10 @@ Runs the port pre-flight check, then `uvicorn app.main:app --reload --reload-dir
 **Inside Docker:**
 
 ```bash
-npm run docker:up
+pnpm run docker:up
 ```
 
-Brings up postgres, qdrant, and `mpmb-backend` (image built from `docker/backend/Dockerfile`). The local `npm run dev:backend` and the Docker backend can't both run — they fight for port 8000. Pick one mode.
+Brings up postgres, qdrant, and `mpmb-backend` (image built from `docker/backend/Dockerfile`). The local `pnpm run dev:backend` and the Docker backend can't both run — they fight for port 8000. Pick one mode.
 
 ## Environment
 
@@ -104,8 +104,8 @@ uv run pytest                  # 70 tests, ~2 seconds
 uv run pytest -v               # verbose
 uv run pytest tests/core/      # subset
 
-# from root (uses uv via npm)
-npm test
+# from root (uses uv via pnpm)
+pnpm test
 ```
 
 Tests don't hit Postgres or Qdrant — the retriever and DB are mocked at the boundary.
@@ -144,4 +144,4 @@ data: [DONE]
 - **Embedding model first-load takes ~30s.** First chat request after backend boot triggers FastEmbed to download `BAAI/bge-small-en-v1.5`. Cached after that.
 - **Reload watches only `backend/app/`.** Editing files outside that path won't trigger uvicorn reload — that's intentional, otherwise `node_modules` churn would restart the backend constantly.
 - **`POSTGRES_PASSWORD` only sticks at first volume init.** Changing it in `.env` later does nothing unless you nuke the volume or `ALTER USER` inside the container.
-- **Stale uvicorn zombies.** If `npm run dev:backend` errors with "port 8000 in use," kill stray Python processes (see root README troubleshooting).
+- **Stale uvicorn zombies.** If `pnpm run dev:backend` errors with "port 8000 in use," kill stray Python processes (see root README troubleshooting).

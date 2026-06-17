@@ -29,11 +29,14 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v6
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
             - name: Setup Node.js
               uses: actions/setup-node@v6
               with:
                   node-version-file: ".nvmrc"
-                  cache: npm
+                  cache: pnpm
 
             - name: Setup Python
               uses: actions/setup-python@v6
@@ -47,13 +50,13 @@ jobs:
                   cache-dependency-glob: backend/uv.lock
 
             - name: Install Node dependencies
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Sync backend dependencies
               run: uv sync --project backend --group dev --frozen
 
             - name: Run repository checks
-              run: npm run check
+              run: pnpm run check
 
     typecheck:
         name: Typecheck
@@ -66,11 +69,14 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v6
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
             - name: Setup Node.js
               uses: actions/setup-node@v6
               with:
                   node-version-file: ".nvmrc"
-                  cache: npm
+                  cache: pnpm
 
             - name: Setup Python
               uses: actions/setup-python@v6
@@ -84,13 +90,13 @@ jobs:
                   cache-dependency-glob: backend/uv.lock
 
             - name: Install Node dependencies
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Sync backend dependencies
               run: uv sync --project backend --group dev --frozen
 
             - name: Run type checks
-              run: npm run typecheck
+              run: pnpm run typecheck
 
     frontend-build:
         name: Frontend Production Build
@@ -101,17 +107,20 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v6
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v6
+
             - name: Setup Node.js
               uses: actions/setup-node@v6
               with:
                   node-version-file: ".nvmrc"
-                  cache: npm
+                  cache: pnpm
 
             - name: Install Node dependencies
-              run: npm ci
+              run: pnpm install --frozen-lockfile
 
             - name: Build frontend
-              run: npm run frontend:build
+              run: pnpm run frontend:build
 
             - name: Upload frontend dist artifact
               uses: actions/upload-artifact@v7

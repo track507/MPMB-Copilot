@@ -87,7 +87,7 @@ try {
 	await fetchJson(`${BASE_URL}/api/health`);
 } catch (error) {
 	console.error(`Backend is not reachable at ${BASE_URL}: ${error.message}.`);
-	console.error("Start the backend first: npm run docker:up");
+	console.error("Start the backend first: pnpm run docker:up");
 	process.exit(1);
 }
 

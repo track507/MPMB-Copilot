@@ -56,6 +56,7 @@ You don't need to be a programmer, but you do need to be comfortable installing 
 - **An LLM API key.** Anthropic Claude is the default and works best (the system prompt is tuned for it). OpenAI and Ollama also work. You pay the LLM provider directly for tokens — this project doesn't host anything.
 - **Docker Desktop** (Windows/macOS) or Docker Engine (Linux) — for Postgres and the vector database.
 - **Node.js 24+** and **Python 3.13+** — for running the chunker, the backend, and the web UI.
+- **`pnpm`** — Node package manager (the repo is a pnpm workspace, pinned via `packageManager`). [Install instructions](https://pnpm.io/installation).
 - **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/).
 - **About 5 GB of disk** for the chunked source files, vector index, and Docker images.
 
@@ -65,17 +66,17 @@ You don't need to be a programmer, but you do need to be comfortable installing 
 # 1. Clone this repo and the MPMB sources it indexes
 git clone https://github.com/track507/MPMB-Copilot.git
 cd MPMB-Copilot
-npm install
+pnpm install
 
 # 2. Add your API key
 cp .env.example .env
 # edit .env, set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 
 # 3. One-shot setup: clones MPMB sources, chunks them, starts Postgres+Qdrant, indexes
-npm run setup:all
+pnpm run setup:all
 
 # 4. Run the dev servers (frontend + backend)
-npm run dev
+pnpm run dev
 ```
 
 Open <http://localhost:5173/> and start chatting.
@@ -87,8 +88,8 @@ The first time you start the backend it will take ~30 seconds to load the embedd
 MPMB ships updates frequently. To pull the latest source, re-chunk, and re-index:
 
 ```bash
-npm run setup     # git pull on the source repos + re-run the chunker
-npm run index     # rebuild the vector index (backend must be running)
+pnpm run setup     # git pull on the source repos + re-run the chunker
+pnpm run index     # rebuild the vector index (backend must be running)
 ```
 
 ## How it's built
@@ -153,26 +154,26 @@ MPMB-Copilot/
 
 ```bash
 # First-time setup
-npm run setup              # clone/update MPMB source repos + chunk
-npm run setup:docker       # build & start postgres + qdrant + backend containers
-npm run setup:index        # wait for backend health then index Qdrant
-npm run setup:all          # all three above, in order
+pnpm run setup              # clone/update MPMB source repos + chunk
+pnpm run setup:docker       # build & start postgres + qdrant + backend containers
+pnpm run setup:index        # wait for backend health then index Qdrant
+pnpm run setup:all          # all three above, in order
 
 # Day-to-day
-npm run dev                # frontend + backend in parallel (recommended)
-npm run dev:backend        # backend only (FastAPI on :8000)
-npm run dev:frontend       # frontend only (Vite on :5173)
-npm run docker:up          # start postgres + qdrant
-npm run docker:down        # stop containers
+pnpm run dev                # frontend + backend in parallel (recommended)
+pnpm run dev:backend        # backend only (FastAPI on :8000)
+pnpm run dev:frontend       # frontend only (Vite on :5173)
+pnpm run docker:up          # start postgres + qdrant
+pnpm run docker:down        # stop containers
 
 # Refreshing content
-npm run chunk              # re-chunk after pulling MPMB sources
-npm run index              # re-upsert chunks into Qdrant
-npm run index:if-empty     # only index if Qdrant collection is empty
+pnpm run chunk              # re-chunk after pulling MPMB sources
+pnpm run index              # re-upsert chunks into Qdrant
+pnpm run index:if-empty     # only index if Qdrant collection is empty
 
 # Quality gates
-npm run check              # lint + format check + tests
-npm run check:full         # also runs mypy + tsc
+pnpm run check              # lint + format check + tests
+pnpm run check:full         # also runs mypy + tsc
 ```
 
 ## Features
@@ -200,7 +201,6 @@ The agentic-retrieval migration (no forced pre-retrieval, `mpmb_search`, prompt 
 - **Evaluation harness** — retrieval + answer benchmarks across beginner how-to, lookup, generation, and debugging
 - **Write tools** — apply edits or generate diff patches against MPMB source files
 - **History compaction** — a reliability safety net near the model's context limit (not a cost optimization, given prompt caching)
-- **Tooling** — migrate the npm workspace to pnpm
 
 ## Troubleshooting
 
@@ -214,8 +214,8 @@ Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
 **Page refresh takes 30+ seconds.**
 You're hitting the IPv6 fallback timeout. Make sure your `.env` uses `127.0.0.1` (not `localhost`) for `POSTGRES_HOST` and `QDRANT_HOST`.
 
-**`npm run index` says "Backend is not reachable".**
-Backend isn't running. Start it with `npm run dev` (recommended) or `npm run docker:up && npm run setup:index`.
+**`pnpm run index` says "Backend is not reachable".**
+Backend isn't running. Start it with `pnpm run dev` (recommended) or `pnpm run docker:up && pnpm run setup:index`.
 
 **Qdrant container is unhealthy in `docker compose ps`.**
 On Windows this is a known false positive — Qdrant is responsive but its healthcheck script can't run. Confirm with `curl http://127.0.0.1:6333/`.

@@ -8,7 +8,7 @@
  *
  * Usage:
  *   node scripts/dev.mjs        # start everything
- *   npm run dev:full             # same, via npm script
+ *   pnpm run dev:full            # same, via pnpm script
  */
 
 import { execSync, spawn } from "node:child_process";
@@ -101,10 +101,10 @@ await Promise.all([waitForPort(POSTGRES_HOST, POSTGRES_PORT, "Postgres"), waitFo
 log("All services ready. Starting dev servers...\n");
 
 // Spawn with env overrides for localhost.
-// Use npm run dev which already has the concurrently command configured.
+// Use pnpm run dev which already has the concurrently command configured.
 const child =
 	process.platform === "win32"
-		? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npm", "run", "dev"], {
+		? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "pnpm", "run", "dev"], {
 				stdio: "inherit",
 				env: {
 					...process.env,
@@ -114,7 +114,7 @@ const child =
 					QDRANT_PORT,
 				},
 			})
-		: spawn("npm", ["run", "dev"], {
+		: spawn("pnpm", ["run", "dev"], {
 				stdio: "inherit",
 				env: {
 					...process.env,
