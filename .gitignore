@@ -13,6 +13,9 @@ data/uploads/
 !data/.gitkeep
 !data/README.md
 
+# Generated eval candidates (feedback exporter output)
+backend/evals/candidates.json
+
 # * Visual Studio .gitignore
 
 ## Ignore Visual Studio temporary files, build results, and
