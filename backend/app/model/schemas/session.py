@@ -1,7 +1,7 @@
 """Pydantic models for session API endpoints."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -23,6 +23,24 @@ class SessionUpdate(BaseModel):
     meta_data: Optional[dict[str, Any]] = None
 
 
+class FeedbackUpsert(BaseModel):
+    """Request body to set feedback on an assistant message."""
+
+    rating: Literal["up", "down"]
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class FeedbackOut(BaseModel):
+    """Feedback in API responses."""
+
+    rating: str
+    note: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class MessageOut(BaseModel):
     """Message in API responses."""
 
@@ -40,6 +58,7 @@ class MessageOut(BaseModel):
     latency_ms: Optional[int] = None
     stop_reason: Optional[str] = None
     meta_data: dict[str, Any] = Field(default_factory=dict)
+    feedback: Optional[FeedbackOut] = None
 
     model_config = {"from_attributes": True}
 

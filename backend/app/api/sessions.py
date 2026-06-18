@@ -18,6 +18,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.logger import get_logger
 from app.model.schemas.session import (
+    FeedbackOut,
+    FeedbackUpsert,
     MessageOut,
     SessionCreate,
     SessionDetailOut,
@@ -25,7 +27,7 @@ from app.model.schemas.session import (
     SessionOut,
     SessionUpdate,
 )
-from app.services.db import db, session_service
+from app.services.db import db, feedback_service, session_service
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -225,3 +227,41 @@ async def get_messages(
         offset=offset,
     )
     return [MessageOut.model_validate(m) for m in messages]
+
+
+# * Set/replace feedback on an assistant message
+@router.put(
+    "/sessions/{session_id}/messages/{message_id}/feedback",
+    response_model=FeedbackOut,
+    summary="Set Message Feedback",
+    description="Upsert thumbs up/down (+ optional note) on an assistant message",
+)
+async def set_message_feedback(session_id: UUID, message_id: UUID, body: FeedbackUpsert):
+    _require_db()
+
+    message = await feedback_service.get_message(message_id)
+    if message is None or message.session_id != session_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Message {message_id} not found",
+        )
+    if message.role != "assistant":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback is only allowed on assistant messages",
+        )
+
+    feedback = await feedback_service.set_feedback(message_id, body.rating, body.note)
+    return FeedbackOut.model_validate(feedback)
+
+
+# * Clear feedback
+@router.delete(
+    "/sessions/{session_id}/messages/{message_id}/feedback",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Clear Message Feedback",
+    description="Remove any feedback vote on a message",
+)
+async def clear_message_feedback(session_id: UUID, message_id: UUID):
+    _require_db()
+    await feedback_service.clear_feedback(message_id)

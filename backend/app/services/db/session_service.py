@@ -74,7 +74,7 @@ class SessionService:
         async with db.session() as s:
             result = await s.execute(
                 select(Session)
-                .options(selectinload(Session.messages))
+                .options(selectinload(Session.messages).selectinload(Message.feedback))
                 .where(
                     Session.id == session_id,
                     Session.deleted_at.is_(None),
