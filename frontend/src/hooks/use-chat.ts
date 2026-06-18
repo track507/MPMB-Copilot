@@ -46,6 +46,7 @@ function primeSessionDetail(queryClient: ReturnType<typeof useQueryClient>, sess
 				latency_ms: null,
 				stop_reason: null,
 				meta_data: {},
+				feedback: null,
 			},
 			{
 				id: `optimistic-assistant-${sessionId}`,
@@ -62,6 +63,7 @@ function primeSessionDetail(queryClient: ReturnType<typeof useQueryClient>, sess
 				latency_ms: null,
 				stop_reason: null,
 				meta_data: metadata?.tools ? { tools: metadata.tools } : {},
+				feedback: null,
 			},
 		],
 	};
