@@ -167,6 +167,12 @@ class Message(Base):
     # Relationships
     session = relationship("Session", back_populates="messages")
     retrievals = relationship("MessageRetrieval", back_populates="message", cascade="all, delete-orphan")
+    feedback = relationship(
+        "MessageFeedback",
+        back_populates="message",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class File(Base):
@@ -320,3 +326,33 @@ class MessageRetrieval(Base):
     # Relationships
     message = relationship("Message", back_populates="retrievals")
     document_chunk = relationship("DocumentChunk", back_populates="message_retrievals")
+
+
+class MessageFeedback(Base):
+    """
+    User feedback (thumbs up/down + optional note) on an assistant message
+
+    One row per message (message_id is unique): re-voting updates the row, clearing the vote deletes it
+    CASCADE-deleted with the parent message
+    """
+
+    __tablename__ = "message_feedback"
+
+    id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
+    message_id: UUID = Column(
+        PGUUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    rating: str = Column(String(10), nullable=False)  # 'up' or 'down'
+    note: Optional[str] = Column(Text, nullable=True)
+    created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    message = relationship("Message", back_populates="feedback")

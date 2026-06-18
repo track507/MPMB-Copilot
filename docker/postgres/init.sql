@@ -231,6 +231,24 @@ CREATE TRIGGER messages_sequence_trigger
     FOR EACH ROW
     EXECUTE FUNCTION set_message_sequence_number();
 
+-- Message Feedback Table (thumbs up/down + optional note on assistant answers)
+CREATE TABLE IF NOT EXISTS message_feedback (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    message_id UUID NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
+    rating VARCHAR(10) NOT NULL CHECK (rating IN ('up', 'down')),
+    note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_feedback_message ON message_feedback(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_feedback_rating ON message_feedback(rating);
+
+CREATE TRIGGER message_feedback_updated_at_trigger
+    BEFORE UPDATE ON message_feedback
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Grant permissions
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO mpmb_user;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO mpmb_user;
