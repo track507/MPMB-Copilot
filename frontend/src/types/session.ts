@@ -1,6 +1,13 @@
 /** Mirrors backend SessionOut / SessionDetailOut / MessageOut schemas. */
 import type { ChatToolsMetadata, ChatUsage } from "@/types/chat";
 
+export interface MessageFeedback {
+	readonly rating: "up" | "down";
+	readonly note: string | null;
+	readonly created_at: string;
+	readonly updated_at: string;
+}
+
 export interface MessageMetadata {
 	readonly retrieval?: Record<string, unknown> | null;
 	readonly timing?: Record<string, unknown>;
@@ -58,6 +65,7 @@ export interface Message {
 	readonly latency_ms: number | null;
 	readonly stop_reason: string | null;
 	readonly meta_data: MessageMetadata;
+	readonly feedback: MessageFeedback | null;
 }
 
 export interface MessageContent {

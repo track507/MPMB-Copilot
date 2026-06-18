@@ -2,11 +2,13 @@ import { Bot, TriangleAlert, User, Zap } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./code-block";
+import { MessageActions } from "./message-actions";
 import { SourceCitation } from "./source-citation";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import type { ChatToolsMetadata, SourceReference } from "@/types/chat";
+import type { MessageFeedback } from "@/types/session";
 
 interface MessageBubbleProps {
 	readonly role: "user" | "assistant" | "system";
@@ -16,11 +18,25 @@ interface MessageBubbleProps {
 	readonly tools?: ChatToolsMetadata | undefined;
 	readonly cacheReadTokens?: number | undefined;
 	readonly stopReason?: string | undefined;
+	readonly messageId?: string | undefined;
+	readonly sessionId?: string | undefined;
+	readonly feedback?: MessageFeedback | null | undefined;
 }
 
 type CodeProps = ComponentPropsWithoutRef<"code">;
 
-export function MessageBubble({ role, content, sources, isStreaming = false, tools, cacheReadTokens, stopReason }: MessageBubbleProps): ReactElement {
+export function MessageBubble({
+	role,
+	content,
+	sources,
+	isStreaming = false,
+	tools,
+	cacheReadTokens,
+	stopReason,
+	messageId,
+	sessionId,
+	feedback,
+}: MessageBubbleProps): ReactElement {
 	const isUser = role === "user";
 
 	return (
@@ -126,6 +142,10 @@ export function MessageBubble({ role, content, sources, isStreaming = false, too
 							))}
 						</ul>
 					</details>
+				)}
+
+				{!isUser && !isStreaming && messageId !== undefined && sessionId !== undefined && (
+					<MessageActions sessionId={sessionId} messageId={messageId} content={content} feedback={feedback ?? null} />
 				)}
 			</div>
 		</div>

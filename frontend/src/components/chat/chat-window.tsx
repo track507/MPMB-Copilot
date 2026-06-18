@@ -128,6 +128,9 @@ export function ChatWindow(): ReactElement {
 					{serverMessages.map((msg) => (
 						<MessageBubble
 							key={msg.id}
+							messageId={msg.id}
+							sessionId={msg.session_id}
+							feedback={msg.feedback}
 							role={msg.role}
 							content={msg.content.text}
 							sources={msg.content.sources}
