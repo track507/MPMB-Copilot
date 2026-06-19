@@ -9,8 +9,8 @@ Override with environment variables:
     MPMB_SOURCE_DIR=./my/mpmb python scripts/chunk_mpmb.py
 """
 
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add backend/ to path so we can import app modules
@@ -46,7 +46,7 @@ def main() -> int:
         return 1
 
     chunker = MPMBChunker()
-    result = chunker.run_all(source_configs=source_configs, output_dir=output_dir)
+    result = chunker.run_all(output_dir=output_dir)
 
     print("\n" + "=" * 70)
     print("RESULTS")
