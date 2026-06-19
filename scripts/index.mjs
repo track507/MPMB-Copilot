@@ -43,7 +43,8 @@ async function fetchJson(url, init = {}) {
 async function waitForTask(taskId) {
 	let lastLine = "";
 
-	for (let attempt = 0; attempt < 240; attempt += 1) {
+	// Capped embedding threads trade CPU for wall-clock, so a full reindex can run well past 12 min
+	for (let attempt = 0; attempt < 600; attempt += 1) {
 		const task = await fetchJson(`${BASE_URL}/api/tasks/${taskId}`);
 		const pct = typeof task.progress === "number" ? ` (${Math.round(task.progress * 100)}%)` : "";
 		const msg = task.progress_message ? ` ${task.progress_message}` : "";

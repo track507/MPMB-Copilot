@@ -87,6 +87,16 @@ class Config(BaseSettings):
     embedding_provider: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384
+    # ! Cap ONNX threads during embedding so indexing does not saturate the machine (0 = auto: half the cores)
+    embedding_threads: int = 0
+
+    @property
+    def resolved_embedding_threads(self) -> int:
+        import os
+
+        if self.embedding_threads > 0:
+            return self.embedding_threads
+        return max(1, (os.cpu_count() or 4) // 2)
 
     # RAG Parameters
     chunk_size: int = 1000
