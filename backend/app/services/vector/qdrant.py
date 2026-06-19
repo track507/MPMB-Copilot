@@ -91,6 +91,9 @@ class QdrantStore:
         self._identity_status = "unknown"  # unknown | ok | missing | mismatch
         self._identity_message = ""
         self._has_identity_point = False
+        # ? Chunker-version staleness is soft: stale chunks still serve queries, unlike a broken embedding stamp
+        self._chunks_stale = False
+        self._chunks_message = ""
 
     # BM25 sparse vector generation (lazy-loaded)
 
@@ -99,7 +102,9 @@ class QdrantStore:
         if self._sparse_model is None:
             from fastembed import SparseTextEmbedding
 
-            self._sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+            self._sparse_model = SparseTextEmbedding(
+                model_name="Qdrant/bm25", threads=config.resolved_embedding_threads
+            )
             logger.info("Loaded BM25 sparse embedding model (Qdrant/bm25)")
         return self._sparse_model
 
@@ -364,10 +369,29 @@ class QdrantStore:
         self._identity_status = "ok"
         self._identity_message = f"{current['provider']}/{current['model']} ({current['dimension']}d)"
 
+        # ? soft: a chunker-version mismatch means stale chunks (still queryable), not broken vectors
+        from app.core.chunker import CHUNKER_VERSION
+
+        stored_chunker = stored.get("chunker_version")
+        if stored_chunker is not None and stored_chunker != CHUNKER_VERSION:
+            self._chunks_stale = True
+            self._chunks_message = f"chunks built by chunker v{stored_chunker}; current is v{CHUNKER_VERSION} - re-chunk + re-index recommended"
+        else:
+            self._chunks_stale = False
+            self._chunks_message = ""
+
     def _raise_if_identity_mismatch(self) -> None:
         """Refuse dense/hybrid queries when stored vectors were built by a different model"""
         if self._identity_status == "mismatch":
             raise RuntimeError(f"Embedding model mismatch: {self._identity_message}")
+
+    @property
+    def chunks_stale(self) -> bool:
+        return self._chunks_stale
+
+    @property
+    def chunks_message(self) -> str:
+        return self._chunks_message
 
     async def identity_health(self) -> tuple[str, str]:
         """Map the cached embedding-stamp state to a (health_status, message) pair"""
@@ -376,6 +400,8 @@ class QdrantStore:
         if self._identity_status == "missing":
             return "ready", self._identity_message
         message = self._identity_message or f"{config.embedding_provider}/{config.embedding_model}"
+        if self._chunks_stale:
+            message = f"{message}; {self._chunks_message}"
         return "ready", message
 
     # * Upsert

@@ -112,6 +112,34 @@ async def test_identity_health_mapping():
 
 
 @pytest.mark.asyncio
+async def test_chunker_version_match_is_not_stale():
+    from app.core.chunker import CHUNKER_VERSION
+    from app.services.embedding.service import embedding_service
+
+    stored = {**embedding_service.identity(), "chunker_version": CHUNKER_VERSION}
+    store = _store(_FakeClient(count=10, stored=stored))
+    await store._load_identity_state()
+    assert store._identity_status == "ok"
+    assert store.chunks_stale is False
+
+
+@pytest.mark.asyncio
+async def test_chunker_version_mismatch_is_soft_stale():
+    from app.services.embedding.service import embedding_service
+
+    stored = {**embedding_service.identity(), "chunker_version": "0-old"}
+    store = _store(_FakeClient(count=10, stored=stored))
+    await store._load_identity_state()
+    # ! embedding matches -> queries still serve; only chunks are flagged stale
+    assert store._identity_status == "ok"
+    assert store.chunks_stale is True
+    store._raise_if_identity_mismatch()  # must not raise
+    status, message = await store.identity_health()
+    assert status == "ready"
+    assert "re-chunk" in message
+
+
+@pytest.mark.asyncio
 async def test_write_identity_upserts_reserved_point():
     client = _FakeClient()
     store = _store(client)

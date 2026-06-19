@@ -24,6 +24,7 @@
 		"index": "node ./scripts/index.mjs --force",
 		"index:if-empty": "node ./scripts/index.mjs",
 		"analyze": "pnpm --filter @mpmb/analyze run analyze",
+		"rechunk": "pnpm run analyze && pnpm run chunk && pnpm run index",
 		"lint": "pnpm run lint:js && pnpm run lint:ts && pnpm run lint:py && pnpm run lint:md",
 		"lint:js": "eslint .",
 		"lint:js:fix": "eslint . --fix",
