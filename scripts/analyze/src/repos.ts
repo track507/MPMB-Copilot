@@ -11,9 +11,17 @@ export const REPOS: RepoConfig[] = [
 
 export const SKIP_NAMES = new Set(["gulpfile.js", "package.json", "package-lock.json"]);
 
+// ! minified WotC bundles (all_WotC_*.min.js) are one giant line re-declaring every WotC object - parsing them duplicates the real per-book sources
+export function isSkippedFile(rel: string): boolean {
+	const name = path.basename(rel);
+	if (SKIP_NAMES.has(name)) return true;
+	if (name.endsWith(".min.js")) return true;
+	return /^all_WotC_.*\.js$/.test(name);
+}
+
 export async function listFiles(repoDir: string): Promise<string[]> {
 	const rels = await fg("**/*.js", { cwd: repoDir, dot: false, absolute: false });
-	return rels.filter((rel) => !SKIP_NAMES.has(path.basename(rel))).sort();
+	return rels.filter((rel) => !isSkippedFile(rel)).sort();
 }
 
 export function gitProvenance(repoDir: string): RepoProvenance {

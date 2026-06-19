@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { REPOS, SKIP_NAMES } from "../src/repos";
+import { isSkippedFile, REPOS, SKIP_NAMES } from "../src/repos";
 
 describe("repos", () => {
 	it("repo keys match the catalog contract Literal", () => {
@@ -14,5 +14,13 @@ describe("repos", () => {
 	it("skips build files", () => {
 		expect(SKIP_NAMES.has("gulpfile.js")).toBe(true);
 		expect(SKIP_NAMES.has("package.json")).toBe(true);
+	});
+
+	it("skips minified WotC bundles but keeps real sources", () => {
+		expect(isSkippedFile("WotC material/all_WotC_pub+UA.min.js")).toBe(true);
+		expect(isSkippedFile("some/path/vendor.min.js")).toBe(true);
+		expect(isSkippedFile("gulpfile.js")).toBe(true);
+		expect(isSkippedFile("WotC material/pub_20181120_GGtR.js")).toBe(false);
+		expect(isSkippedFile("_functions/Functions1.js")).toBe(false);
 	});
 });
