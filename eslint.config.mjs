@@ -23,6 +23,7 @@ export default [
 			"htmlcov/**",
 			"logs/**",
 			"node_modules/**",
+			"scripts/analyze/**",
 		],
 	},
 

@@ -1,0 +1,24 @@
+{
+	"name": "@mpmb/analyze",
+	"private": true,
+	"type": "module",
+	"version": "0.1.0",
+	"scripts": {
+		"analyze": "tsx src/index.ts",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"acorn": "^8.17.0",
+		"acorn-walk": "^8.3.5",
+		"eslint-scope": "^9.1.2",
+		"fast-glob": "^3.3.3"
+	},
+	"devDependencies": {
+		"@types/estree": "^1.0.9",
+		"@types/node": "^25.9.3",
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.8"
+	}
+}

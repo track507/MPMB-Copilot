@@ -1,61 +1,67 @@
-# MPMB Repo Analyzer
+# MPMB Repo Analyzer (`@mpmb/analyze`)
 
-Standalone analysis tool for the three local source trees:
+AST-based static analysis of the three MPMB source trees:
 
-- `data/mpmb_source`
-- `data/mpmb_source_2024`
-- `data/imports_source`
+- `data/mpmb_source` (2014)
+- `data/mpmb_source_2024` (2024)
+- `data/imports_source` (community imports)
 
-The analyzer builds a static HTML report plus a JSON sidecar. It is intentionally separate from the backend so parser/indexing ideas can be explored without coupling the experiment to application code. The report is also meant to be useful for maintainers and contributors who need a readable map of where source truth lives.
+It parses each file with a real JavaScript AST (acorn + eslint-scope) and emits a JSON
+catalog the backend `source_catalog` consumes, plus additive discovery sections. It
+replaces the previous regex/brace-scanner Python tool: the registry / function / `Add*`
+surface is **discovered**, not hardcoded.
 
 ## Run
 
-From the repository root:
+From the repo root:
 
-```powershell
-uv --cache-dir .uv-cache --project scripts/analyze run python scripts/analyze/analyze-repos.py
+```bash
+pnpm run analyze        # alias for: pnpm --filter @mpmb/analyze run analyze
 ```
 
-Default output:
+Output: `scripts/analyze/reports/mpmb-analysis.json` (gitignored).
 
-- `scripts/analyze/reports/mpmb-analysis.html`
-- `scripts/analyze/reports/mpmb-analysis.json`
+Optional host-symbol input (Subsystem B, later):
+`pnpm --filter @mpmb/analyze run analyze --host-symbols path/to/host.json` reclassifies
+undeclared references into host-API vs leak-candidate.
 
-Custom output:
+## Two passes
 
-```powershell
-uv --cache-dir .uv-cache --project scripts/analyze run python scripts/analyze/analyze-repos.py --output docs/mpmb-analysis.html
+1. **Engine pass** - parses the engine repos (`mpmb_source*`) into the authoritative API
+   surface: declared global registries, every function, and the derived `Add*` set.
+2. **Corpus pass** - parses all three trees and, per file, extracts registry writes
+   (`bracket_object` / `dot_object` / `function_object`, incl. nested `classes.primary`),
+   all functions, all call/reference sites, and implicit-global leaks (via eslint-scope),
+   classifying each against the engine surface (+ optional host symbols).
+
+## Output
+
+Preserves the backend `CatalogModel` v1 contract (`objects`, `add_calls`, `functions`,
+`coverage_metrics`, `repos`, `source_keys`, `required_versions`) plus additive sections:
+`discovered_registries`, `all_functions`, `references`, `implicit_globals`,
+`undeclared_seed` (the host-symbol seed for the future PDF/Acrobat host-surface
+discovery), and `parse_errors`.
+
+`coverage_metrics` are AST health signals: `parse_errors`, `leak_candidates`,
+`undeclared_references`, `undiscovered_registries`.
+
+## Dev
+
+```bash
+pnpm --filter @mpmb/analyze run test         # vitest
+pnpm --filter @mpmb/analyze run typecheck    # tsc --noEmit
 ```
 
-## What It Scans
+TypeScript, run via `tsx` (no build step). The analyzer is exempt from the repo's
+Acrobat-ES5 eslint config (it is Node tooling); quality is `tsc` + prettier.
+`src/migrate-diff.ts` is a one-time migration aid that diffs a new report against a saved
+`reports/old-baseline.json` snapshot.
 
-- Git provenance for each source checkout.
-- File inventory and skip/indexable status.
-- MPMB registry assignments such as `SpellsList["key"] = { ... }`.
-- Dot assignments such as `SourceList.P = { ... }`.
-- Function-valued registry assignments such as `MagicItemsList["absorbing tattoo"] = function () { ... }`.
-- `Add*` declaration calls such as `AddSubClass(...)`.
-- Engine function declarations and assignment-style functions.
-- Source-key references.
-- Required sheet version calls.
-- Syntax template marker and attribute counts.
-- Identifier and string references for discovered functions and key symbols.
-- Per-file source intelligence: object counts, source keys, required versions, functions, Add calls, reference samples, and line context.
-- Coverage metrics for current parser baselines versus robust scanner targets.
-- Graph views for spell registry relationships, AddSubClass calls, 2024-specific feature surfaces, source-key provenance, and high-volume file dependencies.
+## Notes
 
-## Report Features
-
-- Interactive file explorer with repo -> folder -> file navigation.
-- File detail panel with copyable `rg` commands for exact local reproduction.
-- Function reference explorer with definitions separated from references.
-- Fan-in file counts and approximate fan-out symbol counts.
-- Reference confidence badges: function call, object registry access, exact identifier, likely dynamic reference, and string mention.
-- Coverage dashboard for parser gaps and disagreements such as indented object assignments, apostrophe keys, legacy-only object hits, function-valued registry entries, assignment-style functions, and syntax marker gaps.
-- Accuracy-mode roadmap showing how a future AST backend can act as a third checker against the baseline regex and brace-aware scanner.
-
-## Accuracy Notes
-
-This version uses a brace-aware scanner and a lightweight JavaScript lexer that skips comments for identifier references while also recording exact symbol mentions inside strings. That is much more reliable than plain grep, but it is not a formal JavaScript AST. The package is structured so a future parser backend, such as tree-sitter or Acorn output, can become a second/third opinion while keeping the report contract.
-
-Git provenance is decoded as UTF-8 explicitly so repository subjects with bullets or other Unicode characters render correctly on Windows.
+- acorn requires valid JS; files with syntax errors (e.g. the `additional content syntax/`
+  templates) are recorded in `parse_errors` and skipped, not crashed on.
+- Discovery is broad: it surfaces every global object container the engine declares;
+  `undiscovered_registries` flags corpus writes to globals the engine did not declare.
+- Subsystems B (PDF/Acrobat host-surface discovery) and C (ESLint static validator) are
+  separate; see `docs/superpowers/specs/2026-06-18-ast-analyzer-design.md`.
