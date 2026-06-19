@@ -28,6 +28,18 @@ def test_cheap_model_for_unknown_provider_uses_default_model():
     assert s.cheap_model_for(provider="mystery") == "some-model"
 
 
+def test_rerank_defaults_and_roundtrip():
+    s = Settings()
+    assert s.rerank_enabled is False
+    assert s.rerank_provider == "fastembed"
+    assert s.rerank_model == "Xenova/ms-marco-MiniLM-L-6-v2"
+    assert s.rerank_candidate_k == 24
+    # hot-reload overlay applies, like retrieval_mode
+    s._apply({"rerank_enabled": True, "rerank_candidate_k": 32})
+    assert s.rerank_enabled is True
+    assert s.rerank_candidate_k == 32
+
+
 def test_cheap_model_fields_serialized_in_to_dict():
     s = Settings()
     data = s.to_dict()

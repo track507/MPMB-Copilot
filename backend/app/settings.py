@@ -106,6 +106,16 @@ class Settings:
         default_factory=lambda: dict(_DEFAULT_TIER_BUDGETS),
     )
 
+    # Reranking (cross-encoder over hybrid candidates, applied per tier before the budget cut)
+    rerank_enabled: bool = False
+    """Off by default. Flip to True once run_eval's A/B confirms a lift / no regression."""
+
+    rerank_provider: str = "fastembed"
+    rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+
+    rerank_candidate_k: int = 24
+    """Candidates fetched + scored per tier before the budget cut. Bounds rerank latency."""
+
     # Tool use
     enable_tool_use: bool = False
     """Allow the LLM to call MPMB source verification tools."""
