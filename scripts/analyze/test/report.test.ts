@@ -38,6 +38,7 @@ describe("buildReport", () => {
 		}
 		expect(report.objects[0]).toMatchObject({ object_type: "SpellsList", assignment_kind: "bracket_object" });
 		expect(report.add_calls.find((c) => c.function_name === "AddSubClass")?.mapped).toBe(true);
+		expect(report.add_calls.find((c) => c.function_name === "AddSubClass")?.end_line).toEqual(expect.any(Number));
 		expect(report.implicit_globals.find((g) => g.name === "LeakyThing")?.classification).toBe("leak-candidate");
 		expect(report.undeclared_seed).toEqual(expect.arrayContaining(["LeakyThing"]));
 	});

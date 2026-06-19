@@ -51,6 +51,7 @@ export function buildReport(input: BuildReportInput): AnalysisReport {
 					repo: c.repo,
 					file: c.file,
 					line: c.line,
+					end_line: c.end_line,
 					function_name: c.callee,
 					mapped: surface.addDeclarations.has(c.callee),
 				});

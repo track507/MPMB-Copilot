@@ -17,6 +17,7 @@ describe("extractFile", () => {
 		expect(byType.SourceList).toMatchObject({ object_key: "P", assignment_kind: "dot_object" });
 		expect(byType.MagicItemsList).toMatchObject({ assignment_kind: "function_object" });
 		expect(byType.classes).toMatchObject({ object_key: "primary", assignment_kind: "dot_object" });
+		expect(byType.SpellsList.end_line).toBeGreaterThanOrEqual(byType.SpellsList.line);
 	});
 
 	it("captures function kinds", () => {

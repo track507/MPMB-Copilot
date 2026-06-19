@@ -8,6 +8,7 @@ export interface CallRecord {
 	repo: string;
 	file: string;
 	line: number;
+	end_line: number;
 	callee: string;
 }
 
@@ -45,6 +46,11 @@ function lineOf(node: AnyNode): number {
 	return loc?.start?.line ?? 0;
 }
 
+function endLineOf(node: AnyNode): number {
+	const loc = node.loc as { end?: { line?: number } } | undefined;
+	return loc?.end?.line ?? 0;
+}
+
 // MemberExpression on a plain Identifier -> { object_type, object_key, dot } | null
 function memberTarget(left: AnyNode): { object_type: string; object_key: string; dot: boolean } | null {
 	if (left.type !== "MemberExpression") return null;
@@ -80,12 +86,12 @@ export function extractFile(code: string, meta: ExtractMeta): ExtractResult {
 		{
 			FunctionDeclaration(node: AnyNode) {
 				const id = node.id as AnyNode | null;
-				if (id) out.functions.push({ repo, file, line: lineOf(node), name: id.name as string, kind: "declaration" });
+				if (id) out.functions.push({ repo, file, line: lineOf(node), end_line: endLineOf(node), name: id.name as string, kind: "declaration" });
 			},
 			VariableDeclarator(node: AnyNode) {
 				const id = node.id as AnyNode;
 				if (id.type === "Identifier" && isFn(node.init)) {
-					out.functions.push({ repo, file, line: lineOf(node), name: id.name as string, kind: "var_function" });
+					out.functions.push({ repo, file, line: lineOf(node), end_line: endLineOf(node), name: id.name as string, kind: "var_function" });
 				}
 			},
 			AssignmentExpression(node: AnyNode) {
@@ -96,6 +102,7 @@ export function extractFile(code: string, meta: ExtractMeta): ExtractResult {
 						repo,
 						file,
 						line: lineOf(node),
+						end_line: endLineOf(node),
 						name: left.name as string,
 						kind: "assignment_function",
 					});
@@ -108,6 +115,7 @@ export function extractFile(code: string, meta: ExtractMeta): ExtractResult {
 					repo,
 					file,
 					line: lineOf(node),
+					end_line: endLineOf(node),
 					object_type: t.object_type,
 					object_key: t.object_key,
 					assignment_kind,
@@ -115,7 +123,7 @@ export function extractFile(code: string, meta: ExtractMeta): ExtractResult {
 			},
 			CallExpression(node: AnyNode) {
 				const callee = node.callee as AnyNode;
-				if (callee.type === "Identifier") out.calls.push({ repo, file, line: lineOf(node), callee: callee.name as string });
+				if (callee.type === "Identifier") out.calls.push({ repo, file, line: lineOf(node), end_line: endLineOf(node), callee: callee.name as string });
 			},
 		} as never
 	);

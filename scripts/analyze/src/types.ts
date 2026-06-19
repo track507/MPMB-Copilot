@@ -20,6 +20,7 @@ export interface ObjectEntry {
 	repo: string;
 	file: string;
 	line: number;
+	end_line: number;
 	object_type: string;
 	object_key: string;
 	assignment_kind: AssignmentKind;
@@ -29,6 +30,7 @@ export interface AddCallEntry {
 	repo: string;
 	file: string;
 	line: number;
+	end_line: number;
 	function_name: string;
 	mapped: boolean;
 }
@@ -37,6 +39,7 @@ export interface FunctionEntry {
 	repo: string;
 	file: string;
 	line: number;
+	end_line: number;
 	name: string;
 	kind: FunctionKind;
 }
