@@ -37,6 +37,7 @@ from app.core.intent import IntentResult, intent_classifier
 from app.core.query_analysis import QueryAnalysis, analyze_query
 from app.logger import get_logger
 from app.services.embedding import embedding_service
+from app.services.rerank import rerank_service
 from app.services.vector import get_vector_store
 from app.settings import settings
 
@@ -184,7 +185,7 @@ class Retriever:
             f"Retrieved {result.total_chunks} chunks "
             f"({len(authoritative)} auth + {len(examples)} ex) "
             f"intent={intent.primary.value} conf={intent.confidence:.2f} "
-            f"mode={mode} "
+            f"mode={mode} rerank={'on' if settings.rerank_enabled else 'off'} "
             f"in {timing_ms:.0f}ms"
         )
 
@@ -200,12 +201,19 @@ class Retriever:
     ) -> tuple[list[dict], list[dict]]:
         """Two separate searches: one for authoritative, one for examples.
 
-        Guarantees both tiers are represented in results.
+        Guarantees both tiers are represented. When reranking is enabled, each tier fetches a wider candidate pool and is reranked down to its budget
         """
         store = get_vector_store()
 
         auth_limit = budget.get("authoritative", 3)
         ex_limit = budget.get("examples", 5)
+
+        rerank_on = settings.rerank_enabled
+        candidate_k = settings.rerank_candidate_k
+        # ? Widen the pool only when reranking; keep the disabled path byte-identical to before
+        auth_fetch = candidate_k if rerank_on else auth_limit
+        ex_fetch = candidate_k if rerank_on else ex_limit
+        prefetch = max(20, candidate_k) if rerank_on else 20
 
         # Authoritative search
         # ? Authoritative chunks (syntax templates, engine functions) carry no object_type tag - filtering on it would always return zero rows
@@ -215,7 +223,9 @@ class Retriever:
             query_text=query,
             query_embedding=query_embedding,
             filters=auth_filters,
-            limit=auth_limit,
+            limit=auth_fetch,
+            dense_limit=prefetch,
+            sparse_limit=prefetch,
         )
 
         # Examples search (official + community)
@@ -227,7 +237,9 @@ class Retriever:
             query_text=query,
             query_embedding=query_embedding,
             filters=ex_filters,
-            limit=ex_limit,
+            limit=ex_fetch,
+            dense_limit=prefetch,
+            sparse_limit=prefetch,
         )
         if not examples and "object_type" in ex_filters:
             # ! Over-filtering fallback: thin object_type+edition combinations (e.g. RaceList in 2024) degrade to broader examples, not zero
@@ -236,11 +248,17 @@ class Retriever:
                 query_text=query,
                 query_embedding=query_embedding,
                 filters=relaxed,
-                limit=ex_limit,
+                limit=ex_fetch,
+                dense_limit=prefetch,
+                sparse_limit=prefetch,
             )
 
         # Deduplicate (shouldn't happen with tier filters, but defensive)
         examples = self._deduplicate(examples, seen_ids={r["id"] for r in authoritative})
+
+        if rerank_on:
+            authoritative = self._rerank_tier(query, authoritative, auth_limit)
+            examples = self._rerank_tier(query, examples, ex_limit)
 
         return authoritative, examples
 
@@ -253,16 +271,25 @@ class Retriever:
     ) -> tuple[list[dict], list[dict]]:
         """One search, then split results by tier.
 
-        Simpler but can't guarantee tier balance.
+        When reranking is enabled, fetch a wider pool and rerank each tier split down to its budget
         """
         store = get_vector_store()
-        total_limit = budget.get("authoritative", 3) + budget.get("examples", 5)
+        auth_limit = budget.get("authoritative", 3)
+        ex_limit = budget.get("examples", 5)
+        total_limit = auth_limit + ex_limit
+
+        rerank_on = settings.rerank_enabled
+        candidate_k = settings.rerank_candidate_k
+        fetch = (candidate_k * 2) if rerank_on else total_limit
+        prefetch = max(20, fetch) if rerank_on else 20
 
         all_results = await store.hybrid_search(
             query_text=query,
             query_embedding=query_embedding,
             filters=base_filters,
-            limit=total_limit,
+            limit=fetch,
+            dense_limit=prefetch,
+            sparse_limit=prefetch,
         )
         if not all_results and "object_type" in base_filters:
             # ! Over-filtering fallback: drop object_type rather than return zero
@@ -271,12 +298,18 @@ class Retriever:
                 query_text=query,
                 query_embedding=query_embedding,
                 filters=relaxed,
-                limit=total_limit,
+                limit=fetch,
+                dense_limit=prefetch,
+                sparse_limit=prefetch,
             )
 
         # Split by tier
         authoritative = [r for r in all_results if r.get("source_tier") == "authoritative"]
         examples = [r for r in all_results if r.get("source_tier") != "authoritative"]
+
+        if rerank_on:
+            authoritative = self._rerank_tier(query, authoritative, auth_limit)
+            examples = self._rerank_tier(query, examples, ex_limit)
 
         return authoritative, examples
 
@@ -284,6 +317,15 @@ class Retriever:
     def _embed_query(self, query: str) -> list[float]:
         """Embed the query text using the configured embedding service (applies any query prefix)."""
         return embedding_service.embed_query(query)
+
+    def _rerank_tier(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+        """Rerank one tier's candidate pool down to its budget, timed for the debug log."""
+        if not candidates:
+            return candidates
+        t0 = time.perf_counter()
+        reranked = rerank_service.rerank(query, candidates, top_k=top_k)
+        logger.debug(f"reranked {len(candidates)} -> {len(reranked)} in {(time.perf_counter() - t0) * 1000:.0f}ms")
+        return reranked
 
     def _build_filters(
         self,

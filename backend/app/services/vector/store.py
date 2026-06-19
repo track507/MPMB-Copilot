@@ -68,8 +68,12 @@ class VectorStore(Protocol):
         query_embedding: list[float],
         filters: Optional[dict] = None,
         limit: int = 10,
+        dense_limit: int = 20,
+        sparse_limit: int = 20,
     ) -> list[dict]:
         """Search using both dense vectors and keyword/BM25 matching.
+
+        dense_limit/sparse_limit are the per-branch prefetch ceilings before fusion
 
         Combines semantic similarity with lexical matching and fuses
         results (e.g. via Reciprocal Rank Fusion).
