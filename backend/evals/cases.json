@@ -6,5 +6,31 @@
 	{ "id": "magic-item", "query": "create a homebrew magic item", "expect": { "object_type": "MagicItemsList" } },
 	{ "id": "required-sheet-version", "query": "what does RequiredSheetVersion do", "expect": { "source_substring": "_functions" } },
 	{ "id": "weapon-mastery-2024", "query": "how do weapon masteries work in 2024", "edition": "2024", "expect": { "source_substring": "WeaponMasteries" } },
-	{ "id": "source-book", "query": "how do I register a new source book", "expect": { "object_type": "SourceList" } }
+	{ "id": "source-book", "query": "how do I register a new source book", "expect": { "object_type": "SourceList" } },
+	{ "id": "psionic-power", "query": "how do I add a psionic power", "expect": { "object_type": "PsionicsList" } },
+	{ "id": "custom-creature", "query": "how do I create a custom creature or monster", "expect": { "object_type": "CreatureList" } },
+	{ "id": "custom-weapon", "query": "how do I define a custom weapon", "expect": { "object_type": "WeaponsList" } },
+	{ "id": "background", "query": "how do I make a custom background", "expect": { "object_type": "BackgroundList" } },
+	{ "id": "background-feature", "query": "how do I add a background feature", "expect": { "object_type": "BackgroundFeatureList" } },
+	{ "id": "custom-class", "query": "how do I create a custom class", "expect": { "object_type": "ClassList" } },
+	{ "id": "custom-armor", "query": "how do I add a piece of custom armor", "expect": { "object_type": "ArmourList" } },
+	{ "id": "custom-gear", "query": "how do I add a piece of adventuring gear", "expect": { "object_type": "GearList" } },
+	{ "id": "ammunition", "query": "how do I define a type of ammunition", "expect": { "object_type": "AmmoList" } },
+	{ "id": "companion", "query": "how do I add an animal companion or familiar", "expect": { "object_type": "CompanionList" } },
+	{
+		"id": "spell-2024",
+		"query": "how do I add a spell using the 2024 rules",
+		"edition": "2024",
+		"expect": { "object_type": "SpellsList", "edition": "2024" }
+	},
+	{ "id": "class-2024", "query": "how do I make a 2024 class", "edition": "2024", "expect": { "object_type": "ClassList", "edition": "2024" } },
+	{
+		"id": "background-2024",
+		"query": "how do I make a 2024 background",
+		"edition": "2024",
+		"expect": { "object_type": "BackgroundList", "edition": "2024" }
+	},
+	{ "id": "feat-2024", "query": "how do I create a 2024 feat", "edition": "2024", "expect": { "object_type": "FeatsList", "edition": "2024" } },
+	{ "id": "spell-engine", "query": "where does the sheet calculate a spellcasting ability", "expect": { "source_substring": "FunctionsSpells" } },
+	{ "id": "ability-scores", "query": "how are ability score modifiers calculated", "expect": { "source_substring": "AbilityScores" } }
 ]
