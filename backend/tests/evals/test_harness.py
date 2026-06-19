@@ -1,4 +1,4 @@
-from evals.harness import aggregate, chunk_matches, score_case
+from evals.harness import aggregate, chunk_matches, format_comparison, score_case
 
 
 def _chunk(source_file="x.js", object_type=None, edition="2014"):
@@ -50,3 +50,13 @@ def test_aggregate_hit_rate_and_mrr():
 def test_aggregate_empty_is_safe():
     agg = aggregate([])
     assert agg == {"cases": 0, "hits": 0, "hit_rate": 0.0, "mrr": 0.0}
+
+
+def test_format_comparison_shows_deltas():
+    base = {"cases": 8, "hits": 4, "hit_rate": 0.5, "mrr": 0.4}
+    rer = {"cases": 8, "hits": 6, "hit_rate": 0.75, "mrr": 0.55}
+    out = format_comparison(base, rer)
+    assert "baseline: 4/8" in out
+    assert "reranked: 6/8" in out
+    assert "+25%" in out  # hit_rate delta
+    assert "+0.150" in out  # mrr delta

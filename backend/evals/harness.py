@@ -41,3 +41,14 @@ def aggregate(results: list[dict]) -> dict:
     hits = sum(1 for r in results if r["hit"])
     mrr = (sum(r["rr"] for r in results) / count) if count else 0.0
     return {"cases": count, "hits": hits, "hit_rate": (hits / count) if count else 0.0, "mrr": mrr}
+
+
+def format_comparison(baseline: dict, reranked: dict) -> str:
+    """One-block baseline-vs-reranked summary from two aggregate() results"""
+    d_hit = reranked["hit_rate"] - baseline["hit_rate"]
+    d_mrr = reranked["mrr"] - baseline["mrr"]
+    return (
+        f"baseline: {baseline['hits']}/{baseline['cases']} hit ({baseline['hit_rate']:.0%}), MRR={baseline['mrr']:.3f}\n"
+        f"reranked: {reranked['hits']}/{reranked['cases']} hit ({reranked['hit_rate']:.0%}), MRR={reranked['mrr']:.3f}\n"
+        f"delta:    hit_rate {d_hit:+.0%}, MRR {d_mrr:+.3f}"
+    )
