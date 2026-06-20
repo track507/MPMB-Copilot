@@ -6,20 +6,13 @@ Each entry carries a FIXED dimension (the vector-space contract that must match 
 forward-compatible `requires`/status metadata so the future add-on installer can flip installable entries into one-click installs
 """
 
-import importlib.util
-import os
 from dataclasses import dataclass
 
-from app.config import config
+from app.core.catalog_common import Requirement  # * shared catalog logic; Requirement re-exported
+from app.core.catalog_common import status_for as _status_for
 from app.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class Requirement:
-    package: str  # import name to probe (e.g. "cohere")
-    env_key: str | None = None  # API key env var (e.g. "COHERE_API_KEY")
 
 
 @dataclass(frozen=True)
@@ -80,25 +73,9 @@ def get_entry(provider: str, model: str) -> EmbeddingModel | None:
     return None
 
 
-def _key_present(env_key: str | None) -> bool:
-    if not env_key:
-        return True
-    # ? Known provider keys live on config (loaded from env at startup); only stub keys fall back to raw env
-    attr = env_key.lower()
-    if hasattr(config, attr):
-        return bool(getattr(config, attr))
-    return bool(os.environ.get(env_key))
-
-
 def status_for(entry: EmbeddingModel) -> str:
     """One of: ready | needs_key | installable"""
-    package = entry.requires.package if entry.requires else None
-    if package is not None and importlib.util.find_spec(package) is None:
-        return "installable"
-    env_key = entry.requires.env_key if entry.requires else _PROVIDER_ENV_KEY.get(entry.provider)
-    if not _key_present(env_key):
-        return "needs_key"
-    return "ready"
+    return _status_for(entry.requires, _PROVIDER_ENV_KEY.get(entry.provider))
 
 
 def dimension_for(provider: str, model: str) -> int:

@@ -4,12 +4,10 @@ Curated catalog of selectable reranker (cross-encoder) models
 Rerankers have no vector-space dimension to match, so entries are simpler than embeddings
 """
 
-import importlib.util
-import os
 from dataclasses import dataclass
 
-from app.config import config
-from app.core.embedding_catalog import Requirement  # * reuse the shared requirement shape
+from app.core.catalog_common import Requirement  # * shared catalog logic
+from app.core.catalog_common import status_for as _status_for
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -64,23 +62,9 @@ def get_entry(provider: str, model: str) -> RerankModel | None:
     return None
 
 
-def _key_present(env_key: str | None) -> bool:
-    if not env_key:
-        return True
-    # ? Known provider keys live on config (loaded from env at startup); stubs fall back to raw env
-    attr = env_key.lower()
-    if hasattr(config, attr):
-        return bool(getattr(config, attr))
-    return bool(os.environ.get(env_key))
-
-
 def status_for(entry: RerankModel) -> str:
     """One of: ready | needs_key | installable"""
-    package = entry.requires.package if entry.requires else None
-    if package is not None and importlib.util.find_spec(package) is None:
-        return "installable"
-    env_key = entry.requires.env_key if entry.requires else _PROVIDER_ENV_KEY.get(entry.provider)
-    return "ready" if _key_present(env_key) else "needs_key"
+    return _status_for(entry.requires, _PROVIDER_ENV_KEY.get(entry.provider))
 
 
 def serialize() -> list[dict]:
