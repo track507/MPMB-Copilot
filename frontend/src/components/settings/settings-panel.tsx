@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useModelCatalog, useEmbeddingCatalog } from "@/hooks/use-settings";
+import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useCapabilities } from "@/hooks/use-settings";
 import { ModelSelect } from "@/components/settings/model-select";
 import { cn } from "@/lib/utils";
 import type { ChangeEvent, ReactElement } from "react";
@@ -80,8 +80,10 @@ export function SettingsPanel(): ReactElement {
 }
 
 function SettingsForm({ settings }: { readonly settings: Settings }): ReactElement {
-	const { data: catalog } = useModelCatalog();
-	const { data: embeddingCatalog } = useEmbeddingCatalog();
+	const { data: capabilities } = useCapabilities();
+	const catalog = capabilities?.generation.entries;
+	// ! keep the {models, current} shape to accommodate for the current contract
+	const embeddingCatalog = capabilities ? { models: capabilities.embedding.entries, current: capabilities.embedding.current } : undefined;
 	const updateSettings = useUpdateSettings();
 	const { data: indexStatus } = useIndexStatus();
 	const triggerIndex = useTriggerIndex();

@@ -24,6 +24,10 @@ export interface Settings {
 	readonly max_tool_calls: number;
 	readonly tool_search_limit: number;
 	readonly enable_extended_thinking: boolean;
+	readonly rerank_enabled: boolean;
+	readonly rerank_provider: string;
+	readonly rerank_model: string;
+	readonly rerank_candidate_k: number;
 	readonly system_prompt: string | null;
 }
 
@@ -67,6 +71,54 @@ export interface EmbeddingModelOption {
 export interface EmbeddingCatalog {
 	readonly models: readonly EmbeddingModelOption[];
 	readonly current: { readonly provider: string; readonly model: string };
+}
+
+/** One selectable reranker from the capabilities envelope */
+export interface RerankModelOption {
+	readonly provider: string;
+	readonly id: string;
+	readonly label: string;
+	readonly pinned: boolean;
+	readonly status: "ready" | "needs_key" | "installable";
+}
+
+/** One selectable vector store from the capabilities envelope */
+export interface VectorStoreOption {
+	readonly provider: string;
+	readonly id: string;
+	readonly label: string;
+	readonly pinned: boolean;
+	readonly status: "ready" | "needs_key" | "installable";
+}
+
+/** GET /api/capabilities - one envelope per capability
+ * `kind` tells the UI how to render entries
+ */
+export interface CapabilityEnvelope {
+	readonly generation: {
+		readonly label: string;
+		readonly kind: "live_models";
+		readonly entries: ModelCatalog;
+		readonly current: { readonly provider: string; readonly model: string; readonly effort: string };
+	};
+	readonly embedding: {
+		readonly label: string;
+		readonly kind: "curated";
+		readonly entries: readonly EmbeddingModelOption[];
+		readonly current: { readonly provider: string; readonly model: string };
+	};
+	readonly rerank: {
+		readonly label: string;
+		readonly kind: "curated";
+		readonly entries: readonly RerankModelOption[];
+		readonly current: { readonly provider: string; readonly model: string; readonly enabled: boolean; readonly candidate_k: number };
+	};
+	readonly vector_store: {
+		readonly label: string;
+		readonly kind: "curated";
+		readonly entries: readonly VectorStoreOption[];
+		readonly current: { readonly provider: string };
+	};
 }
 
 export interface IndexStatus {

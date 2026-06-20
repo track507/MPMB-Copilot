@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { Settings, SettingsUpdate, IndexStatus, HealthResponse, ModelCatalog, EmbeddingCatalog } from "@/types/settings";
+import type { Settings, SettingsUpdate, IndexStatus, HealthResponse, CapabilityEnvelope } from "@/types/settings";
 
 const SETTINGS_KEY = ["settings"] as const;
-const MODELS_KEY = ["models"] as const;
-const EMBEDDING_MODELS_KEY = ["embedding-models"] as const;
+const CAPABILITIES_KEY = ["capabilities"] as const;
 const INDEX_KEY = ["index-status"] as const;
 const HEALTH_KEY = ["health"] as const;
 
@@ -15,19 +14,11 @@ export function useSettings(): ReturnType<typeof useQuery<Settings>> {
 	});
 }
 
-export function useModelCatalog(): ReturnType<typeof useQuery<ModelCatalog>> {
+export function useCapabilities(): ReturnType<typeof useQuery<CapabilityEnvelope>> {
 	return useQuery({
-		queryKey: MODELS_KEY,
-		queryFn: async () => apiClient.get<ModelCatalog>("/api/models"),
-		// ? Model lists change rarely and the backend caches for an hour; keep it fresh-ish across mounts
-		staleTime: 30 * 60_000,
-	});
-}
-
-export function useEmbeddingCatalog(): ReturnType<typeof useQuery<EmbeddingCatalog>> {
-	return useQuery({
-		queryKey: EMBEDDING_MODELS_KEY,
-		queryFn: async () => apiClient.get<EmbeddingCatalog>("/api/embedding-models"),
+		queryKey: CAPABILITIES_KEY,
+		queryFn: async () => apiClient.get<CapabilityEnvelope>("/api/capabilities"),
+		// ? Catalogs change rarely and the backend caches model fetches for an hour
 		staleTime: 30 * 60_000,
 	});
 }
