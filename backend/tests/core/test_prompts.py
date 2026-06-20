@@ -72,6 +72,28 @@ def test_tool_use_addendum_present_when_enabled(monkeypatch):
     assert "FIRST move" in text
 
 
+def test_diagnose_addendum_present_when_tools_enabled(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+    text = prompt_builder.get_static_instructions()
+    assert "Diagnosing Errors" in text
+    assert "Root cause" in text
+    assert "./data/uploads/session/" in text
+    # ? the playbook must come after the tools it depends on
+    assert text.index("MPMB Source Tools") < text.index("Diagnosing Errors")
+
+
+def test_diagnose_addendum_absent_when_tools_disabled(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", False)
+    text = prompt_builder.get_static_instructions()
+    assert "Diagnosing Errors" not in text
+
+
 @pytest.fixture
 def healthy_pb_service(monkeypatch, valid_catalog_path: Path) -> SourceCatalogService:
     from app import settings as settings_module

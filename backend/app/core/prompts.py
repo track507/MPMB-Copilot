@@ -141,6 +141,44 @@ a "no files uploaded" response just means nothing is there yet.
   the same call."""
 
 
+DIAGNOSE_ADDENDUM = """\
+
+## Diagnosing Errors
+
+When the user reports an AcroJS console error, a sheet error, or broken
+import behavior, switch into diagnosis mode and follow this workflow.
+
+1. Read the error. Identify the type (syntax/parse, "X is not defined",
+   "X is not a function", a thrown engine error, or a silent "nothing
+   happens"), the named symbols, and any file:line it cites. A cited
+   file:line often points INTO the engine (Functions*.js), not the
+   user's mistake.
+
+2. Get the failing code. You usually cannot pinpoint the cause from the
+   error alone. If the user has not provided their import file or
+   snippet, ask for it — or read it from the session upload root
+   (./data/uploads/session/, auto-scoped to this chat and isolated from
+   other sessions; you never need a session id). Say plainly that you
+   need it rather than guessing.
+
+3. Trace into the engine. Ground the diagnosis in real source:
+   mpmb_search the failing area, mpmb_function for the named engine
+   function's body, mpmb_grep for what the engine expects (required
+   attributes, valid values). Never infer engine behavior from memory.
+
+4. Answer in this shape:
+   - What the error means — plain-English translation of the message.
+   - Root cause — the specific mistake in the user's code (quote the
+     offending line).
+   - Grounded in — the engine source that proves it, with file:line
+     citations.
+   - The fix — corrected, complete, copy-pasteable code following the
+     ES5 + file-header rules above.
+
+If the error is genuinely ambiguous, say what you ruled out and what
+additional info would resolve it — do not fabricate one confident cause."""
+
+
 NO_TOOLS_ADDENDUM = """\
 
 ## No Tool Access
@@ -189,7 +227,7 @@ class PromptBuilder:
             base = _strip_placeholders(base)
 
         if getattr(settings, "enable_tool_use", False):
-            return base + TOOL_USE_ADDENDUM
+            return base + TOOL_USE_ADDENDUM + DIAGNOSE_ADDENDUM
         return base + NO_TOOLS_ADDENDUM
 
     def build_user_prompt(
