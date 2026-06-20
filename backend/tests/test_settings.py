@@ -64,3 +64,11 @@ def test_embedding_dim_derives_from_catalog():
 def test_embedding_dim_defaults_for_unknown_model():
     s = Settings(embedding_provider="fastembed", embedding_model="nope")
     assert s.embedding_dim() == 384
+
+
+def test_settings_update_schema_accepts_rerank_fields():
+    from app.api.settings import SettingsUpdate
+
+    body = SettingsUpdate(rerank_enabled=True, rerank_model="BAAI/bge-reranker-base")
+    updates = body.model_dump(exclude_none=True)
+    assert updates == {"rerank_enabled": True, "rerank_model": "BAAI/bge-reranker-base"}

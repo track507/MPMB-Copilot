@@ -7,9 +7,10 @@ applies a partial update and persists to disk.
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.api.deps import Principal, require_admin
 from app.logger import get_logger
 from app.settings import settings
 
@@ -39,6 +40,10 @@ class SettingsUpdate(BaseModel):
     intent_confidence_threshold: float | None = None
     intent_confidence_margin: float | None = None
     tier_budgets: dict[str, dict[str, int]] | None = None
+    rerank_enabled: bool | None = None
+    rerank_provider: str | None = None
+    rerank_model: str | None = None
+    rerank_candidate_k: int | None = None
     enable_tool_use: bool | None = None
     max_tool_calls: int | None = None
     tool_search_limit: int | None = None
@@ -101,13 +106,30 @@ async def get_embedding_models() -> dict[str, Any]:
     }
 
 
+@router.get(
+    "/capabilities",
+    status_code=status.HTTP_200_OK,
+    summary="List all selectable capabilities for the store",
+)
+async def get_capabilities(_: Principal = Depends(require_admin)) -> dict[str, Any]:
+    """
+    Unified provider/capability catalog for the settings store
+
+    Returns `{capability: {label, kind, entries, current}}` for generation, embedding, rerank, and vector store
+    Admin-gated (store/provider config is admin-only); the gate is a no-op single-admin today
+    """
+    from app.core.registry import serialize_all
+
+    return await serialize_all()
+
+
 @router.patch(
     "/settings",
     status_code=status.HTTP_200_OK,
     summary="Update behavioral settings",
     description="Partial update. Only fields present in the body are changed.",
 )
-async def update_settings(body: SettingsUpdate) -> dict[str, Any]:
+async def update_settings(body: SettingsUpdate, _: Principal = Depends(require_admin)) -> dict[str, Any]:
     """Apply a partial settings update and persist to disk."""
     updates = body.model_dump(exclude_none=True)
 
