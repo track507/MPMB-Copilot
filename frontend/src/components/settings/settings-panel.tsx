@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useCapabilities } from "@/hooks/use-settings";
 import { ModelSelect } from "@/components/settings/model-select";
+import { RerankSelect } from "@/components/settings/rerank-select";
 import { cn } from "@/lib/utils";
 import type { ChangeEvent, ReactElement } from "react";
 import type { ModelOption, Settings } from "@/types/settings";
@@ -25,6 +26,10 @@ const settingsSchema = z.object({
 	top_k_results: z.number().int().min(1).max(50),
 	similarity_threshold: z.number().min(0).max(1),
 	retrieval_mode: z.enum(["single", "dual", "auto"]),
+	rerank_enabled: z.boolean(),
+	rerank_provider: z.string(),
+	rerank_model: z.string(),
+	rerank_candidate_k: z.number().int().min(1).max(200),
 	enable_tool_use: z.boolean(),
 	enable_extended_thinking: z.boolean(),
 });
@@ -107,6 +112,10 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 			top_k_results: settings.top_k_results,
 			similarity_threshold: settings.similarity_threshold,
 			retrieval_mode: settings.retrieval_mode,
+			rerank_enabled: settings.rerank_enabled,
+			rerank_provider: settings.rerank_provider,
+			rerank_model: settings.rerank_model,
+			rerank_candidate_k: settings.rerank_candidate_k,
 			enable_tool_use: settings.enable_tool_use,
 			enable_extended_thinking: settings.enable_extended_thinking,
 		}),
@@ -133,6 +142,8 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 	const anthropicCheap = useWatch({ control, name: "anthropic_cheap_model" });
 	const openaiCheap = useWatch({ control, name: "openai_cheap_model" });
 	const embeddingModel = useWatch({ control, name: "embedding_model" });
+	const rerank = capabilities?.rerank;
+	const rerankModel = useWatch({ control, name: "rerank_model" });
 	const embeddingChanged = embeddingCatalog !== undefined && embeddingCatalog.current.model !== embeddingModel;
 
 	// ? Remember the last model chosen per provider so switching providers restores the right one (Ollama keeps its own id, not Anthropic's)
@@ -348,6 +359,36 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 					</div>
 				</div>
 			</section>
+
+			{/* Reranker */}
+			{rerank && (
+				<section className="space-y-4">
+					<h2 className="text-lg font-semibold">{rerank.label}</h2>
+					<div className="flex items-center gap-3">
+						<input {...register("rerank_enabled")} type="checkbox" id="rerank-enabled" className="size-4 rounded" />
+						<label htmlFor="rerank-enabled" className="text-sm">
+							Rerank search results (cross-encoder over hybrid candidates)
+						</label>
+					</div>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<div className="space-y-2">
+							<FieldLabel label="Reranker model" description="Re-scores candidates before the budget cut" />
+							<RerankSelect
+								value={rerankModel}
+								options={rerank.entries}
+								onChange={(prov, id) => {
+									setValue("rerank_provider", prov, { shouldDirty: true });
+									setValue("rerank_model", id, { shouldDirty: true });
+								}}
+							/>
+						</div>
+						<div className="space-y-2">
+							<FieldLabel label="Candidate pool" description="Candidates scored per tier before the cut" />
+							<input {...register("rerank_candidate_k", { valueAsNumber: true })} type="number" min="1" max="200" className={inputClass} />
+						</div>
+					</div>
+				</section>
+			)}
 
 			{/* Index Status */}
 			<section className="space-y-4">
