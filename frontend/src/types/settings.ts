@@ -49,14 +49,14 @@ export interface ModelOption {
 	readonly effort: readonly string[];
 }
 
-/** Per-provider model lists from `GET /api/models`. Empty list = free-form input. */
+/** Per-provider model lists (the generation entries in the capabilities envelope). Empty list = free-form input. */
 export interface ModelCatalog {
 	readonly anthropic: readonly ModelOption[];
 	readonly openai: readonly ModelOption[];
 	readonly ollama: readonly ModelOption[];
 }
 
-/** One selectable embedding model from `GET /api/embedding-models` */
+/** One selectable embedding model (an embedding entry in the capabilities envelope) */
 export interface EmbeddingModelOption {
 	readonly provider: string;
 	readonly id: string;
@@ -65,12 +65,6 @@ export interface EmbeddingModelOption {
 	readonly multilingual: boolean;
 	readonly pinned: boolean;
 	readonly status: "ready" | "needs_key" | "installable";
-}
-
-/** Embedding catalog + current selection from `GET /api/embedding-models` */
-export interface EmbeddingCatalog {
-	readonly models: readonly EmbeddingModelOption[];
-	readonly current: { readonly provider: string; readonly model: string };
 }
 
 /** One selectable reranker from the capabilities envelope */

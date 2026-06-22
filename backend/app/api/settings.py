@@ -67,46 +67,6 @@ async def get_settings() -> dict[str, Any]:
 
 
 @router.get(
-    "/models",
-    status_code=status.HTTP_200_OK,
-    summary="List selectable models per provider",
-)
-async def get_models() -> dict[str, list[dict[str, Any]]]:
-    """
-    Return `{provider: [{id, label, effort}]}` for the settings model pickers
-
-    `effort` is the list of supported effort levels (empty = no effort control)
-    Anthropic/OpenAI are fetched live with a curated fallback
-    Ollama is empty (free-form)
-
-    Never raises - falls back to curated lists on any failure
-    """
-    from app.core.model_catalog import get_model_catalog
-
-    return await get_model_catalog()
-
-
-@router.get(
-    "/embedding-models",
-    status_code=status.HTTP_200_OK,
-    summary="List selectable embedding models with availability",
-)
-async def get_embedding_models() -> dict[str, Any]:
-    """
-    Return `{models: [...], current: {provider, model}}` for the embedding picker
-
-    Each model carries its fixed dimension, multilingual flag, pinned flag, and a status of ready/needs_key/installable
-    Never raise
-    """
-    from app.core.embedding_catalog import serialize
-
-    return {
-        "models": serialize(),
-        "current": {"provider": settings.embedding_provider, "model": settings.embedding_model},
-    }
-
-
-@router.get(
     "/capabilities",
     status_code=status.HTTP_200_OK,
     summary="List all selectable capabilities for the store",

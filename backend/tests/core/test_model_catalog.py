@@ -78,31 +78,6 @@ def test_effort_levels_for_when_cache_cold():
     assert effort_levels_for("ollama", "llama3") == ()
 
 
-@pytest.mark.asyncio
-async def test_models_endpoint_serializes_through_response_model(monkeypatch):
-    """Exercise the real FastAPI response validation - effort is a list, not a str."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from app.api import settings as settings_api
-    from app.config import config
-
-    monkeypatch.setattr(config, "anthropic_api_key", None)
-    monkeypatch.setattr(config, "openai_api_key", None)
-
-    app = FastAPI()
-    app.include_router(settings_api.router)
-    client = TestClient(app)
-
-    resp = client.get("/models")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert {"anthropic", "openai", "ollama"} <= set(data)
-    entry = data["anthropic"][0]
-    assert set(entry) == {"id", "label", "effort"}
-    assert isinstance(entry["effort"], list)
-
-
 def test_effort_levels_for_prefers_warm_cache(monkeypatch):
     from app.core.model_catalog import ModelOption
 
