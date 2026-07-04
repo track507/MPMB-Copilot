@@ -57,13 +57,21 @@ export interface ChatTiming {
 	readonly generation_ms?: number | undefined;
 }
 
-export interface ChatRetrieval {
-	readonly total_chunks?: number | undefined;
-	readonly intent?: string | undefined;
+export interface RetrievalChunk {
+	readonly source_file: string;
+	readonly start_line?: number | undefined;
+	readonly end_line?: number | undefined;
+	readonly tier?: string | undefined;
+	readonly score?: number | undefined;
 	readonly edition?: string | undefined;
-	readonly object_type?: string | undefined;
-	readonly authoritative_count?: number | undefined;
-	readonly examples_count?: number | undefined;
+	readonly chunk_type?: string | undefined;
+}
+
+export interface RetrievalTraceEntry {
+	readonly tool: string;
+	readonly query: string;
+	readonly edition?: string | undefined;
+	readonly chunks: readonly RetrievalChunk[];
 }
 
 export interface ChatMetadata {
@@ -72,7 +80,7 @@ export interface ChatMetadata {
 	readonly model?: string | undefined;
 	readonly usage?: ChatUsage | undefined;
 	readonly timing?: ChatTiming | undefined;
-	readonly retrieval?: ChatRetrieval | undefined;
+	readonly retrieval?: readonly RetrievalTraceEntry[] | undefined;
 	readonly tools?: ChatToolsMetadata | undefined;
 	readonly stop_reason?: string | undefined;
 }
