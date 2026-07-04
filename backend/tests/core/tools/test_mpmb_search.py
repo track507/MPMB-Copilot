@@ -156,3 +156,44 @@ def test_mpmb_search_registered_on_toolset():
     toolset = build_mpmb_toolset()
     assert "mpmb_search" in toolset.tools
     assert set(toolset.tools) == {"mpmb_search", "mpmb_read", "mpmb_grep", "mpmb_function"}
+
+
+@pytest.mark.asyncio
+async def test_search_records_citation_trace_on_deps(monkeypatch):
+    from app.core.retriever import retriever
+
+    fake = _result(
+        authoritative=[_chunk("_common/SpellsList.js", 'SpellsList["fireball"] = {};')],
+        examples=[_chunk("examples/feat.js", "FeatsList['lucky'] = {};", score=0.61, tier="official_example")],
+    )
+    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=fake))
+
+    deps = _deps()
+    await _mpmb_search_impl(deps, "how does fireball work")
+
+    assert len(deps.trace) == 1
+    entry = deps.trace[0]
+    assert entry["tool"] == "mpmb_search"
+    assert entry["query"] == "how does fireball work"
+    assert len(entry["chunks"]) == 2
+    chunk = entry["chunks"][0]
+    assert chunk["source_file"] == "_common/SpellsList.js"
+    assert chunk["start_line"] == 10 and chunk["end_line"] == 42
+    assert chunk["tier"] == "authoritative"
+    assert chunk["score"] == 0.8
+    # ! citation only - never the chunk body
+    assert "content" not in chunk
+
+
+@pytest.mark.asyncio
+async def test_search_records_empty_trace_entry(monkeypatch):
+    from app.core.retriever import retriever
+
+    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=_result()))
+
+    deps = _deps()
+    await _mpmb_search_impl(deps, "nonsense", edition="2024")
+
+    assert len(deps.trace) == 1
+    assert deps.trace[0]["chunks"] == []
+    assert deps.trace[0]["query"] == "nonsense"
