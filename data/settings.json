@@ -2,8 +2,10 @@
   "default_llm_provider": "anthropic",
   "default_model": "claude-sonnet-4-6",
   "temperature": 0.2,
-  "max_tokens": 4000,
+  "max_tokens": 8000,
   "default_effort": "high",
+  "embedding_provider": "fastembed",
+  "embedding_model": "BAAI/bge-small-en-v1.5",
   "anthropic_cheap_model": "claude-haiku-4-5-20251001",
   "openai_cheap_model": "gpt-5.4-mini",
   "ollama_cheap_model": "",
@@ -33,6 +35,10 @@
       "examples": 2
     }
   },
+  "rerank_enabled": true,
+  "rerank_provider": "fastembed",
+  "rerank_model": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "rerank_candidate_k": 12,
   "enable_tool_use": true,
   "max_tool_calls": 0,
   "source_catalog_path": null,
