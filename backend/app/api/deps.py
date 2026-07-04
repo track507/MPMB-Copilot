@@ -1,11 +1,18 @@
 """
-Auth dependency stubs
+Auth dependencies: cookie -> auth session -> Principal
 
-Single-admin no-op today: every request resolves to the default admin principal
-When auth lands these resolve the real session principal and require_admin enforces the role - a dependency swap, not a re-touch. New store / settings-mutating endpoints depend on require_admin now
+current_principal is the API-wide wall (401 unauthenticated, 503 when the DB is down - fail closed) require_admin layers the role check (403)
+auth_disabled is an env-only dev escape honored only on loopback
 """
 
 from dataclasses import dataclass
+
+from fastapi import Depends, HTTPException, Request, status
+
+from app.config import config
+from app.services.db import auth_service, db
+
+COOKIE_NAME = "mpmb_session"
 
 
 @dataclass(frozen=True)
@@ -14,16 +21,44 @@ class Principal:
     role: str
 
 
-# ! No-op single admin today
 _DEFAULT_ADMIN = Principal(user_id="default", role="admin")
 
 
-async def current_principal() -> Principal:
-    return _DEFAULT_ADMIN
+def is_loopback(host: str) -> bool:
+    return host in {"127.0.0.1", "localhost", "::1"}
 
 
-async def require_admin() -> Principal:
-    # ? Today every principal is the default admin; the gate is a structural placeholder for real roles
-    principal = await current_principal()
-    # when real roles exist: raise HTTPException(403) if principal.role != "admin"
+def auth_bypassed() -> bool:
+    # ! Never allow the escape hatch on an exposed interface
+    return config.auth_disabled and is_loopback(config.bind_host)
+
+
+async def resolve_optional_principal(request: Request) -> Principal | None:
+    raw = request.cookies.get(COOKIE_NAME)
+    if not raw or not db.is_connected:
+        return None
+    user = await auth_service.resolve_session(raw)
+    if user is None:
+        return None
+    return Principal(user_id=str(user.id), role=user.role)
+
+
+async def current_principal(request: Request) -> Principal:
+    if auth_bypassed():
+        return _DEFAULT_ADMIN
+    raw = request.cookies.get(COOKIE_NAME)
+    if not raw:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    if not db.is_connected:
+        # ! Fail closed: a cookie we cannot verify is not a login
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication unavailable")
+    principal = await resolve_optional_principal(request)
+    if principal is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return principal
+
+
+async def require_admin(principal: Principal = Depends(current_principal)) -> Principal:
+    if principal.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return principal

@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 def _client(monkeypatch):
     from app.api import settings as settings_api
+    from app.api.deps import Principal, current_principal
     from app.core import model_catalog, registry
 
     async def _fake_models():
@@ -13,6 +14,8 @@ def _client(monkeypatch):
     monkeypatch.setattr(registry, "_REGISTRY", {})  # ? force rebuild so the stub fetch is used
 
     app = FastAPI()
+    # ? Mini-app carries no session cookie; require_admin is real now, so override the principal like conftest does for main.app
+    app.dependency_overrides[current_principal] = lambda: Principal(user_id="default", role="admin")
     app.include_router(settings_api.router)
     return TestClient(app)
 
@@ -22,7 +25,7 @@ def test_capabilities_endpoint_shape(monkeypatch):
     resp = client.get("/capabilities")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"generation", "embedding", "rerank", "vector_store"}
+    assert set(body) == {"generation", "embedding", "rerank", "vector_store", "auth"}
     assert set(body["rerank"]) == {"label", "kind", "entries", "current"}
     assert "model" in body["rerank"]["current"]
 

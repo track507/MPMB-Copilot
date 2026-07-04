@@ -20,6 +20,7 @@ class Capability(str, Enum):
     embedding = "embedding"
     rerank = "rerank"
     vector_store = "vector_store"
+    auth = "auth"
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,23 @@ def _vector_store_entries() -> list[dict]:
         {"provider": "qdrant", "id": "qdrant", "label": "Qdrant (default)", "pinned": True, "status": "ready"},
         {"provider": "weaviate", "id": "weaviate", "label": "Weaviate", "pinned": False, "status": "installable"},
         {"provider": "pgvector", "id": "pgvector", "label": "pgvector", "pinned": False, "status": "installable"},
+    ]
+
+
+def _auth_entries() -> list[dict]:
+    import importlib.util
+
+    # ? Password is the pinned, non-removable method; OIDC becomes one-click once authlib is installable via the store
+    oidc_status = "ready" if importlib.util.find_spec("authlib") is not None else "installable"
+    return [
+        {"provider": "local", "id": "password", "label": "Username & password", "pinned": True, "status": "ready"},
+        {
+            "provider": "oidc",
+            "id": "oidc",
+            "label": "OIDC / SSO (Keycloak, Authentik, Zitadel, ...)",
+            "pinned": False,
+            "status": oidc_status,
+        },
     ]
 
 
@@ -106,6 +124,15 @@ def _register_builtins() -> None:
             kind="curated",
             entries=_vector_store_entries,
             current=lambda: {"provider": getattr(config, "vector_store", "qdrant")},
+        )
+    )
+    register(
+        CapabilitySpec(
+            key=Capability.auth,
+            label="Authentication",
+            kind="curated",
+            entries=_auth_entries,
+            current=lambda: {"method": "password"},
         )
     )
 

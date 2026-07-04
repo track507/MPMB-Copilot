@@ -25,7 +25,7 @@ def test_register_and_all_specs(fresh_registry):
 
 
 @pytest.mark.asyncio
-async def test_serialize_all_includes_four_builtins(fresh_registry, monkeypatch):
+async def test_serialize_all_includes_builtins(fresh_registry, monkeypatch):
     async def _fake_models():
         return {"anthropic": [{"id": "claude", "label": "Claude", "effort": []}], "openai": [], "ollama": []}
 
@@ -34,7 +34,7 @@ async def test_serialize_all_includes_four_builtins(fresh_registry, monkeypatch)
     monkeypatch.setattr(model_catalog, "get_model_catalog", _fake_models)
 
     out = await fresh_registry.serialize_all()
-    assert set(out) == {"generation", "embedding", "rerank", "vector_store"}
+    assert set(out) == {"generation", "embedding", "rerank", "vector_store", "auth"}
     for cap in out.values():
         assert set(cap) == {"label", "kind", "entries", "current"}
     # generation entries came from the awaited live-fetch stub

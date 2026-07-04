@@ -4,12 +4,25 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import chat, health, index, sessions, settings, tasks
-from app.api import source_catalog as source_catalog_api
+from app.api import (
+    auth as auth_api,
+)
+from app.api import (
+    chat,
+    health,
+    index,
+    sessions,
+    settings,
+    tasks,
+)
+from app.api import (
+    source_catalog as source_catalog_api,
+)
+from app.api.deps import current_principal
 from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
@@ -114,13 +127,16 @@ async def global_exception_handler(request, exc: Exception):
 
 
 # Include API routers
+_wall = [Depends(current_principal)]
+
 app.include_router(health.router, prefix=config.api_prefix, tags=["Health"])
-app.include_router(chat.router, prefix=config.api_prefix, tags=["Chat"])
-app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"])
-app.include_router(sessions.router, prefix=config.api_prefix, tags=["Sessions"])
-app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"])
-app.include_router(settings.router, prefix=config.api_prefix, tags=["Settings"])
-app.include_router(source_catalog_api.router, prefix=config.api_prefix, tags=["Source Catalog"])
+app.include_router(auth_api.router, prefix=config.api_prefix, tags=["Auth"])
+app.include_router(chat.router, prefix=config.api_prefix, tags=["Chat"], dependencies=_wall)
+app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"], dependencies=_wall)
+app.include_router(sessions.router, prefix=config.api_prefix, tags=["Sessions"], dependencies=_wall)
+app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"], dependencies=_wall)
+app.include_router(settings.router, prefix=config.api_prefix, tags=["Settings"], dependencies=_wall)
+app.include_router(source_catalog_api.router, prefix=config.api_prefix, tags=["Source Catalog"], dependencies=_wall)
 
 
 # Root endpoint
