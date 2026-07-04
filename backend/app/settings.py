@@ -116,6 +116,13 @@ class Settings:
     rerank_candidate_k: int = 24
     """Candidates fetched + scored per tier before the budget cut. Bounds rerank latency."""
 
+    # Auth sessions
+    session_lifetime_days: int = 30
+    """Absolute auth-session lifetime; the cookie max-age matches."""
+
+    session_idle_days: int = 7
+    """Sliding idle timeout; a session unused this long expires early."""
+
     # Tool use
     enable_tool_use: bool = False
     """Allow the LLM to call MPMB source verification tools."""

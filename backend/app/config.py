@@ -31,6 +31,13 @@ class Config(BaseSettings):
     log_level: str = "INFO"
     debug: bool = Field(default=False, description="Enable debug mode")
 
+    # Auth / exposure
+    # ! bind_host must mirror the launcher's --host so fail-safe exposure logic is honest
+    bind_host: str = "127.0.0.1"
+    cookie_secure: Literal["auto", "always", "never"] = "auto"
+    # ! Env-only dev escape hatch; honored only when bind_host is loopback
+    auth_disabled: bool = False
+
     # API Settings
     api_prefix: str = "/api"
     allowed_origins: Annotated[list[str], NoDecode] = Field(

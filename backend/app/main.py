@@ -1,5 +1,6 @@
 """FastAPI application entry point"""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -39,6 +40,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await db.connect(config.resolved_database_url, echo=config.is_development)
         if await db.health_check():
             logger.info("postgres_connected")
+            from app.services.db.migrations import run_migrations
+
+            await asyncio.to_thread(run_migrations)
         else:
             await db.disconnect()
             logger.warning("postgres_unavailable", error="Initial database health check failed")

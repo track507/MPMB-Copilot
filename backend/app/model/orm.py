@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -357,3 +357,59 @@ class MessageFeedback(Base):
     )
 
     message = relationship("Message", back_populates="feedback")
+
+
+class User(Base):
+    """
+    Identity record
+    password_hash is nullable by design: OIDC/JIT-provisioned users have no local credential
+    """
+
+    __tablename__ = "users"
+
+    id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
+    username: str = Column(String(64), nullable=False, unique=True)
+    password_hash: Optional[str] = Column(Text, nullable=True)
+    role: str = Column(String(10), nullable=False, default="user")
+    disabled: bool = Column(Boolean, nullable=False, default=False)
+    created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    last_login: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+
+    auth_sessions = relationship("AuthSession", back_populates="user", cascade="all, delete-orphan")
+
+
+class AuthSession(Base):
+    """
+    Server-side login session
+    Only the sha256 of the token is stored; the raw token lives in the cookie
+    """
+
+    __tablename__ = "auth_sessions"
+
+    id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
+    token_hash: str = Column(String(64), nullable=False, unique=True)
+    user_id: UUID = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at: datetime = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="auth_sessions")
+
+
+class LoginAttempt(Base):
+    """
+    Failed-login ledger backing the Postgres fixed-window rate limiter
+    """
+
+    __tablename__ = "login_attempts"
+
+    id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
+    username: str = Column(String(64), nullable=False)
+    client_ip: str = Column(String(64), nullable=False)
+    attempted_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

@@ -72,3 +72,9 @@ def test_settings_update_schema_accepts_rerank_fields():
     body = SettingsUpdate(rerank_enabled=True, rerank_model="BAAI/bge-reranker-base")
     updates = body.model_dump(exclude_none=True)
     assert updates == {"rerank_enabled": True, "rerank_model": "BAAI/bge-reranker-base"}
+
+
+def test_auth_session_settings_defaults():
+    s = Settings()
+    assert s.session_lifetime_days == 30
+    assert s.session_idle_days == 7
