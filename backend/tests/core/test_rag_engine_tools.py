@@ -266,3 +266,21 @@ async def test_stream_mpmb_search_drives_retriever(tmp_path, monkeypatch):
     assert final.tools["calls"][0]["status"] == "success"
     streamed_text = "".join(e.content for e in events if e.content)
     assert "Here is how you add a race." in streamed_text
+
+
+@pytest.mark.asyncio
+async def test_generate_surfaces_retrieval_trace(monkeypatch):
+    from app.core import rag_engine as re_mod
+    from app.core.agent import LLMResponse
+
+    async def fake_agent_generate(**kwargs):
+        deps = kwargs.get("deps")
+        if deps is not None:
+            deps.trace.append({"tool": "mpmb_search", "query": "q", "edition": "2014", "chunks": []})
+        return LLMResponse(content="answer", provider="anthropic", model="m")
+
+    monkeypatch.setattr(re_mod, "agent_generate", fake_agent_generate)
+    monkeypatch.setattr(re_mod.settings, "enable_tool_use", True)
+
+    resp = await re_mod.rag_engine.generate(query="how do I add a spell", session_id="s")
+    assert resp.retrieval == [{"tool": "mpmb_search", "query": "q", "edition": "2014", "chunks": []}]

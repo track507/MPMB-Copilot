@@ -52,6 +52,8 @@ class Deps:
     edition: str
     # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
+    # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run
+    trace: list[dict] = field(default_factory=list)
 
 
 # * Implementations (testable without PydanticAI)
@@ -156,9 +158,18 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
     try:
         result = await retriever.retrieve(query=query, edition=edition)
     except Exception as e:
+        deps.trace.append({"tool": "mpmb_search", "query": query, "edition": edition, "chunks": []})
         return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."
 
     if result.is_empty:
+        deps.trace.append(
+            {
+                "tool": "mpmb_search",
+                "query": query,
+                "edition": (result.query_analysis.edition if result.query_analysis else None) or edition,
+                "chunks": [],
+            }
+        )
         return (
             f'No indexed chunks matched "{query}"'
             + (f" (edition={edition})" if edition else "")
@@ -174,6 +185,25 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
     overlap = len(keys & deps.seen_chunks) / len(keys) if keys else 0.0
     repeated = bool(deps.seen_chunks) and overlap >= 0.7
     deps.seen_chunks |= keys
+    deps.trace.append(
+        {
+            "tool": "mpmb_search",
+            "query": query,
+            "edition": (result.query_analysis.edition if result.query_analysis else None) or edition,
+            "chunks": [
+                {
+                    "source_file": c.get("source_file"),
+                    "start_line": c.get("start_line"),
+                    "end_line": c.get("end_line"),
+                    "tier": c.get("source_tier"),
+                    "score": round(float(c.get("score", 0.0)), 4),
+                    "edition": c.get("edition"),
+                    "chunk_type": c.get("chunk_type"),
+                }
+                for c in all_chunks
+            ],
+        }
+    )
 
     sections: list[str] = []
     if repeated:

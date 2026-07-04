@@ -65,6 +65,7 @@ class RAGResponse:
     stop_reason: Optional[str] = None
     timing: dict[str, float] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
+    retrieval: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -79,6 +80,7 @@ class RAGStreamEvent:
     event: Optional[str] = None
     tool: Optional[dict[str, Any]] = None
     tools: Optional[dict[str, Any]] = None
+    retrieval: Optional[list[dict]] = None
 
 
 # * Hard net for runaway loops; matches pydantic-ai's own default request_limit
@@ -217,6 +219,7 @@ class RAGEngine:
                 "generation_ms": round(generation_ms, 1),
                 "total_ms": round(total_ms, 1),
             },
+            retrieval=deps.trace if deps else [],
         )
 
     async def stream(
@@ -353,6 +356,7 @@ class RAGEngine:
                 "total_ms": round(total_ms, 1),
             },
             tools=tools_meta,
+            retrieval=deps.trace if deps else None,
         )
 
 
