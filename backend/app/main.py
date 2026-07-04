@@ -1,6 +1,7 @@
 """FastAPI application entry point"""
 
 import asyncio
+import secrets
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -22,15 +23,27 @@ from app.api import (
 from app.api import (
     source_catalog as source_catalog_api,
 )
-from app.api.deps import current_principal
+from app.api.deps import current_principal, is_loopback
 from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
-from app.services.db import db
+from app.services.db import auth_service, db
 
 # Initialize structured logging before anything else
 configure_logging()
 logger = get_logger(__name__)
+
+
+async def _init_setup_token() -> str | None:
+    """Fail-safe exposure: an exposed fresh install requires a one-time token to claim admin."""
+    if is_loopback(config.bind_host):
+        return None
+    if await auth_service.count_users() > 0:
+        return None
+    token = secrets.token_urlsafe(16)
+    # ! Printed once; required by POST /api/auth/setup while no admin exists
+    logger.warning("setup_token_required", token=token, hint="submit as setup_token on the first-run setup screen")
+    return token
 
 
 @asynccontextmanager
@@ -48,6 +61,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         qdrant=f"{config.qdrant_host}:{config.qdrant_port}",
     )
 
+    app.state.setup_token = None
+
     # Connect to PostgreSQL
     try:
         await db.connect(config.resolved_database_url, echo=config.is_development)
@@ -56,6 +71,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from app.services.db.migrations import run_migrations
 
             await asyncio.to_thread(run_migrations)
+            app.state.setup_token = await _init_setup_token()
         else:
             await db.disconnect()
             logger.warning("postgres_unavailable", error="Initial database health check failed")

@@ -15,7 +15,7 @@
 		"setup:all": "pnpm run setup && pnpm run setup:docker && pnpm run setup:index",
 		"dev": "concurrently -n backend,frontend -c blue,magenta \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
 		"dev:full": "node ./scripts/dev.mjs",
-		"dev:backend": "node ./scripts/check-port.mjs 8000 backend && uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --reload-dir backend/app --host 0.0.0.0 --port 8000",
+		"dev:backend": "node ./scripts/check-port.mjs 8000 backend && uv --cache-dir .uv-cache run --no-sync --project backend uvicorn app.main:app --app-dir backend --reload --reload-dir backend/app --host 127.0.0.1 --port 8000",
 		"dev:frontend": "pnpm --filter ./frontend run dev",
 		"docker:up": "docker compose up -d",
 		"docker:down": "docker compose down",

@@ -67,6 +67,9 @@ services:
             - LOG_LEVEL=INFO
             - DEBUG=true
 
+            # Auth fail-safe exposure: the container binds 0.0.0.0 (required); setup then demands the logged token
+            - BIND_HOST=0.0.0.0
+
             # Database
             - POSTGRES_HOST=postgres
             - POSTGRES_PORT=5432
