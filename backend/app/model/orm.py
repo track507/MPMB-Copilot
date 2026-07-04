@@ -280,6 +280,7 @@ class DocumentChunk(Base):
     message_retrievals = relationship("MessageRetrieval", back_populates="document_chunk", cascade="all, delete-orphan")
 
 
+# ! Superseded by the meta_data["retrieval"] group on messages (agentic trace); this table + its document_chunks FK are unpopulated under agentic retrieval
 class MessageRetrieval(Base):
     """Junction table tracking which document chunks were used for each message.
 

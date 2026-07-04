@@ -230,6 +230,7 @@ class SessionService:
                 history.append({"role": msg.role, "content": text})
         return history
 
+    # ! Unpopulated: the chat path records retrieval on meta_data["retrieval"], not this table
     # * Retrieval Tracking
     async def track_retrievals(
         self,

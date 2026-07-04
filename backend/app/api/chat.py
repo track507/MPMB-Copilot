@@ -118,6 +118,9 @@ async def _save_assistant_message(
                 meta_data["usage"] = usage
             if tools_meta:
                 meta_data["tools"] = tools_meta
+            retrieval = getattr(rag_response, "retrieval", None)
+            if retrieval:
+                meta_data["retrieval"] = retrieval
             kwargs.update(
                 provider=getattr(rag_response, "provider", None),
                 model=getattr(rag_response, "model", None),
@@ -154,12 +157,13 @@ def _build_metadata(
     usage: dict | None = None,
     timing: dict | None = None,
     tools: dict | None = None,
+    retrieval: list | None = None,
     stop_reason: str | None = None,
 ) -> dict:
     """
     Build nested metadata matching the frontend `ChatMetadata` type
 
-    Retrieval is agent-driven via mpmb_search; per-turn retrieval metadata no longer exists, so the `retrieval` group is omitted (the frontend type marks it optional)
+    `retrieval` is the per-turn agentic trace (one citation entry per mpmb_search call), included only when the turn searched
     """
     meta = {
         "session_id": session_id,
@@ -170,6 +174,8 @@ def _build_metadata(
     }
     if tools:
         meta["tools"] = tools
+    if retrieval:
+        meta["retrieval"] = retrieval
     if stop_reason:
         meta["stop_reason"] = stop_reason
     return meta
@@ -221,6 +227,7 @@ async def chat(request: ChatRequest):
             model=rag_response.model,
             usage=rag_response.usage,
             timing=rag_response.timing,
+            retrieval=rag_response.retrieval,
         )
 
         return ChatResponse(
@@ -299,6 +306,7 @@ async def chat_stream(request: ChatRequest):
                                 timing=event.timing,
                                 tools=event.tools,
                                 stop_reason=event.stop_reason,
+                                retrieval=event.retrieval,
                             ),
                         )
                         yield f"data: {final_chunk.model_dump_json()}\n\n"
