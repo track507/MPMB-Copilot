@@ -1,10 +1,11 @@
-import { Circle, Moon, Sun } from "lucide-react";
+import { Circle, LogOut, Moon, Sun } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useIndexStatus } from "@/hooks/use-settings";
 import { useSession } from "@/hooks/use-sessions";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
+import { useLogout } from "@/hooks/use-auth";
 
 export function TopBar(): ReactElement {
 	const { data: indexStatus } = useIndexStatus();
@@ -12,6 +13,8 @@ export function TopBar(): ReactElement {
 	const { data: session } = useSession(sessionId ?? null);
 	const title = session?.title ?? "MPMB Copilot";
 	const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+	const logout = useLogout();
+	const navigate = useNavigate();
 
 	const toggleTheme = useCallback(() => {
 		setDark((prev) => {
@@ -52,12 +55,27 @@ export function TopBar(): ReactElement {
 				</span>
 			</div>
 
-			<button
-				type="button"
-				onClick={toggleTheme}
-				className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
-				{dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-			</button>
+			<div className="flex items-center gap-1">
+				<button
+					type="button"
+					onClick={toggleTheme}
+					className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+					{dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+				</button>
+				<button
+					type="button"
+					title="Sign out"
+					onClick={() => {
+						logout.mutate(undefined, {
+							onSettled: () => {
+								void navigate("/login");
+							},
+						});
+					}}
+					className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
+					<LogOut className="size-4" />
+				</button>
+			</div>
 		</header>
 	);
 }
