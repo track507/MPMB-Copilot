@@ -27,7 +27,7 @@ class ChatRequest(BaseModel):
             ... )
     """
 
-    message: str = Field(..., min_length=1, max_length=10000, description="User message")
+    message: str = Field(..., min_length=1, max_length=50000, description="User message")
     session_id: Optional[str] = Field(None, description="Session UUID for conversation persistence")
     provider: Optional[str] = Field(None, description="LLM provider (anthropic/openai/ollama)")
     model: Optional[str] = Field(None, description="Specific model to use")
