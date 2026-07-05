@@ -19,6 +19,11 @@ const TOOL_PILL_TEXT: Record<string, string> = {
 };
 const DEFAULT_PILL_TEXT = "Verifying code...";
 
+// Mirror of ChatRequest.message max_length in backend/app/model/schemas/chat.py
+const MAX_MESSAGE_LENGTH = 50_000;
+// Reveal the counter only as the user nears the cap, so short messages stay uncluttered
+const COUNTER_REVEAL_AT = Math.floor(MAX_MESSAGE_LENGTH * 0.9);
+
 export function ChatWindow(): ReactElement {
 	const { sessionId: sessionIdParam } = useParams();
 	const sessionId = sessionIdParam ?? null;
@@ -85,7 +90,7 @@ export function ChatWindow(): ReactElement {
 
 	const submitMessage = useCallback(() => {
 		const trimmed = input.trim();
-		if (trimmed.length === 0 || isStreaming) return;
+		if (trimmed.length === 0 || isStreaming || input.length > MAX_MESSAGE_LENGTH) return;
 		setInput("");
 		shouldAutoScrollRef.current = true;
 
@@ -112,6 +117,10 @@ export function ChatWindow(): ReactElement {
 		},
 		[submitMessage]
 	);
+
+	const charCount = input.length;
+	const isOverLimit = charCount > MAX_MESSAGE_LENGTH;
+	const showCounter = charCount >= COUNTER_REVEAL_AT;
 
 	return (
 		<div className="flex h-full min-w-0 flex-col">
@@ -165,39 +174,57 @@ export function ChatWindow(): ReactElement {
 
 			{/* Input area */}
 			<div className="border-t border-border bg-background px-4 py-3">
-				<form onSubmit={handleSubmit} className="mx-auto flex min-w-0 max-w-3xl items-end gap-2">
-					<textarea
-						ref={textareaRef}
-						value={input}
-						onChange={(e) => {
-							setInput(e.target.value);
-						}}
-						onKeyDown={handleKeyDown}
-						placeholder="Ask about MPMB scripting..."
-						rows={1}
-						className={cn(
-							"flex-1 resize-none rounded-lg border border-input bg-background px-4 py-3",
-							"text-sm placeholder:text-muted-foreground",
-							"focus:outline-none focus:ring-2 focus:ring-ring"
-						)}
-					/>
+				<div className="mx-auto min-w-0 max-w-3xl">
+					<form onSubmit={handleSubmit} className="flex min-w-0 items-end gap-2">
+						<textarea
+							ref={textareaRef}
+							value={input}
+							onChange={(e) => {
+								setInput(e.target.value);
+							}}
+							onKeyDown={handleKeyDown}
+							placeholder="Ask about MPMB scripting..."
+							rows={1}
+							aria-invalid={isOverLimit}
+							className={cn(
+								"flex-1 resize-none rounded-lg border bg-background px-4 py-3",
+								"text-sm placeholder:text-muted-foreground",
+								"focus:outline-none focus:ring-2",
+								isOverLimit ? "border-destructive focus:ring-destructive" : "border-input focus:ring-ring"
+							)}
+						/>
 
-					{isStreaming ? (
-						<button
-							type="button"
-							onClick={cancelStream}
-							className="shrink-0 rounded-lg bg-destructive p-3 text-destructive-foreground transition-colors hover:bg-destructive/90">
-							<Square className="size-4" />
-						</button>
-					) : (
-						<button
-							type="submit"
-							disabled={input.trim().length === 0}
-							className="shrink-0 rounded-lg bg-primary p-3 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
-							<Send className="size-4" />
-						</button>
+						{isStreaming ? (
+							<button
+								type="button"
+								onClick={cancelStream}
+								className="shrink-0 rounded-lg bg-destructive p-3 text-destructive-foreground transition-colors hover:bg-destructive/90">
+								<Square className="size-4" />
+							</button>
+						) : (
+							<button
+								type="submit"
+								disabled={input.trim().length === 0 || isOverLimit}
+								className="shrink-0 rounded-lg bg-primary p-3 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
+								<Send className="size-4" />
+							</button>
+						)}
+					</form>
+
+					{showCounter && (
+						<p className={cn("mt-1.5 text-right text-xs tabular-nums", isOverLimit ? "text-destructive" : "text-muted-foreground")}>
+							{isOverLimit ? (
+								<span role="alert">
+									{(charCount - MAX_MESSAGE_LENGTH).toLocaleString()} over the {MAX_MESSAGE_LENGTH.toLocaleString()} character limit
+								</span>
+							) : (
+								<>
+									{charCount.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()}
+								</>
+							)}
+						</p>
 					)}
-				</form>
+				</div>
 			</div>
 		</div>
 	);
