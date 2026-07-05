@@ -67,6 +67,14 @@ export default function App(): ReactElement {
 							</AuthGate>
 						}>
 						<Route
+							index
+							element={
+								<Suspense fallback={<PageLoader />}>
+									<HomePage />
+								</Suspense>
+							}
+						/>
+						<Route
 							path="chat/:sessionId"
 							element={
 								<Suspense fallback={<PageLoader />}>
