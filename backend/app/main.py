@@ -171,9 +171,10 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
+    # ! Bind the configured host, not a hardcoded 0.0.0.0: the exposure fail-safe keys off config.bind_host, so the launcher and the fail-safe must never disagree about whether we are exposed
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",
+        host=config.bind_host,
         port=8000,
         reload=config.is_development,
         log_level=config.log_level.lower(),
