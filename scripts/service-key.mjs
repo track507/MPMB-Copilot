@@ -26,7 +26,7 @@ export function readServiceKey() {
 
 export function authHeaders() {
 	const key = readServiceKey();
-	return key ? { Authorization: `Bearer: ${key}` } : {};
+	return key ? { Authorization: `Bearer ${key}` } : {};
 }
 
 export const AUTH_HINT = 'Mint a key with "pnpm run mint-key" and set SERVICE_API_KEY in .env, or set AUTH_DISABLED=true for loopback dev.';
