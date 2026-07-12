@@ -121,6 +121,20 @@ export interface IndexStatus {
 	readonly indexed_files: number;
 	readonly last_updated: string | null;
 	readonly status: "ready" | "indexing" | "stale" | "empty" | "error";
+	readonly task_id: string | null;
+}
+
+export interface IndexTriggerResponse {
+	readonly status: "completed" | "in_progress" | "failed" | "partial";
+	readonly message: string;
+	readonly task_id: string | null;
+}
+
+export interface TaskStatus {
+	readonly status: "pending" | "running" | "completed" | "failed" | "cancelled";
+	readonly progress: number | null;
+	readonly progress_message: string | null;
+	readonly error: string | null;
 }
 
 export interface HealthResponse {
