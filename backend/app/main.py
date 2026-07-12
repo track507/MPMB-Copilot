@@ -91,6 +91,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         object_count=catalog_health.object_count,
         catalog_path=catalog_health.catalog_path,
     )
+    # Warm the model catalog cache so the first settings visit is a cache hit, not two provider round trips
+    from app.core.model_catalog import get_model_catalog
+
+    def _warmup_done(task: asyncio.Task) -> None:
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("model_catalog_warmup_failed", error=str(task.exception()))
+
+    app.state.catalog_warmup = asyncio.create_task(get_model_catalog())
+    app.state.catalog_warmup.add_done_callback(_warmup_done)
     yield
 
     # Shutdown

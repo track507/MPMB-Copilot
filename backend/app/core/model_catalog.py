@@ -13,6 +13,7 @@ Results are cached briefly so the settings screen doesn't hit the provider on ev
 Ollama is intentionally free-form (empty list) - local model names are arbitrary, so the frontend shows a plain input
 """
 
+import asyncio
 import time
 from dataclasses import dataclass
 
@@ -190,8 +191,10 @@ async def get_model_catalog() -> dict[str, list[dict]]:
     `effort` is the list of supported effort levels (empty = no effort control)
     Ollama is always empty (free-form input on the frontend)
     """
-    anthropic = await _cached("anthropic", _fetch_anthropic)
-    openai = await _cached("openai", _fetch_openai)
+    anthropic, openai = await asyncio.gather(
+        _cached("anthropic", _fetch_anthropic),
+        _cached("openai", _fetch_openai),
+    )
     return {
         "anthropic": [_serialize(o) for o in anthropic],
         "openai": [_serialize(o) for o in openai],

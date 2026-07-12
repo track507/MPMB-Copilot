@@ -1,3 +1,6 @@
+import asyncio
+import time
+
 import pytest
 
 from app.core import model_catalog
@@ -104,3 +107,29 @@ async def test_anthropic_fetch_failure_falls_back(monkeypatch):
 
     options = await model_catalog._fetch_anthropic()
     assert [o.id for o in options] == [o.id for o in ANTHROPIC_CURATED]
+
+
+async def test_provider_fetches_run_concurrently(monkeypatch):
+    from app.core import model_catalog
+
+    monkeypatch.setattr(model_catalog, "_cache", {})
+
+    async def slow_anthropic():
+        await asyncio.sleep(0.1)
+        return [model_catalog.ModelOption("claude-x", "Claude X")]
+
+    async def slow_openai():
+        await asyncio.sleep(0.1)
+        return [model_catalog.ModelOption("gpt-x", "GPT X")]
+
+    monkeypatch.setattr(model_catalog, "_fetch_anthropic", slow_anthropic)
+    monkeypatch.setattr(model_catalog, "_fetch_openai", slow_openai)
+
+    start = time.perf_counter()
+    catalog = await model_catalog.get_model_catalog()
+    elapsed = time.perf_counter() - start
+
+    # ? Sequential would be >= 0.2s; concurrent stays close to one sleep
+    assert elapsed < 0.18
+    assert catalog["anthropic"][0]["id"] == "claude-x"
+    assert catalog["openai"][0]["id"] == "gpt-x"
