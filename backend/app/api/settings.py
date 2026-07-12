@@ -61,7 +61,7 @@ class SettingsUpdate(BaseModel):
     status_code=status.HTTP_200_OK,
     summary="Get current behavioral settings",
 )
-async def get_settings() -> dict[str, Any]:
+async def get_settings(_: Principal = Depends(require_admin)) -> dict[str, Any]:
     """Return the current hot-reloadable settings as a dict."""
     return settings.to_dict()
 

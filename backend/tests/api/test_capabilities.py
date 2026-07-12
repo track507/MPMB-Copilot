@@ -40,3 +40,16 @@ def test_patch_settings_accepts_rerank_fields(monkeypatch):
     resp = client.patch("/settings", json={"rerank_enabled": True, "rerank_model": "BAAI/bge-reranker-base"})
     assert resp.status_code == 200
     assert captured == {"rerank_enabled": True, "rerank_model": "BAAI/bge-reranker-base"}
+
+
+def test_settings_read_requires_admin():
+    from fastapi.testclient import TestClient
+
+    from app.api.deps import Principal, current_principal
+    from app.main import app
+
+    app.dependency_overrides[current_principal] = lambda: Principal(user_id="u1", role="user")
+    try:
+        assert TestClient(app, raise_server_exceptions=False).get("/api/settings").status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_principal, None)
