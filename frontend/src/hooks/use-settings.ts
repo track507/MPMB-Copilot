@@ -4,8 +4,8 @@ import type { Settings, SettingsUpdate, IndexStatus, IndexTriggerResponse, TaskS
 
 const SETTINGS_KEY = ["settings"] as const;
 const CAPABILITIES_KEY = ["capabilities"] as const;
-const INDEX_KEY = ["index-status"] as const;
 const HEALTH_KEY = ["health"] as const;
+export const INDEX_KEY = ["index-status"] as const;
 
 export function useSettings(): ReturnType<typeof useQuery<Settings>> {
 	return useQuery({
