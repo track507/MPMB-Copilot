@@ -1,15 +1,26 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useCapabilities } from "@/hooks/use-settings";
+import { INDEX_KEY, useSettings, useUpdateSettings, useIndexStatus, useTriggerIndex, useIndexTask, useCapabilities } from "@/hooks/use-settings";
 import { ModelSelect } from "@/components/settings/model-select";
 import { RerankSelect } from "@/components/settings/rerank-select";
 import { cn } from "@/lib/utils";
 import type { ChangeEvent, ReactElement } from "react";
-import type { ModelOption, Settings } from "@/types/settings";
+import type { CapabilityEnvelope, ModelOption, Settings } from "@/types/settings";
+import { classifyIndexResponse, isIndexBusy } from "@/lib/index-actions";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const settingsSchema = z.object({
 	default_llm_provider: z.string().min(1),
@@ -70,10 +81,28 @@ function FieldLabel({ label, description }: { readonly label: string; readonly d
 }
 
 export function SettingsPanel(): ReactElement {
-	const { data: settings, isLoading } = useSettings();
+	const settingsQuery = useSettings();
+	const capabilitiesQuery = useCapabilities();
 
-	// Gate on load so the inner form always has defined settings - lets `values` stay non-optional
-	if (isLoading || settings === undefined) {
+	// ? One paint: the form renders only when settings AND capabilities are ready, so sections never pop in
+	if (settingsQuery.isError || capabilitiesQuery.isError) {
+		return (
+			<div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-muted-foreground">
+				<p>Failed to load settings{capabilitiesQuery.isError ? " capabilities" : ""}.</p>
+				<button
+					type="button"
+					onClick={() => {
+						void settingsQuery.refetch();
+						void capabilitiesQuery.refetch();
+					}}
+					className="rounded-md bg-secondary px-3 py-1.5 font-medium text-secondary-foreground hover:bg-secondary/80">
+					Retry
+				</button>
+			</div>
+		);
+	}
+
+	if (settingsQuery.data === undefined || capabilitiesQuery.data === undefined) {
 		return (
 			<div className="flex items-center justify-center py-12">
 				<Loader2 className="size-6 animate-spin text-muted-foreground" />
@@ -81,17 +110,18 @@ export function SettingsPanel(): ReactElement {
 		);
 	}
 
-	return <SettingsForm settings={settings} />;
+	return <SettingsForm settings={settingsQuery.data} capabilities={capabilitiesQuery.data} />;
 }
 
-function SettingsForm({ settings }: { readonly settings: Settings }): ReactElement {
-	const { data: capabilities } = useCapabilities();
-	const catalog = capabilities?.generation.entries;
+function SettingsForm({ settings, capabilities }: { readonly settings: Settings; readonly capabilities: CapabilityEnvelope }): ReactElement {
+	const catalog = capabilities.generation.entries;
 	// ! keep the {models, current} shape to accommodate for the current contract
-	const embeddingCatalog = capabilities ? { models: capabilities.embedding.entries, current: capabilities.embedding.current } : undefined;
+	const embeddingCatalog = { models: capabilities.embedding.entries, current: capabilities.embedding.current };
+	const rerank = capabilities.rerank;
 	const updateSettings = useUpdateSettings();
 	const { data: indexStatus } = useIndexStatus();
 	const triggerIndex = useTriggerIndex();
+	const queryClient = useQueryClient();
 	const inputClass = cn("w-full rounded-md border border-input bg-background px-3 py-2 text-sm", "focus:outline-none focus:ring-2 focus:ring-ring");
 
 	// RHF's `values` keeps the form synced to server state (and resets dirty after each save)
@@ -142,9 +172,8 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 	const anthropicCheap = useWatch({ control, name: "anthropic_cheap_model" });
 	const openaiCheap = useWatch({ control, name: "openai_cheap_model" });
 	const embeddingModel = useWatch({ control, name: "embedding_model" });
-	const rerank = capabilities?.rerank;
 	const rerankModel = useWatch({ control, name: "rerank_model" });
-	const embeddingChanged = embeddingCatalog !== undefined && embeddingCatalog.current.model !== embeddingModel;
+	const embeddingChanged = embeddingCatalog.current.model !== embeddingModel;
 
 	// ? Remember the last model chosen per provider so switching providers restores the right one (Ollama keeps its own id, not Anthropic's)
 	const [lastModelByProvider, setLastModelByProvider] = useState<Record<string, string>>({
@@ -153,7 +182,6 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 
 	const optionsByProvider = useCallback(
 		(prov: string): readonly ModelOption[] => {
-			if (catalog === undefined) return [];
 			if (prov === "anthropic") return catalog.anthropic;
 			if (prov === "openai") return catalog.openai;
 			if (prov === "ollama") return catalog.ollama;
@@ -202,16 +230,56 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 		[updateSettings]
 	);
 
-	const handleReindex = useCallback(() => {
-		triggerIndex.mutate(undefined, {
-			onSuccess: () => {
-				toast.success("Indexing started");
-			},
-			onError: () => {
-				toast.error("Failed to start indexing");
-			},
-		});
-	}, [triggerIndex]);
+	const [forceRebuild, setForceRebuild] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [startedTaskId, setStartedTaskId] = useState<string | null>(null);
+	// ? Live status wins (covers CLI-started runs); startedTaskId only bridges the gap until the next status refetch
+	const activeTaskId = indexStatus?.task_id ?? startedTaskId;
+	const { data: activeTask } = useIndexTask(activeTaskId);
+	const busy = isIndexBusy(indexStatus, activeTask) || triggerIndex.isPending;
+
+	// ? One-shot per task id: toast + refresh exactly once when a run reaches a terminal state
+	// No setState in here (react-hooks/set-state-in-effect): startedTaskId is never cleared - staleness is
+	// harmless because polling stops on terminal status and status-first precedence shadows stale ids
+	const handledTaskRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (activeTaskId === null || activeTask === undefined) return;
+		if (activeTask.status === "pending" || activeTask.status === "running") return;
+		if (handledTaskRef.current === activeTaskId) return;
+		handledTaskRef.current = activeTaskId;
+		if (activeTask.status === "completed") toast.success("Indexing finished");
+		if (activeTask.status === "failed") toast.error(activeTask.error ?? "Indexing failed");
+		void queryClient.invalidateQueries({ queryKey: INDEX_KEY });
+	}, [activeTask, activeTaskId, queryClient]);
+
+	const runIndex = useCallback(() => {
+		triggerIndex.mutate(
+			{ force: forceRebuild },
+			{
+				onSuccess: (resp) => {
+					const action = classifyIndexResponse(resp);
+					if (action.kind === "started") {
+						setStartedTaskId(action.taskId);
+						toast.success("Indexing started");
+					} else {
+						// ? The honest no-op: surface the backend's own message
+						toast.info(action.message);
+					}
+				},
+				onError: () => {
+					toast.error("Failed to start indexing");
+				},
+			}
+		);
+	}, [triggerIndex, forceRebuild]);
+
+	const handleReindexClick = useCallback(() => {
+		if (forceRebuild) {
+			setConfirmOpen(true);
+		} else {
+			runIndex();
+		}
+	}, [forceRebuild, runIndex]);
 
 	return (
 		<form
@@ -361,34 +429,32 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 			</section>
 
 			{/* Reranker */}
-			{rerank && (
-				<section className="space-y-4">
-					<h2 className="text-lg font-semibold">{rerank.label}</h2>
-					<div className="flex items-center gap-3">
-						<input {...register("rerank_enabled")} type="checkbox" id="rerank-enabled" className="size-4 rounded" />
-						<label htmlFor="rerank-enabled" className="text-sm">
-							Rerank search results (cross-encoder over hybrid candidates)
-						</label>
+			<section className="space-y-4">
+				<h2 className="text-lg font-semibold">{rerank.label}</h2>
+				<div className="flex items-center gap-3">
+					<input {...register("rerank_enabled")} type="checkbox" id="rerank-enabled" className="size-4 rounded" />
+					<label htmlFor="rerank-enabled" className="text-sm">
+						Rerank search results (cross-encoder over hybrid candidates)
+					</label>
+				</div>
+				<div className="grid gap-4 sm:grid-cols-2">
+					<div className="space-y-2">
+						<FieldLabel label="Reranker model" description="Re-scores candidates before the budget cut" />
+						<RerankSelect
+							value={rerankModel}
+							options={rerank.entries}
+							onChange={(prov, id) => {
+								setValue("rerank_provider", prov, { shouldDirty: true });
+								setValue("rerank_model", id, { shouldDirty: true });
+							}}
+						/>
 					</div>
-					<div className="grid gap-4 sm:grid-cols-2">
-						<div className="space-y-2">
-							<FieldLabel label="Reranker model" description="Re-scores candidates before the budget cut" />
-							<RerankSelect
-								value={rerankModel}
-								options={rerank.entries}
-								onChange={(prov, id) => {
-									setValue("rerank_provider", prov, { shouldDirty: true });
-									setValue("rerank_model", id, { shouldDirty: true });
-								}}
-							/>
-						</div>
-						<div className="space-y-2">
-							<FieldLabel label="Candidate pool" description="Candidates scored per tier before the cut" />
-							<input {...register("rerank_candidate_k", { valueAsNumber: true })} type="number" min="1" max="200" className={inputClass} />
-						</div>
+					<div className="space-y-2">
+						<FieldLabel label="Candidate pool" description="Candidates scored per tier before the cut" />
+						<input {...register("rerank_candidate_k", { valueAsNumber: true })} type="number" min="1" max="200" className={inputClass} />
 					</div>
-				</section>
-			)}
+				</div>
+			</section>
 
 			{/* Index Status */}
 			<section className="space-y-4">
@@ -402,40 +468,84 @@ function SettingsForm({ settings }: { readonly settings: Settings }): ReactEleme
 						<span className="text-muted-foreground">Files indexed</span>
 						<span className="font-medium">{String(indexStatus?.indexed_files ?? 0)}</span>
 					</div>
+
+					{activeTask !== undefined && (activeTask.status === "pending" || activeTask.status === "running") && (
+						<div className="mt-3 space-y-1">
+							<div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+								<div
+									className="h-full bg-primary transition-all"
+									style={{ width: `${String(Math.round((activeTask.progress ?? 0) * 100))}%` }}
+								/>
+							</div>
+							<p className="text-xs text-muted-foreground">{activeTask.progress_message ?? "Indexing..."}</p>
+						</div>
+					)}
+
 					<button
 						type="button"
-						onClick={handleReindex}
-						disabled={triggerIndex.isPending}
+						onClick={handleReindexClick}
+						disabled={busy}
 						className="mt-3 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50">
-						{triggerIndex.isPending ? "Starting..." : "Re-index"}
+						{busy ? "Indexing..." : "Re-index"}
 					</button>
+
+					<div className="mt-3 flex items-center gap-3">
+						<input
+							type="checkbox"
+							id="force-rebuild"
+							checked={forceRebuild}
+							onChange={(e) => {
+								setForceRebuild(e.target.checked);
+							}}
+							className="size-4 rounded"
+						/>
+						<label htmlFor="force-rebuild" className="text-sm">
+							Force rebuild
+							<span className="block text-xs text-muted-foreground">
+								Drops the index and rebuilds all vectors; required after changing the embedding model
+							</span>
+						</label>
+					</div>
 				</div>
 
-				{embeddingCatalog && (
-					<div className="space-y-2">
-						<FieldLabel label="Embedding model" description="Builds and queries the vector index" />
-						<select
-							value={embeddingModel}
-							onChange={(e) => {
-								const next = embeddingCatalog.models.find((m) => m.id === e.target.value);
-								if (next) {
-									setValue("embedding_provider", next.provider, { shouldDirty: true });
-									setValue("embedding_model", next.id, { shouldDirty: true });
-								}
-							}}
-							className={inputClass}>
-							{embeddingCatalog.models.map((m) => (
-								<option key={`${m.provider}:${m.id}`} value={m.id} disabled={m.status !== "ready"}>
-									{m.label} - {m.dimension}d{m.multilingual ? " - multilingual" : ""}
-									{m.status === "needs_key" ? " (set API key)" : m.status === "installable" ? " (install via add-ons)" : ""}
-								</option>
-							))}
-						</select>
-						{embeddingChanged && (
-							<p className="text-xs text-amber-600">Changing the embedding model requires a full re-index (use Re-index above).</p>
-						)}
-					</div>
-				)}
+				<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+					<AlertDialogContent>
+						<AlertDialogTitle>Rebuild the index from scratch?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This drops all {String(indexStatus?.total_vectors ?? 0)} vectors and re-embeds everything. Search is degraded until it finishes.
+						</AlertDialogDescription>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction onClick={runIndex}>Rebuild</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+
+				<div className="space-y-2">
+					<FieldLabel label="Embedding model" description="Builds and queries the vector index" />
+					<select
+						value={embeddingModel}
+						onChange={(e) => {
+							const next = embeddingCatalog.models.find((m) => m.id === e.target.value);
+							if (next) {
+								setValue("embedding_provider", next.provider, { shouldDirty: true });
+								setValue("embedding_model", next.id, { shouldDirty: true });
+							}
+						}}
+						className={inputClass}>
+						{embeddingCatalog.models.map((m) => (
+							<option key={`${m.provider}:${m.id}`} value={m.id} disabled={m.status !== "ready"}>
+								{m.label} - {m.dimension}d{m.multilingual ? " - multilingual" : ""}
+								{m.status === "needs_key" ? " (set API key)" : m.status === "installable" ? " (install via add-ons)" : ""}
+							</option>
+						))}
+					</select>
+					{embeddingChanged && (
+						<p className="text-xs text-amber-600">
+							Changing the embedding model requires a full rebuild: turn on Force rebuild above, then Re-index.
+						</p>
+					)}
+				</div>
 			</section>
 
 			{/* Save */}
