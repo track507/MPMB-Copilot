@@ -10,6 +10,7 @@
  */
 
 import { syncChunksToDocker } from "./docker-sync.mjs";
+import { AUTH_HINT, authHeaders } from "./service-key.mjs";
 
 const BASE_URL = (process.env.BACKEND_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 const INDEX_URL = `${BASE_URL}/api/index`;
@@ -20,7 +21,7 @@ function sleep(ms) {
 }
 
 async function fetchJson(url, init = {}) {
-	const response = await fetch(url, init);
+	const response = await fetch(url, { ...init, headers: { ...authHeaders(), ...(init.headers || {}) } });
 	const text = await response.text();
 	let payload = {};
 
@@ -34,7 +35,8 @@ async function fetchJson(url, init = {}) {
 
 	if (!response.ok) {
 		const detail = payload.detail || payload.message || payload.raw || response.statusText;
-		throw new Error(`${init.method || "GET"} ${url}: ${response.status} ${detail}`);
+		const hint = response.status === 401 || response.status === 403 ? ` ${AUTH_HINT}` : "";
+		throw new Error(`${init.method || "GET"} ${url}: ${response.status} ${detail}${hint}`);
 	}
 
 	return payload;
