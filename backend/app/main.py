@@ -9,17 +9,11 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api import api_keys as api_keys_api
 from app.api import (
     auth as auth_api,
 )
-from app.api import (
-    chat,
-    health,
-    index,
-    sessions,
-    settings,
-    tasks,
-)
+from app.api import chat, health, index, sessions, settings, tasks
 from app.api import (
     source_catalog as source_catalog_api,
 )
@@ -152,6 +146,7 @@ app.include_router(index.router, prefix=config.api_prefix, tags=["Indexing"], de
 app.include_router(sessions.router, prefix=config.api_prefix, tags=["Sessions"], dependencies=_wall)
 app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"], dependencies=_ops_wall)
 app.include_router(settings.router, prefix=config.api_prefix, tags=["Settings"], dependencies=_wall)
+app.include_router(api_keys_api.router, prefix=config.api_prefix, tags=["API Keys"])
 app.include_router(source_catalog_api.router, prefix=config.api_prefix, tags=["Source Catalog"], dependencies=_wall)
 
 
