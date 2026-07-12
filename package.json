@@ -48,6 +48,7 @@
 		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest backend/ -v",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run test",
 		"check:full": "pnpm run check && pnpm run typecheck",
+		"mint-key": "node ./scripts/mint-key.mjs",
 		"prepare": "husky"
 	},
 	"lint-staged": {
