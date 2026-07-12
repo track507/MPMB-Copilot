@@ -17,7 +17,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 from uuid_utils import uuid7
@@ -413,3 +413,23 @@ class LoginAttempt(Base):
     username: str = Column(String(64), nullable=False)
     client_ip: str = Column(String(64), nullable=False)
     attempted_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ApiKey(Base):
+    """
+    Server-granted service API key (ops scripts)
+    Only the sha256 of the token is stored; the raw token is shown once at mint time
+    """
+
+    __tablename__ = "api_keys"
+
+    id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
+    name: str = Column(String(64), nullable=False)
+    token_hash: str = Column(String(64), nullable=False, unique=True)
+    token_prefix: str = Column(String(16), nullable=False)
+    scopes: list = Column(ARRAY(Text), nullable=False)
+    created_by: UUID = Column(PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    expires_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    last_used_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    revoked_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
