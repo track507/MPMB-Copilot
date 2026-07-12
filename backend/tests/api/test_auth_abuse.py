@@ -13,10 +13,11 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def unwalled_main_client():
     """main.app WITHOUT the conftest auth bypass - the real wall."""
-    from app.api.deps import current_principal
+    from app.api.deps import current_principal, principal_or_service
     from app.main import app
 
     app.dependency_overrides.pop(current_principal, None)
+    app.dependency_overrides.pop(principal_or_service, None)
     yield TestClient(app, raise_server_exceptions=False)
 
 

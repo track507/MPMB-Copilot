@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request, status
 
 from app.config import config
-from app.services.db import auth_service, db
+from app.services.db import api_key_service, auth_service, db
 
 COOKIE_NAME = "mpmb_session"
 
@@ -19,6 +19,7 @@ COOKIE_NAME = "mpmb_session"
 class Principal:
     user_id: str
     role: str
+    scopes: tuple[str, ...] = ()
 
 
 _DEFAULT_ADMIN = Principal(user_id="default", role="admin")
@@ -56,6 +57,36 @@ async def current_principal(request: Request) -> Principal:
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     return principal
+
+
+async def principal_or_service(request: Request) -> Principal:
+    """Ops wall: cookie principal OR a server-granted API key (index/tasks routers only)."""
+    if auth_bypassed():
+        return _DEFAULT_ADMIN
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        if not db.is_connected:
+            # ! Fail closed: a key we cannot verify is not a grant
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication unavailable")
+        key = await api_key_service.resolve_key(auth_header.removeprefix("Bearer ").strip())
+        if key is None:
+            # ? Uniform 401: unknown, revoked, and expired are indistinguishable to the caller
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        return Principal(user_id=str(key.id), role="service", scopes=tuple(key.scopes))
+    return await current_principal(request)
+
+
+def require_scope(scope: str):
+    """Admins hold all scopes implicitly; service principals need the explicit grant; plain users are refused."""
+
+    async def _check(principal: Principal = Depends(principal_or_service)) -> Principal:
+        if principal.role == "admin":
+            return principal
+        if principal.role == "service" and scope in principal.scopes:
+            return principal
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+    return _check
 
 
 async def require_admin(principal: Principal = Depends(current_principal)) -> Principal:

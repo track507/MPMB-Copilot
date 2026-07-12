@@ -2,8 +2,9 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.deps import require_scope
 from app.config import config
 from app.logger import get_logger
 from app.model.schemas.index import IndexRequest, IndexResponse, IndexStatus
@@ -121,6 +122,7 @@ async def get_index_status():
     status_code=status.HTTP_202_ACCEPTED,
     summary="Index MPMB Source Code",
     description="Start indexing MPMB source files in background (non-blocking)",
+    dependencies=[Depends(require_scope("index:write"))],
 )
 async def trigger_indexing(request: IndexRequest = IndexRequest()):
     """Trigger background indexing of MPMB source code
@@ -211,6 +213,7 @@ async def trigger_indexing(request: IndexRequest = IndexRequest()):
     status_code=status.HTTP_200_OK,
     summary="Clear Index",
     description="Delete all vectors from the Qdrant collection",
+    dependencies=[Depends(require_scope("index:write"))],
 )
 async def clear_index():
     """Clear all vectors from the Qdrant collection
