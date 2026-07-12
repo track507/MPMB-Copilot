@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MessageActions } from "@/components/chat/message-actions";
 
@@ -16,12 +16,15 @@ describe("MessageActions", () => {
 		clearMutate.mockClear();
 	});
 
-	it("copies the message content", () => {
-		const writeText = vi.fn();
+	it("copies the message content", async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined);
 		Object.assign(navigator, { clipboard: { writeText } });
 		render(<MessageActions sessionId="s1" messageId="m1" content="hello world" feedback={null} />);
 		fireEvent.click(screen.getByTitle("Copy"));
-		expect(writeText).toHaveBeenCalledWith("hello world");
+		// ? copy() awaits the clipboard write before setting the copied state; waitFor flushes that update inside act
+		await waitFor(() => {
+			expect(writeText).toHaveBeenCalledWith("hello world");
+		});
 	});
 
 	it("submits a down vote and reveals the note field", () => {
