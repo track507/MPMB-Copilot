@@ -44,3 +44,8 @@ export function useLogout(): ReturnType<typeof useMutation<undefined, Error, voi
 		},
 	});
 }
+
+export function useIsAdmin(): { isAdmin: boolean; isLoading: boolean } {
+	const { data, isLoading } = useAuthState();
+	return { isAdmin: data?.user?.role === "admin", isLoading };
+}

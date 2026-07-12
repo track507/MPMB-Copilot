@@ -6,6 +6,7 @@ import RootLayout from "./components/layout/root-layout";
 import type { ReactElement } from "react";
 import { ApiError } from "@/lib/api-client";
 import { AuthGate } from "@/components/auth/auth-gate";
+import { AdminRoute } from "@/components/auth/admin-route";
 
 const HomePage = lazy(async () => import("./pages/home"));
 const SettingsPage = lazy(async () => import("./pages/settings"));
@@ -85,9 +86,11 @@ export default function App(): ReactElement {
 						<Route
 							path="settings"
 							element={
-								<Suspense fallback={<PageLoader />}>
-									<SettingsPage />
-								</Suspense>
+								<AdminRoute>
+									<Suspense fallback={<PageLoader />}>
+										<SettingsPage />
+									</Suspense>
+								</AdminRoute>
 							}
 						/>
 						<Route

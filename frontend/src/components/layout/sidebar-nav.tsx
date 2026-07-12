@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useSessions, useDeleteSession, useUpdateSession } from "@/hooks/use-sessions";
 import type { Session } from "@/types/session";
 import type { ReactElement } from "react";
+import { useIsAdmin } from "@/hooks/use-auth";
 
 export function SidebarNav(): ReactElement {
 	const navigate = useNavigate();
@@ -13,6 +14,8 @@ export function SidebarNav(): ReactElement {
 
 	const { data: sessionList } = useSessions();
 	const deleteSession = useDeleteSession();
+
+	const { isAdmin } = useIsAdmin();
 
 	// ? New Chat just opens a blank window
 	// ? The session is created by the backend on the first message (see use-chat), avoiding empty throwaway sessions
@@ -66,22 +69,24 @@ export function SidebarNav(): ReactElement {
 				))}
 			</nav>
 
-			{/* Settings link */}
-			<div className="shrink-0 border-t border-sidebar-border p-3">
-				<NavLink
-					to="/settings"
-					className={({ isActive }) =>
-						cn(
-							"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-							isActive
-								? "bg-sidebar-accent text-sidebar-accent-foreground"
-								: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-						)
-					}>
-					<Settings className="size-4" />
-					Settings
-				</NavLink>
-			</div>
+			{/* Settings link (admin only) */}
+			{isAdmin && (
+				<div className="shrink-0 border-t border-sidebar-border p-3">
+					<NavLink
+						to="/settings"
+						className={({ isActive }) =>
+							cn(
+								"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+								isActive
+									? "bg-sidebar-accent text-sidebar-accent-foreground"
+									: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+							)
+						}>
+						<Settings className="size-4" />
+						Settings
+					</NavLink>
+				</div>
+			)}
 		</aside>
 	);
 }
