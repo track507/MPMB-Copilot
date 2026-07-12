@@ -67,6 +67,7 @@ class IndexStatus(BaseModel):
     indexed_files: int = Field(..., description="Number of source files indexed")
     last_updated: Optional[datetime] = Field(None, description="Last indexing timestamp (UTC)")
     status: str = Field(..., description="Index health status (ready/indexing/stale/empty/error)")
+    task_id: Optional[str] = Field(None, description="Active indexing task id when status is 'indexing'")
 
 
 class IndexRequest(BaseModel):

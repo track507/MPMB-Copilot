@@ -38,14 +38,6 @@ def _parse_last_updated(value: object) -> datetime | None:
         return None
 
 
-def _has_active_index_task() -> bool:
-    """Return True if a background indexing task is currently pending or running."""
-    return any(
-        task.name == "index_all_chunks" and task.status in {TaskStatus.PENDING, TaskStatus.RUNNING}
-        for task in task_manager.tasks.values()
-    )
-
-
 def _get_active_index_task():
     """Return the active indexing task, if any."""
     for task in task_manager.tasks.values():
@@ -95,7 +87,8 @@ async def get_index_status():
         if not metadata and points_count > 0:
             metadata = index_status_store.rebuild_from_chunked_output(total_vectors=points_count, status="ready")
 
-        if _has_active_index_task():
+        active_task = _get_active_index_task()
+        if active_task is not None:
             index_status = "indexing"
         else:
             index_status = "ready" if points_count > 0 else "empty"
@@ -106,6 +99,7 @@ async def get_index_status():
             indexed_files=int(metadata.get("indexed_files", 0)),
             last_updated=_parse_last_updated(metadata.get("last_updated")),
             status=index_status,
+            task_id=active_task.id if active_task is not None else None,
         )
 
     except Exception as e:
