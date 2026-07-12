@@ -1,3 +1,8 @@
+/**
+ * Service API key lookup for ops scripts
+ *
+ * Reads SERVICE_API_KEY from the environment, falling back to the repo-root .env file (Node scripts do not load it; the backend reads it via pydantic-settings)
+ */
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
