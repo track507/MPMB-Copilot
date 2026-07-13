@@ -43,12 +43,15 @@ def aggregate(results: list[dict]) -> dict:
     return {"cases": count, "hits": hits, "hit_rate": (hits / count) if count else 0.0, "mrr": mrr}
 
 
-def format_comparison(baseline: dict, reranked: dict) -> str:
-    """One-block baseline-vs-reranked summary from two aggregate() results"""
-    d_hit = reranked["hit_rate"] - baseline["hit_rate"]
-    d_mrr = reranked["mrr"] - baseline["mrr"]
-    return (
-        f"baseline: {baseline['hits']}/{baseline['cases']} hit ({baseline['hit_rate']:.0%}), MRR={baseline['mrr']:.3f}\n"
-        f"reranked: {reranked['hits']}/{reranked['cases']} hit ({reranked['hit_rate']:.0%}), MRR={reranked['mrr']:.3f}\n"
-        f"delta:    hit_rate {d_hit:+.0%}, MRR {d_mrr:+.3f}"
-    )
+def format_matrix(aggs: dict[str, dict], baseline: str) -> str:
+    """Every config vs the baseline, one line each, from aggregate() results"""
+    base = aggs[baseline]
+    lines = [f"{baseline}: {base['hits']}/{base['cases']} hit ({base['hit_rate']:.0%}), MRR={base['mrr']:.3f}"]
+    for label, agg in aggs.items():
+        if label == baseline:
+            continue
+        lines.append(
+            f"{label}: {agg['hits']}/{agg['cases']} hit ({agg['hit_rate']:.0%}), MRR={agg['mrr']:.3f}"
+            f"  [vs {baseline}: hit {agg['hit_rate'] - base['hit_rate']:+.0%}, MRR {agg['mrr'] - base['mrr']:+.3f}]"
+        )
+    return "\n".join(lines)

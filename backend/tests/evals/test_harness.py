@@ -1,4 +1,4 @@
-from evals.harness import aggregate, chunk_matches, format_comparison, score_case
+from evals.harness import aggregate, chunk_matches, format_matrix, score_case
 
 
 def _chunk(source_file="x.js", object_type=None, edition="2014"):
@@ -52,11 +52,16 @@ def test_aggregate_empty_is_safe():
     assert agg == {"cases": 0, "hits": 0, "hit_rate": 0.0, "mrr": 0.0}
 
 
-def test_format_comparison_shows_deltas():
-    base = {"cases": 8, "hits": 4, "hit_rate": 0.5, "mrr": 0.4}
-    rer = {"cases": 8, "hits": 6, "hit_rate": 0.75, "mrr": 0.55}
-    out = format_comparison(base, rer)
-    assert "baseline: 4/8" in out
-    assert "reranked: 6/8" in out
-    assert "+25%" in out  # hit_rate delta
-    assert "+0.150" in out  # mrr delta
+def test_format_matrix_shows_deltas_vs_baseline():
+    aggs = {
+        "baseline": {"cases": 4, "hits": 2, "hit_rate": 0.5, "mrr": 0.40},
+        "jina-v2": {"cases": 4, "hits": 3, "hit_rate": 0.75, "mrr": 0.55},
+        "minilm-l6": {"cases": 4, "hits": 2, "hit_rate": 0.5, "mrr": 0.45},
+    }
+    out = format_matrix(aggs, baseline="baseline")
+    assert "baseline: 2/4 hit (50%), MRR=0.400" in out
+    assert "jina-v2: 3/4 hit (75%), MRR=0.550" in out
+    assert "minilm-l6: 2/4 hit (50%), MRR=0.450" in out
+    assert "+25%" in out  # hit_rate delta vs baseline
+    assert "+0.150" in out  # mrr delta vs baseline
+    assert "+0%" in out  # unchanged hit_rate still reported
