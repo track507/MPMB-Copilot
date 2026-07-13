@@ -1,7 +1,10 @@
 """
-Export down-voted answers as candidate eval cases for manual curation
+Export voted answers as candidate eval cases for manual curation
 
-Pairs each down-vote with its question (the preceding user message) and edition, and writes skeletons to candidates.json with an empty `expect` for a someone to fill in
+Up-votes arrive with a filled `expect` derived from the persisted retrieval
+trace (what a good answer used is a correct expectation); down-votes keep an empty `expect` for a human,
+with the trace attached as scorer-ignored `_retrieved` context (a bad answer's trace encodes the failure)
+
 Never writes cases.json
 
 Usage:
@@ -29,14 +32,64 @@ def slugify(text: str, max_len: int = 60) -> str:
     return slug[:max_len].strip("-") or "candidate"
 
 
-def build_candidate(query: str, edition: Optional[str], note: Optional[str], session_id: str, message_id: str) -> dict:
-    """Skeleton case: query + edition are auto-filled, expect is left empty for a human"""
+def _top_chunk(retrieval: Optional[list]) -> Optional[dict]:
+    """Top-ranked chunk of the last non-empty search (rank order - rerank already reordered)"""
+    for entry in reversed(retrieval or []):
+        chunks = entry.get("chunks") or []
+        if chunks:
+            return chunks[0]
+    return None
+
+
+def build_expect_from_trace(retrieval: Optional[list]) -> dict:
+    """Auto-expect for up-votes; empty when no search happened"""
+    top = _top_chunk(retrieval)
+    if top is None:
+        return {}
+    expect: dict = {}
+    if top.get("source_file"):
+        expect["source_substring"] = Path(str(top["source_file"])).name
+    if top.get("object_type"):
+        expect["object_type"] = top["object_type"]
+    if top.get("edition") in ("2014", "2024"):
+        expect["edition"] = top["edition"]
+    return expect
+
+
+def summarize_retrieved(retrieval: Optional[list], per_search: int = 3) -> list[dict]:
+    """Compact scorer-ignored context: what each search actually fetched"""
+    return [
+        {
+            "query": entry.get("query"),
+            "top": [
+                {k: c.get(k) for k in ("source_file", "object_type", "edition", "chunk_type")}
+                for c in (entry.get("chunks") or [])[:per_search]
+            ],
+        }
+        for entry in retrieval or []
+    ]
+
+
+def build_candidate(
+    query: str,
+    edition: Optional[str],
+    note: Optional[str],
+    session_id: str,
+    message_id: str,
+    rating: str = "down",
+    retrieval: Optional[list] = None,
+) -> dict:
+    """Up-votes get an auto-filled expect from the trace; down-votes leave it for a human"""
     case: dict = {"id": slugify(query), "query": query}
     if edition:
         case["edition"] = edition
-    case["expect"] = {}
+    case["expect"] = build_expect_from_trace(retrieval) if rating == "up" else {}
     if note:
         case["_note"] = note
+    case["_rating"] = rating
+    retrieved = summarize_retrieved(retrieval)
+    if retrieved:
+        case["_retrieved"] = retrieved
     case["_source"] = {"session_id": session_id, "message_id": message_id}
     return case
 
@@ -62,7 +115,7 @@ async def main() -> None:
                 await s.execute(
                     select(MessageFeedback, Message)
                     .join(Message, MessageFeedback.message_id == Message.id)
-                    .where(MessageFeedback.rating == "down")
+                    .where(MessageFeedback.rating.in_(("down", "up")))
                 )
             ).all()
 
@@ -86,7 +139,17 @@ async def main() -> None:
 
                 session = (await s.execute(select(Session).where(Session.id == msg.session_id))).scalar_one_or_none()
                 edition = (session.settings or {}).get("edition") if session else None
-                candidates.append(build_candidate(query, edition, fb.note, str(msg.session_id), str(msg.id)))
+                candidates.append(
+                    build_candidate(
+                        query,
+                        edition,
+                        fb.note,
+                        str(msg.session_id),
+                        str(msg.id),
+                        rating=fb.rating,
+                        retrieval=(msg.meta_data or {}).get("retrieval"),
+                    )
+                )
 
         dedupe_ids(candidates)
         _OUT.write_text(json.dumps(candidates, indent=2) + "\n", encoding="utf-8")
