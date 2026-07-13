@@ -15,8 +15,10 @@ class FakeIntent:
         self.primary = intent
 
 
-def _chunk(source_file: str, content: str, score: float = 0.8, tier: str = "authoritative") -> dict:
-    return {
+def _chunk(
+    source_file: str, content: str, score: float = 0.8, tier: str = "authoritative", object_type: str | None = None
+) -> dict:
+    chunk = {
         "content": content,
         "source_file": source_file,
         "edition": "2014",
@@ -25,6 +27,9 @@ def _chunk(source_file: str, content: str, score: float = 0.8, tier: str = "auth
         "end_line": 42,
         "score": score,
     }
+    if object_type is not None:
+        chunk["metadata"] = {"object_type": object_type}
+    return chunk
 
 
 def _result(authoritative=None, examples=None, edition="2014") -> RetrievalResult:
@@ -163,7 +168,7 @@ async def test_search_records_citation_trace_on_deps(monkeypatch):
     from app.core.retriever import retriever
 
     fake = _result(
-        authoritative=[_chunk("_common/SpellsList.js", 'SpellsList["fireball"] = {};')],
+        authoritative=[_chunk("_common/SpellsList.js", 'SpellsList["fireball"] = {};', object_type="SpellsList")],
         examples=[_chunk("examples/feat.js", "FeatsList['lucky'] = {};", score=0.61, tier="official_example")],
     )
     monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=fake))
@@ -181,6 +186,9 @@ async def test_search_records_citation_trace_on_deps(monkeypatch):
     assert chunk["start_line"] == 10 and chunk["end_line"] == 42
     assert chunk["tier"] == "authoritative"
     assert chunk["score"] == 0.8
+    # ? Trace carries object_type so the feedback exporter can auto-fill expect
+    assert chunk["object_type"] == "SpellsList"
+    assert entry["chunks"][1]["object_type"] is None
     # ! citation only - never the chunk body
     assert "content" not in chunk
 

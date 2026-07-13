@@ -199,6 +199,7 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
                     "score": round(float(c.get("score", 0.0)), 4),
                     "edition": c.get("edition"),
                     "chunk_type": c.get("chunk_type"),
+                    "object_type": (c.get("metadata") or {}).get("object_type"),
                 }
                 for c in all_chunks
             ],
