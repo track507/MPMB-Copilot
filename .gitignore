@@ -16,6 +16,9 @@ data/uploads/
 # Generated eval candidates (feedback exporter output)
 backend/evals/candidates.json
 
+# Generated eval run results (run_eval output)
+backend/evals/results/
+
 # * Visual Studio .gitignore
 
 ## Ignore Visual Studio temporary files, build results, and
