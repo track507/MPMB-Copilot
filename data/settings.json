@@ -37,7 +37,7 @@
   },
   "rerank_enabled": true,
   "rerank_provider": "fastembed",
-  "rerank_model": "jinaai/jina-reranker-v2-base-multilingual",
+  "rerank_model": "Xenova/ms-marco-MiniLM-L-6-v2",
   "rerank_candidate_k": 12,
   "session_lifetime_days": 30,
   "session_idle_days": 7,
