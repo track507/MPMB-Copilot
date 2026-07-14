@@ -51,7 +51,7 @@ class EmbeddingService:
         from app.settings import settings
 
         # ? Reload when the embedding selection changes so a settings switch takes effect
-        selection = (settings.embedding_provider, settings.embedding_model)
+        selection = (settings.embedding_provider, settings.embedding_model, settings.inference_device)
         if self.provider is None or self._selection != selection:
             self.provider = self._load_provider()
             self._selection = selection

@@ -102,6 +102,7 @@ class QdrantStore:
         if self._sparse_model is None:
             from fastembed import SparseTextEmbedding
 
+            # ? BM25 is token counting, not a neural model - it stays on CPU regardless of inference_device
             self._sparse_model = SparseTextEmbedding(
                 model_name="Qdrant/bm25",
                 threads=config.resolved_embedding_threads,

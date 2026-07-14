@@ -36,3 +36,24 @@ def test_empty_and_disabled(monkeypatch):
     assert svc.rerank("q", [], top_k=3) == []
     cands = [{"id": "a"}, {"id": "b"}]
     assert svc.rerank("q", cands, top_k=1) == cands[:1]
+
+
+def test_rerank_selection_includes_device(monkeypatch):
+    from app.services.rerank.service import RerankService
+    from app.settings import settings
+
+    captured: dict = {}
+
+    class FakeCrossEncoder:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("fastembed.rerank.cross_encoder.TextCrossEncoder", FakeCrossEncoder)
+    monkeypatch.setattr(settings, "rerank_provider", "fastembed")
+    monkeypatch.setattr(settings, "inference_device", "cpu")
+    service = RerankService()
+    service._ensure_model()
+    first_selection = service._selection
+    monkeypatch.setattr(settings, "inference_device", "gpu")
+    service._ensure_model()
+    assert service._selection != first_selection  # ? device is part of the cache key

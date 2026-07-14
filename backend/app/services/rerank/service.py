@@ -22,7 +22,7 @@ class RerankService:
     def _ensure_model(self) -> object | None:
         from app.settings import settings
 
-        selection = (settings.rerank_provider, settings.rerank_model)
+        selection = (settings.rerank_provider, settings.rerank_model, settings.inference_device)
         # ? Cache per selection; a cached None means "known-unavailable", so we don't reload every call
         if self._selection == selection:
             return self._model
@@ -39,9 +39,14 @@ class RerankService:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
 
             from app.config import config
+            from app.core.onnx_device import onnx_providers
 
-            self._model = TextCrossEncoder(model_name=settings.rerank_model, cache_dir=str(config.fastembed_cache_path))
-            logger.info(f"Reranker loaded: {settings.rerank_model}")
+            kwargs: dict = {"model_name": settings.rerank_model, "cache_dir": str(config.fastembed_cache_path)}
+            providers = onnx_providers()
+            if providers is not None:
+                kwargs["providers"] = providers
+            self._model = TextCrossEncoder(**kwargs)
+            logger.info(f"Reranker loaded: {settings.rerank_model} (device={settings.inference_device})")
         except Exception as e:
             logger.warning(f"Reranker load failed ({e}); reranking disabled")
             self._model = None
