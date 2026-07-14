@@ -25,7 +25,7 @@ def test_capabilities_endpoint_shape(monkeypatch):
     resp = client.get("/capabilities")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body) == {"generation", "embedding", "rerank", "vector_store", "auth"}
+    assert set(body) == {"generation", "embedding", "rerank", "vector_store", "auth", "compute"}
     assert set(body["rerank"]) == {"label", "kind", "entries", "current"}
     assert "model" in body["rerank"]["current"]
 

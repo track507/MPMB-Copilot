@@ -21,6 +21,7 @@ class Capability(str, Enum):
     rerank = "rerank"
     vector_store = "vector_store"
     auth = "auth"
+    compute = "compute"
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,24 @@ def _auth_entries() -> list[dict]:
             "label": "OIDC / SSO (Keycloak, Authentik, Zitadel, ...)",
             "pinned": False,
             "status": oidc_status,
+        },
+    ]
+
+
+def _compute_entries() -> list[dict]:
+    from app.core import onnx_device
+
+    # ? Detection reports the RUNTIME (is a GPU-capable onnxruntime installed); "installable" is the item-13 installer hook
+    detected = onnx_device.detect_gpu_provider()
+    gpu_label = f"GPU ({detected[1]})" if detected else "GPU"
+    return [
+        {"provider": "local", "id": "cpu", "label": "CPU", "pinned": True, "status": "ready"},
+        {
+            "provider": "local",
+            "id": "gpu",
+            "label": gpu_label,
+            "pinned": False,
+            "status": "ready" if detected else "installable",
         },
     ]
 
@@ -133,6 +152,15 @@ def _register_builtins() -> None:
             kind="curated",
             entries=_auth_entries,
             current=lambda: {"method": "password"},
+        )
+    )
+    register(
+        CapabilitySpec(
+            key=Capability.compute,
+            label="Compute device",
+            kind="curated",
+            entries=_compute_entries,
+            current=lambda: {"device": settings.inference_device},
         )
     )
 
