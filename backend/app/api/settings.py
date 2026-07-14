@@ -5,7 +5,7 @@ the frontend settings panel. GET returns the current state, PATCH
 applies a partial update and persists to disk.
 """
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -54,6 +54,7 @@ class SettingsUpdate(BaseModel):
     source_catalog_path: Optional[str] = None
     source_catalog_enabled: Optional[bool] = None
     inject_catalog_context: Optional[bool] = None
+    inference_device: Literal["cpu", "gpu"] | None = None
 
 
 @router.get(

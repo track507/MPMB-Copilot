@@ -78,3 +78,22 @@ def test_auth_session_settings_defaults():
     s = Settings()
     assert s.session_lifetime_days == 30
     assert s.session_idle_days == 7
+
+
+def test_inference_device_default_and_roundtrip():
+    s = Settings()
+    assert s.inference_device == "cpu"
+    s._apply({"inference_device": "gpu"})
+    assert s.inference_device == "gpu"
+    assert s.to_dict()["inference_device"] == "gpu"
+
+
+def test_settings_update_schema_validates_inference_device():
+    import pytest
+    from pydantic import ValidationError
+
+    from app.api.settings import SettingsUpdate
+
+    assert SettingsUpdate(inference_device="gpu").model_dump(exclude_none=True) == {"inference_device": "gpu"}
+    with pytest.raises(ValidationError):
+        SettingsUpdate(inference_device="tpu")

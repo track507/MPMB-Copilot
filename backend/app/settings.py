@@ -116,6 +116,14 @@ class Settings:
     rerank_candidate_k: int = 24
     """Candidates fetched + scored per tier before the budget cut. Bounds rerank latency."""
 
+    # Global inference model, default CPU
+    inference_device: str = "cpu"
+    """
+    Device preference for locally-run ONNX models (embedding, reranking)
+    'gpu' means use the GPU where applicable: cloud providers ignore it and a failed GPU load falls back to CPU per model
+    'cpu' is the safe default
+    """
+
     # Auth sessions
     session_lifetime_days: int = 30
     """Absolute auth-session lifetime; the cookie max-age matches."""
