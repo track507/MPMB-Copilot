@@ -29,6 +29,7 @@ export interface Settings {
 	readonly rerank_model: string;
 	readonly rerank_candidate_k: number;
 	readonly system_prompt: string | null;
+	readonly inference_device: "cpu" | "gpu";
 }
 
 export interface TierBudget {
@@ -85,6 +86,14 @@ export interface VectorStoreOption {
 	readonly status: "ready" | "needs_key" | "installable";
 }
 
+export interface ComputeOption {
+	readonly provider: string;
+	readonly id: string;
+	readonly label: string;
+	readonly pinned: boolean;
+	readonly status: "ready" | "installable";
+}
+
 /** GET /api/capabilities - one envelope per capability
  * `kind` tells the UI how to render entries
  */
@@ -112,6 +121,12 @@ export interface CapabilityEnvelope {
 		readonly kind: "curated";
 		readonly entries: readonly VectorStoreOption[];
 		readonly current: { readonly provider: string };
+	};
+	readonly compute: {
+		readonly label: string;
+		readonly kind: "curated";
+		readonly entries: readonly ComputeOption[];
+		readonly current: { readonly device: string };
 	};
 }
 

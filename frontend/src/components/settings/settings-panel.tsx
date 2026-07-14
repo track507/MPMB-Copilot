@@ -43,6 +43,7 @@ const settingsSchema = z.object({
 	rerank_candidate_k: z.number().int().min(1).max(200),
 	enable_tool_use: z.boolean(),
 	enable_extended_thinking: z.boolean(),
+	inference_device: z.enum(["cpu", "gpu"]),
 });
 
 type SettingsFormData = z.infer<typeof settingsSchema>;
@@ -148,6 +149,7 @@ function SettingsForm({ settings, capabilities }: { readonly settings: Settings;
 			rerank_candidate_k: settings.rerank_candidate_k,
 			enable_tool_use: settings.enable_tool_use,
 			enable_extended_thinking: settings.enable_extended_thinking,
+			inference_device: settings.inference_device,
 		}),
 		[settings]
 	);
@@ -174,6 +176,11 @@ function SettingsForm({ settings, capabilities }: { readonly settings: Settings;
 	const embeddingModel = useWatch({ control, name: "embedding_model" });
 	const rerankModel = useWatch({ control, name: "rerank_model" });
 	const embeddingChanged = embeddingCatalog.current.model !== embeddingModel;
+	const compute = capabilities.compute;
+	const gpuEntry = compute.entries.find((e) => e.id === "gpu");
+	const gpuReady = gpuEntry?.status === "ready";
+	const inferenceDevice = useWatch({ control, name: "inference_device" });
+	const gpuActive = inferenceDevice === "gpu" && gpuReady;
 
 	// ? Remember the last model chosen per provider so switching providers restores the right one (Ollama keeps its own id, not Anthropic's)
 	const [lastModelByProvider, setLastModelByProvider] = useState<Record<string, string>>({
@@ -428,9 +435,39 @@ function SettingsForm({ settings, capabilities }: { readonly settings: Settings;
 				</div>
 			</section>
 
+			{/* Hardware */}
+			<section className="space-y-4">
+				<h2 className="text-lg font-semibold">{compute.label}</h2>
+				<div className="flex items-center gap-3">
+					<input
+						type="checkbox"
+						id="inference-device"
+						checked={inferenceDevice === "gpu"}
+						disabled={!gpuReady}
+						onChange={(e) => {
+							setValue("inference_device", e.target.checked ? "gpu" : "cpu", { shouldDirty: true });
+						}}
+						className="size-4 rounded"
+					/>
+					<label htmlFor="inference-device" className="text-sm">
+						Use GPU for local models{gpuEntry && gpuReady ? ` - ${gpuEntry.label}` : ""}
+						<span className="block text-xs text-muted-foreground">
+							{gpuReady
+								? "Applies to locally-run models (embedding, reranking); cloud providers are unaffected"
+								: "GPU support not installed on this backend"}
+						</span>
+					</label>
+				</div>
+			</section>
+
 			{/* Reranker */}
 			<section className="space-y-4">
-				<h2 className="text-lg font-semibold">{rerank.label}</h2>
+				<h2 className="text-lg font-semibold">
+					{rerank.label}
+					{gpuActive && (
+						<span className="ml-2 rounded bg-secondary px-1.5 py-0.5 align-middle text-xs font-medium text-secondary-foreground">GPU</span>
+					)}
+				</h2>
 				<div className="flex items-center gap-3">
 					<input {...register("rerank_enabled")} type="checkbox" id="rerank-enabled" className="size-4 rounded" />
 					<label htmlFor="rerank-enabled" className="text-sm">
