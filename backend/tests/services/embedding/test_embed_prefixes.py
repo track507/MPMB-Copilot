@@ -17,10 +17,12 @@ def _service(monkeypatch, provider="fastembed", model="intfloat/multilingual-e5-
 
     monkeypatch.setattr(settings, "embedding_provider", provider)
     monkeypatch.setattr(settings, "embedding_model", model)
+    monkeypatch.setattr(settings, "inference_device", "cpu")
     svc = EmbeddingService()
     rec = _Recorder()
     svc.provider = rec
-    svc._selection = (provider, model)  # mark provider as loaded for this selection
+    # ? Must mirror _ensure_provider's cache key exactly, or the recorder is evicted by a real model load
+    svc._selection = (provider, model, "cpu")
     return svc, rec
 
 

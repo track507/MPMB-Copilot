@@ -1,4 +1,3 @@
-# app/services/embedding_providers/openai_embed.py
 from typing import List
 
 from openai import OpenAI
