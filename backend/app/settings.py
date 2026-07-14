@@ -107,8 +107,8 @@ class Settings:
     )
 
     # Reranking (cross-encoder over hybrid candidates, applied per tier before the budget cut)
-    rerank_enabled: bool = False
-    """Off by default. Flip to True once run_eval's A/B confirms a lift / no regression."""
+    rerank_enabled: bool = True
+    """On by default: run_eval matrix"""
 
     rerank_provider: str = "fastembed"
     rerank_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"

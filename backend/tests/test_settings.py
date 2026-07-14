@@ -30,13 +30,13 @@ def test_cheap_model_for_unknown_provider_uses_default_model():
 
 def test_rerank_defaults_and_roundtrip():
     s = Settings()
-    assert s.rerank_enabled is False
+    assert s.rerank_enabled is True
     assert s.rerank_provider == "fastembed"
     assert s.rerank_model == "Xenova/ms-marco-MiniLM-L-6-v2"
     assert s.rerank_candidate_k == 24
     # hot-reload overlay applies, like retrieval_mode
-    s._apply({"rerank_enabled": True, "rerank_candidate_k": 32})
-    assert s.rerank_enabled is True
+    s._apply({"rerank_enabled": False, "rerank_candidate_k": 32})
+    assert s.rerank_enabled is False
     assert s.rerank_candidate_k == 32
 
 
