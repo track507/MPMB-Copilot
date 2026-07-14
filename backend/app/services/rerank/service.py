@@ -38,7 +38,9 @@ class RerankService:
         try:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
 
-            self._model = TextCrossEncoder(model_name=settings.rerank_model)
+            from app.config import config
+
+            self._model = TextCrossEncoder(model_name=settings.rerank_model, cache_dir=str(config.fastembed_cache_path))
             logger.info(f"Reranker loaded: {settings.rerank_model}")
         except Exception as e:
             logger.warning(f"Reranker load failed ({e}); reranking disabled")

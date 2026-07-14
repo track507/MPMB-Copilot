@@ -7,6 +7,7 @@ data/chunked_output/
 data/adobe_docs/
 data/index_cache/
 data/uploads/
+data/models/
 
 # But keep the directory structure
 !data/

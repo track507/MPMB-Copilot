@@ -103,7 +103,9 @@ class QdrantStore:
             from fastembed import SparseTextEmbedding
 
             self._sparse_model = SparseTextEmbedding(
-                model_name="Qdrant/bm25", threads=config.resolved_embedding_threads
+                model_name="Qdrant/bm25",
+                threads=config.resolved_embedding_threads,
+                cache_dir=str(config.fastembed_cache_path),
             )
             logger.info("Loaded BM25 sparse embedding model (Qdrant/bm25)")
         return self._sparse_model

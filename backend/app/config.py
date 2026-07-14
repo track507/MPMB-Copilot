@@ -140,6 +140,9 @@ class Config(BaseSettings):
     index_cache_dir: str = "./data/index_cache"
     upload_dir: str = "./data/uploads"
 
+    # ! FastEmbed model cache: never the OS temp dir (Windows purges it, silently breaking retrieval)
+    fastembed_cache_dir: str = "./data/models/fastembed"
+
     # Source Repository URLs (used by source acquisition scripts)
     mpmb_repo_url: str = "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git"
     mpmb_repo_2024_url: str = "https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet.git"
@@ -201,6 +204,15 @@ class Config(BaseSettings):
     @property
     def chunked_output_path(self) -> Path:
         return Path(self.chunked_output_dir)
+
+    @property
+    def fastembed_cache_path(self) -> Path:
+        # ? Anchored to the repo root so uvicorn (repo cwd) and the evals scripts (backend cwd) share one cache
+        path = Path(self.fastembed_cache_dir)
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @property
     def user_source_paths(self) -> list[Path]:
