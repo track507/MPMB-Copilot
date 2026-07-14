@@ -29,12 +29,16 @@ RUN apt-get update && \
 COPY --from=builder /app/.venv /app/.venv
 
 # Set environment
+# DATA_DIR/FASTEMBED_CACHE_DIR must be absolute here: the code anchors relative data
+# paths to the repo root, which resolves to / inside the container (code lives at /app/app)
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     TRANSFORMERS_OFFLINE=0 \
-    HF_HOME=/tmp/huggingface
+    HF_HOME=/tmp/huggingface \
+    DATA_DIR=/app/data \
+    FASTEMBED_CACHE_DIR=/app/data/models/fastembed
 
 WORKDIR /app
 

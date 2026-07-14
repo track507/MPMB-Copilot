@@ -23,6 +23,7 @@
 		"chunk": "uv --cache-dir .uv-cache run --no-sync --project backend python scripts/chunk_mpmb.py",
 		"index": "node ./scripts/index.mjs --force",
 		"index:if-empty": "node ./scripts/index.mjs",
+		"gpu:install": "cd backend && uv pip uninstall onnxruntime onnxruntime-directml && uv pip install onnxruntime-gpu",
 		"analyze": "pnpm --filter @mpmb/analyze run analyze",
 		"rechunk": "pnpm run analyze && pnpm run chunk && pnpm run index",
 		"lint": "pnpm run lint:js && pnpm run lint:ts && pnpm run lint:py && pnpm run lint:md",

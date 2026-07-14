@@ -66,6 +66,28 @@ def test_embedding_dim_defaults_for_unknown_model():
     assert s.embedding_dim() == 384
 
 
+def test_from_config_loads_relative_settings_file_from_repo_root(monkeypatch, tmp_path):
+    import app.settings as settings_module
+
+    monkeypatch.setattr(settings_module, "_REPO_ROOT", tmp_path)
+    settings_dir = tmp_path / "data"
+    settings_dir.mkdir()
+    (settings_dir / "settings.json").write_text(
+        '{"embedding_provider": "fastembed", "embedding_model": "intfloat/multilingual-e5-large"}\n',
+        encoding="utf-8",
+    )
+
+    class FakeConfig:
+        data_dir = "./data"
+        embedding_provider = "fastembed"
+        embedding_model = "BAAI/bge-small-en-v1.5"
+
+    s = Settings.from_config(FakeConfig)
+
+    assert s._file_path == settings_dir / "settings.json"
+    assert s.embedding_model == "intfloat/multilingual-e5-large"
+
+
 def test_settings_update_schema_accepts_rerank_fields():
     from app.api.settings import SettingsUpdate
 

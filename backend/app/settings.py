@@ -37,6 +37,9 @@ from app.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Project root resolved from this file: backend/app/settings.py -> repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # Default tier budgets per intent.
 # Keys are intent names, values set how many chunks to fetch from each tier.
 _DEFAULT_TIER_BUDGETS: dict[str, dict[str, int]] = {
@@ -225,9 +228,15 @@ class Settings:
             inject_catalog_context=getattr(config_module, "inject_catalog_context", cls.inject_catalog_context),
         )
 
-        # Resolve JSON file path
-        settings_file = getattr(config_module, "settings_file", None) or "./data/settings.json"
-        instance._file_path = Path(settings_file)
+        # Resolve JSON file path from the repo root, not the current process cwd.
+        settings_file = getattr(config_module, "settings_file", None)
+        if settings_file is None:
+            settings_file = Path(getattr(config_module, "data_dir", "./data")) / "settings.json"
+
+        settings_path = Path(settings_file)
+        if not settings_path.is_absolute():
+            settings_path = _REPO_ROOT / settings_path
+        instance._file_path = settings_path
 
         # Overlay persisted user settings (if file exists)
         instance.reload()
