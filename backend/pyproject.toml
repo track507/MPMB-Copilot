@@ -19,6 +19,8 @@ dependencies = [
 	# RAG & Embeddings
 	"qdrant-client>=1.14.0",
 	"fastembed>=0.7.4",
+	# GPU-capable ONNX runtime on Windows (DirectML; superset of the CPU build)
+	"onnxruntime-directml>=1.24; sys_platform == 'win32'",
 	# LLM Providers
 	"pydantic-ai-slim[anthropic,openai]>=1.107.0",
 	# Logging
@@ -86,3 +88,7 @@ dev = [
 	"pytest-cov>=7.0.0",
 	"ruff>=0.14.10",
 ]
+
+[tool.uv]
+# ! onnxruntime distributions all provide the same module and must not coexist: on Windows the DirectML build (declared above) replaces fastembed's plain onnxruntime
+override-dependencies = ["onnxruntime>=1.22; sys_platform != 'win32'"]
