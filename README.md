@@ -37,7 +37,7 @@ Most of these have now shipped. See [What's next](#whats-next) for the live road
 MPMB-Copilot is a chat interface, like ChatGPT or Claude, but specialized for [MorePurpleMoreBetter's D&D 5e Character Record Sheet](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet). When you ask a question, your message goes straight to the model, which then:
 
 1. Decides whether it even needs the MPMB source (a greeting or a general JavaScript question doesn't)
-2. Calls `mpmb_search` to pull the most relevant code snippets, syntax templates, and examples from the indexed source (9,000+ chunks across the 2014 + 2024 editions plus the WotC Imports repo)
+2. Calls `mpmb_search` to pull the most relevant code snippets, syntax templates, and examples from the indexed source (11,000+ chunks across the 2014 + 2024 editions plus the WotC Imports repo), with a local cross-encoder reranking the candidates so the best match sits at the top
 3. Optionally follows up with `mpmb_read`, `mpmb_grep`, or `mpmb_function` to verify an exact signature or function body instead of guessing
 4. Streams the answer back — through Claude (Anthropic), GPT (OpenAI), or a local Ollama model — citing the source files it used so you can copy-paste working code
 
@@ -79,18 +79,25 @@ pnpm run setup:all
 pnpm run dev
 ```
 
-Open <http://localhost:5173/> and start chatting.
+Open <http://localhost:5173/>. **On first visit you'll be asked to create an admin account** — the app is login-gated by default (cookie sessions, argon2id passwords). Then start chatting.
+
+> **Auth and the index step:** the indexing API sits behind auth, so `setup:all`'s final index step needs a credential. Two options:
+>
+> - **Dev shortcut (local only):** set `AUTH_DISABLED=true` in `.env` before `setup:all`. It's honored only on a loopback bind — it can never disable auth on an exposed interface.
+> - **Proper path:** run `setup:all` (the index step will tell you what it needs), create your admin account in the browser, mint a service key with `pnpm run mint-key`, put it in `.env` as `SERVICE_API_KEY`, then `pnpm run index`.
 
 The first time you start the backend it will take ~30 seconds to load the embedding model. After that, responses stream in a few seconds.
 
 ## Updating the MPMB sources
 
-MPMB ships updates frequently. To pull the latest source, re-chunk, and re-index:
+MPMB ships updates frequently. To pull the latest source, re-analyze, re-chunk, and re-index:
 
 ```bash
-pnpm run setup     # git pull on the source repos + re-run the chunker
-pnpm run index     # rebuild the vector index (backend must be running)
+pnpm run setup       # git pull on the source repos + re-run the chunker
+pnpm run rechunk     # analyze + chunk + force re-index in one shot (backend must be running)
 ```
+
+Or trigger a rebuild from the UI: Settings -> Vector Index -> enable **Force rebuild** -> Re-index (with a live progress bar). Either path needs auth: a `SERVICE_API_KEY` in `.env` for the scripts (mint one with `pnpm run mint-key`), or your admin login for the UI.
 
 ## How it's built
 
@@ -123,27 +130,31 @@ flowchart LR
 ```
 
 - **Frontend:** React 19 + Vite + TanStack Query + Zustand + shadcn/ui
-- **Backend:** FastAPI + PydanticAI + SQLAlchemy
-- **Vector store:** Qdrant (hybrid retrieval: dense embeddings via FastEmbed + BM25 sparse, fused with RRF)
-- **Database:** Postgres (session and message persistence)
+- **Backend:** FastAPI + PydanticAI + SQLAlchemy + Alembic migrations
+- **Vector store:** Qdrant (hybrid retrieval: dense embeddings via FastEmbed + BM25 sparse, fused with RRF, then reranked by a local cross-encoder)
+- **Database:** Postgres (sessions, messages, users, auth sessions, API keys, answer feedback)
 - **LLM providers:** Anthropic, OpenAI, Ollama (configurable)
-
-For the deeper architecture write-up, see [`docs/superpowers/specs/2026-04-18-phase-b-tool-use-design.md`](./docs/superpowers/specs/2026-04-18-phase-b-tool-use-design.md).
+- **Auth:** cookie sessions with argon2id passwords; ops scripts authenticate with scoped, revocable API keys
+- **Local inference:** ONNX Runtime on CPU by default, with an opt-in GPU mode (see [GPU acceleration](#gpu-acceleration))
 
 ## Repository layout
 
 ```
 MPMB-Copilot/
 ├── backend/                  # FastAPI app — see backend/README.md
+│   └── evals/                # retrieval eval harness (cases, matrix runner, feedback exporter)
 ├── frontend/                 # React app    — see frontend/README.md
 ├── data/                     # gitignored: cloned MPMB sources, chunks, index cache
 ├── docker/                   # Dockerfiles for backend + custom postgres image
 ├── docker-compose.yml        # postgres + qdrant + backend
-├── docs/                     # specs, plans, policy docs
+├── docs/                     # policy docs
 ├── scripts/
 │   ├── setup.ps1             # clone/pull MPMB source repos, run chunker
 │   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
+│   ├── analyze/              # AST source analyzer (feeds the chunker + prompt catalog)
 │   ├── index.mjs             # trigger /api/index against running backend
+│   ├── mint-key.mjs          # mint a scoped service API key for the ops scripts
+│   ├── service-key.mjs       # shared SERVICE_API_KEY lookup for the scripts
 │   ├── check-port.mjs        # pre-flight check before uvicorn
 │   └── wait-and-index.mjs    # used by setup:all — poll backend then index
 ├── package.json              # all dev commands
@@ -167,9 +178,15 @@ pnpm run docker:up          # start postgres + qdrant
 pnpm run docker:down        # stop containers
 
 # Refreshing content
+pnpm run analyze            # re-run the AST source analyzer
 pnpm run chunk              # re-chunk after pulling MPMB sources
-pnpm run index              # re-upsert chunks into Qdrant
+pnpm run index              # force re-index into Qdrant (drops + rebuilds)
 pnpm run index:if-empty     # only index if Qdrant collection is empty
+pnpm run rechunk            # analyze + chunk + index, in order
+
+# Auth & hardware
+pnpm run mint-key           # mint a scoped SERVICE_API_KEY (logs in with your admin account)
+pnpm run gpu:install        # Linux + NVIDIA only: swap in the CUDA onnxruntime
 
 # Quality gates
 pnpm run check              # lint + format check + tests
@@ -190,16 +207,39 @@ pnpm run check:full         # also runs mypy + tsc
 - ✅ **Inline citations** — answers reference the source files (path + line range) the model pulled from via its tools
 - ✅ **Model + effort picker** — Settings dropdowns list each provider's models and their supported reasoning-effort levels, fetched live from the backend (no hardcoded lists), with a Custom escape hatch and free-form Ollama input
 - ✅ **Embedding-model identity** — the index is stamped with its embedding provider/model/dimension; on a mismatch the app refuses dense queries and reports "re-index required" instead of returning garbage similarities
+- ✅ **Cross-encoder reranking (on by default)** — a local MiniLM-L6 reranker re-scores hybrid candidates before the cut; adopted after the built-in eval harness measured +0.14 MRR over fused order at ~1s/search (larger rerankers tied on quality at 10-25x the latency and were benched)
+- ✅ **Login & accounts** — first-run admin setup, cookie sessions (opaque tokens, SHA-256 at rest), argon2id passwords, fail-safe exposure (a non-loopback bind with no admin requires a one-time logged setup token)
+- ✅ **Scoped API keys** — mint revocable, scope-limited service keys for the ops scripts (`pnpm run mint-key`); keys authenticate only against the indexing endpoints and can never touch chats or settings
+- ✅ **Answer feedback → eval loop** — thumbs up/down (with optional note) on every answer; the exporter turns up-votes into ready-made retrieval eval cases (the persisted search trace supplies the expected result) and down-votes into skeletons for curation
+- ✅ **Eval harness** — `backend/evals/` scores retrieval (hit-rate + MRR) across named configs in one run and persists results stamped with the embedding identity, so every model/reranker swap is a measurement instead of a guess
+- ✅ **Reindex UX** — a Force rebuild toggle with confirmation, live progress bar (attaches even to CLI-started runs), and honest no-op messages; the top-bar index dot reflects real state
+- ✅ **Role-aware UI** — settings are admin-only end to end; non-admin users get a 404 on admin routes (no endpoint discoverability), and the backend enforces the same wall regardless
+- ✅ **GPU acceleration (opt-in)** — route local embedding + reranking onto your GPU with one toggle; see [GPU acceleration](#gpu-acceleration)
+- ✅ **Durable model cache** — local ONNX models live under `data/models/`, not the OS temp dir, so a Windows temp cleanup can't silently break retrieval
+
+## GPU acceleration
+
+Local inference (the embedding model and the reranker) runs on **CPU by default** — safe everywhere, no drivers required. If you have a GPU, you can opt in from **Settings → Compute device → "Use GPU for local models"**. It's a preference, not a demand: cloud embedding providers ignore it, and a model that can't load on the GPU falls back to CPU on its own. The payoff is a much faster full re-index and lower per-search reranking latency.
+
+| Platform | What it takes |
+|---|---|
+| **Windows** (AMD, NVIDIA, or Intel — any DX12 GPU) | Nothing — the DirectML runtime ships by default. Just enable the toggle. |
+| **Linux + NVIDIA** | `pnpm run gpu:install`, restart the backend, enable the toggle (it will read "GPU (CUDA)"). |
+| **Docker + NVIDIA** | Install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), add `gpus: all` to the backend service in `docker-compose.yml`, and run `pnpm run gpu:install` inside the container (advanced; CPU is the supported default in Docker). |
+| **AMD on Linux / macOS** | Not supported yet — the toggle shows "GPU support not installed" and everything runs on CPU. |
+
+**Caveat (Linux):** a plain `uv sync` in `backend/` restores the CPU runtime — re-run `pnpm run gpu:install` afterward. A future add-on installer will make this a one-click install from the settings screen.
 
 ## What's next
 
-The agentic-retrieval migration (no forced pre-retrieval, `mpmb_search`, prompt caching, per-provider cheap models, `/chat/:id` routes), the provider-driven model + effort picker, and embedding-model identity stamping are all shipped. Ahead:
+The agentic-retrieval migration, auth + scoped API keys, the eval harness + feedback loop, cross-encoder reranking, and GPU acceleration are all shipped. Ahead:
 
+- **Static script validator** — an ESLint-based ES5/AcroJS checker for generated and user scripts (no execution), with its globals list generated from the AST source analyzer instead of hand-maintained
+- **Write tools** — let the agent produce or apply diff patches for your own homebrew scripts (with explicit approval — never auto-applied)
 - **Upload API** — endpoints for the existing session/global upload roots, so the model can read user-supplied source bundles (e.g. private homebrew collections)
 - **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs
-- **Multilingual / cloud embeddings** — now that the index records its embedding identity, swap bge for a multilingual model or a cloud provider without silently corrupting similarities
-- **Evaluation harness** — retrieval + answer benchmarks across beginner how-to, lookup, generation, and debugging
-- **Write tools** — apply edits or generate diff patches against MPMB source files
+- **Provider add-on store** — browse/configure providers by capability (generation, embedding, rerank, OCR, vector store) with curated one-click installs
+- **Opt-in telemetry** — default-off, fully transparent (the receiver code lives in this repo), anonymized aggregate signals only; raw questions and answers never leave your machine
 - **History compaction** — a reliability safety net near the model's context limit (not a cost optimization, given prompt caching)
 
 ## Troubleshooting
@@ -216,6 +256,12 @@ You're hitting the IPv6 fallback timeout. Make sure your `.env` uses `127.0.0.1`
 
 **`pnpm run index` says "Backend is not reachable".**
 Backend isn't running. Start it with `pnpm run dev` (recommended) or `pnpm run docker:up && pnpm run setup:index`.
+
+**`pnpm run index` fails with `401 Not authenticated`.**
+The indexing API is auth-gated. Either mint a service key (`pnpm run mint-key`, then set `SERVICE_API_KEY` in `.env`) or, for local dev only, set `AUTH_DISABLED=true` in `.env` and restart the backend.
+
+**The GPU toggle is grayed out.**
+The backend's ONNX runtime has no GPU support on this platform — see [GPU acceleration](#gpu-acceleration). On Windows it should always be available; on Linux run `pnpm run gpu:install` first.
 
 **Qdrant container is unhealthy in `docker compose ps`.**
 On Windows this is a known false positive — Qdrant is responsive but its healthcheck script can't run. Confirm with `curl http://127.0.0.1:6333/`.
