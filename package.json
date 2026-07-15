@@ -24,7 +24,7 @@
 		"index": "node ./scripts/index.mjs --force",
 		"index:if-empty": "node ./scripts/index.mjs",
 		"gpu:install": "cd backend && uv pip uninstall onnxruntime onnxruntime-directml && uv pip install onnxruntime-gpu",
-		"analyze": "pnpm --filter @mpmb/analyze run analyze",
+		"analyze": "pnpm --filter @mpmb/analyze run analyze && pnpm --filter @mpmb/validate run globals",
 		"rechunk": "pnpm run analyze && pnpm run chunk && pnpm run index",
 		"lint": "pnpm run lint:js && pnpm run lint:ts && pnpm run lint:py && pnpm run lint:md",
 		"lint:js": "eslint .",
@@ -69,16 +69,16 @@
 		]
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^21.0.2",
-		"@commitlint/config-conventional": "^21.0.2",
-		"@commitlint/types": "^21.0.1",
+		"@commitlint/cli": "^21.2.1",
+		"@commitlint/config-conventional": "^21.2.0",
+		"@commitlint/types": "^21.2.0",
 		"@eslint/js": "^10.0.1",
 		"concurrently": "^10.0.3",
-		"eslint": "^10.5.0",
-		"globals": "^17.6.0",
+		"eslint": "^10.7.0",
+		"globals": "^17.7.0",
 		"husky": "^9.1.7",
-		"lint-staged": "^17.0.7",
-		"markdownlint-cli2": "^0.22.0",
-		"prettier": "^3.8.4"
+		"lint-staged": "^17.0.8",
+		"markdownlint-cli2": "^0.22.1",
+		"prettier": "^3.9.5"
 	}
 }

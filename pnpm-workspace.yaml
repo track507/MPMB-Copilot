@@ -1,5 +1,6 @@
 packages:
     - frontend
     - scripts/analyze
+    - scripts/validate
 allowBuilds:
     esbuild: true

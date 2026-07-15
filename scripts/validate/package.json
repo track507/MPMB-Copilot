@@ -1,0 +1,25 @@
+{
+	"name": "@mpmb/validate",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "ES5/AcroJS static validator for MPMB scripts",
+	"files": [
+		"src"
+	],
+	"scripts": {
+		"globals": "node src/generate-globals.mjs",
+		"corpus": "node src/corpus.mjs",
+		"test": "vitest run",
+		"typecheck": "tsc -p jsconfig.json"
+	},
+	"dependencies": {
+		"@eslint/js": "^10.0.1",
+		"eslint": "^10.7.0"
+	},
+	"devDependencies": {
+		"@types/node": "^25.9.5",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	}
+}
