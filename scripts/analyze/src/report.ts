@@ -11,6 +11,7 @@ import type {
 	ParseErrorEntry,
 	ReferenceEntry,
 	RepoProvenance,
+	EngineSurfaceJson,
 } from "./types";
 
 export interface BuildReportInput {
@@ -20,10 +21,11 @@ export interface BuildReportInput {
 	hostSet: Set<string>;
 	generatedAt: string;
 	projectRoot?: string;
+	surfacesByRepo?: Record<string, EngineSurface>;
 }
 
 export function buildReport(input: BuildReportInput): AnalysisReport {
-	const { repos, perFile, surface, hostSet, generatedAt, projectRoot = "." } = input;
+	const { repos, perFile, surface, hostSet, generatedAt, projectRoot = ".", surfacesByRepo = {} } = input;
 	const objects: ObjectEntry[] = [];
 	const functions: FunctionEntry[] = [];
 	const add_calls: AddCallEntry[] = [];
@@ -32,6 +34,12 @@ export function buildReport(input: BuildReportInput): AnalysisReport {
 	const parse_errors: ParseErrorEntry[] = [];
 	const undeclaredSeed = new Set<string>();
 	const writtenRegistries = new Set<string>();
+	const undeclaredByRepo = new Map<string, Set<string>>();
+	const addUndeclared = (repo: string, name: string): void => {
+		const set = undeclaredByRepo.get(repo) ?? new Set<string>();
+		set.add(name);
+		undeclaredByRepo.set(repo, set);
+	};
 
 	for (const f of perFile) {
 		if (f.parseError) {
@@ -56,7 +64,10 @@ export function buildReport(input: BuildReportInput): AnalysisReport {
 					mapped: surface.addDeclarations.has(c.callee),
 				});
 			}
-			if (klass === "undeclared") undeclaredSeed.add(c.callee);
+			if (klass === "undeclared") {
+				undeclaredSeed.add(c.callee);
+				addUndeclared(c.repo, c.callee);
+			}
 		}
 		for (const g of f.implicitGlobals) {
 			implicit_globals.push({
@@ -68,7 +79,10 @@ export function buildReport(input: BuildReportInput): AnalysisReport {
 			});
 		}
 		for (const u of f.unresolved) {
-			if (classifyName(u.name, surface, hostSet) === "undeclared") undeclaredSeed.add(u.name);
+			if (classifyName(u.name, surface, hostSet) === "undeclared") {
+				undeclaredSeed.add(u.name);
+				addUndeclared(f.repo, u.name);
+			}
 		}
 	}
 
@@ -97,5 +111,13 @@ export function buildReport(input: BuildReportInput): AnalysisReport {
 		implicit_globals,
 		undeclared_seed: [...undeclaredSeed].sort(),
 		parse_errors,
+		engine_surface_by_repo: serializeSurfaces(surfacesByRepo),
+		undeclared_by_repo: Object.fromEntries([...undeclaredByRepo].map(([k, v]) => [k, [...v].sort()])),
 	};
+}
+
+export function serializeSurfaces(surfacesByRepo: Record<string, EngineSurface>): Record<string, EngineSurfaceJson> {
+	return Object.fromEntries(
+		Object.entries(surfacesByRepo).map(([key, s]) => [key, { registries: [...s.registries].sort(), functions: [...s.functions.keys()].sort() }])
+	);
 }

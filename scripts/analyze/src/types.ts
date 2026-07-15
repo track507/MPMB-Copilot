@@ -44,6 +44,11 @@ export interface FunctionEntry {
 	kind: FunctionKind;
 }
 
+export interface EngineSurfaceJson {
+	registries: string[];
+	functions: string[];
+}
+
 export interface CoverageWarning {
 	key: string;
 	label: string;
@@ -102,6 +107,8 @@ export interface AnalysisReport extends CatalogModel {
 	implicit_globals: ImplicitGlobalEntry[];
 	undeclared_seed: string[];
 	parse_errors: ParseErrorEntry[];
+	engine_surface_by_repo: Record<string, EngineSurfaceJson>;
+	undeclared_by_repo: Record<string, string[]>;
 }
 
 // Internal analyzer types.

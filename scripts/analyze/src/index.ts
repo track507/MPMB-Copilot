@@ -24,6 +24,7 @@ async function main(): Promise<void> {
 	const repos: Record<string, RepoProvenance> = {};
 	const engineCodes: string[] = [];
 	const perFile: ExtractResult[] = [];
+	const engineCodesByRepo = new Map<string, string[]>();
 
 	for (const repo of REPOS) {
 		const dir = path.join(ROOT, repo.dir);
@@ -36,13 +37,19 @@ async function main(): Promise<void> {
 			} catch {
 				continue;
 			}
-			if (repo.kind === "mpmb") engineCodes.push(code);
+			if (repo.kind === "mpmb") {
+				engineCodes.push(code);
+				const bucket = engineCodesByRepo.get(repo.key) ?? [];
+				bucket.push(code);
+				engineCodesByRepo.set(repo.key, bucket);
+			}
 			const meta: ExtractMeta = { repo: repo.key, file: rel, edition: repo.edition };
 			perFile.push(extractFile(code, meta));
 		}
 	}
 
 	const surface = buildEngineSurface(engineCodes);
+	const surfacesByRepo = Object.fromEntries([...engineCodesByRepo].map(([key, codes]) => [key, buildEngineSurface(codes)]));
 	const report = buildReport({
 		repos,
 		perFile,
@@ -50,6 +57,7 @@ async function main(): Promise<void> {
 		hostSet,
 		generatedAt: new Date().toISOString(),
 		projectRoot: ".",
+		surfacesByRepo,
 	});
 
 	await mkdir(path.dirname(OUT), { recursive: true });
