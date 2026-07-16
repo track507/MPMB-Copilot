@@ -67,6 +67,7 @@ def test_tool_use_addendum_present_when_enabled(monkeypatch):
     assert "mpmb_read" in text
     assert "mpmb_grep" in text
     assert "mpmb_function" in text
+    assert "mpmb_validate" in text
     assert "./data/uploads/session/" in text
     assert "./data/imports_source/" in text
     assert "FIRST move" in text
@@ -92,6 +93,25 @@ def test_diagnose_addendum_absent_when_tools_disabled(monkeypatch):
     monkeypatch.setattr(settings, "enable_tool_use", False)
     text = prompt_builder.get_static_instructions()
     assert "Diagnosing Errors" not in text
+
+
+def test_tool_addendum_teaches_validation():
+    from app.core import prompts
+
+    assert "mpmb_validate" in prompts.TOOL_USE_ADDENDUM
+    assert "mpmb_validate" in prompts.DIAGNOSE_ADDENDUM
+
+
+def test_validating_section_ordered_with_tool_sections(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+    text = prompt_builder.get_static_instructions()
+    assert "Validating scripts" in text
+    assert "two fix passes" in text
+    assert "validator unavailable" in text
+    assert text.index("Roots") < text.index("Validating scripts") < text.index("Return format")
 
 
 @pytest.fixture

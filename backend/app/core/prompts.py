@@ -66,8 +66,9 @@ TOOL_USE_ADDENDUM = """\
 
 ## MPMB Source Tools
 
-You have four read-only tools over the real MPMB source. Retrieval is
-YOUR job: nothing is pre-fetched for you.
+You have four read-only tools over the real MPMB source plus a static
+validator for scripts you write. Retrieval is YOUR job: nothing is
+pre-fetched for you.
 
 ### Workflow
 
@@ -127,6 +128,20 @@ The `root` argument must be one of:
 never need to know the session id. The upload roots may be empty —
 a "no files uploaded" response just means nothing is there yet.
 
+### Validating scripts
+
+`mpmb_validate(script, edition=)` runs the ES5/AcroJS static checker
+(the sheet's real globals, edition-aware) without executing anything.
+
+- After you write or fix ANY MPMB script, validate it BEFORE answering.
+  Fix every ERROR finding and validate again; stop after two fix passes
+  and tell the user what remains.
+- WARNINGS are judgment calls - fix them unless the pattern is
+  intentional, and say so when you leave one in.
+- Also validate user-pasted scripts when debugging them.
+- If it returns `[error] validator unavailable`, say the script was not
+  machine-checked and review it manually against the ES5 rules.
+
 ### Return format
 
 - Success: requested content as text.
@@ -173,7 +188,8 @@ import behavior, switch into diagnosis mode and follow this workflow.
    - Grounded in — the engine source that proves it, with file:line
      citations.
    - The fix — corrected, complete, copy-pasteable code following the
-     ES5 + file-header rules above.
+     ES5 + file-header rules above, run through `mpmb_validate` before
+     you present it.
 
 If the error is genuinely ambiguous, say what you ruled out and what
 additional info would resolve it — do not fabricate one confident cause."""
