@@ -26,7 +26,7 @@ from app.core.tools.source_paths import (
     missing_root_error,
     resolve_safe_path,
 )
-from app.core.tools.validate_client import ValidatorResult, run_validator
+from app.core.tools.validator_client import ValidatorResult, run_validator
 from app.logger import get_logger
 from app.settings import settings
 
