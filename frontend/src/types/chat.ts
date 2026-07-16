@@ -1,5 +1,5 @@
 /** Mirrors backend ChatRequest / ChatResponse / ChatStreamChunk schemas. */
-export type ToolName = "mpmb_read" | "mpmb_grep" | "mpmb_function";
+export type ToolName = "mpmb_search" | "mpmb_read" | "mpmb_grep" | "mpmb_function" | "mpmb_validate";
 export type ToolStatus = "success" | "error" | "truncated";
 
 export interface ChatRequest {
