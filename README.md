@@ -11,6 +11,13 @@ I have not tested this with OpenAI since I started this project. Testing has bee
 
 Also, I'm a native english speaker and it's my only language. All of the existing intent examples under `./data/intent_examples.json` is produced by AI. If any of these examples should be written differently, please open an issue. If you also don't mind adding a brief explanation for me to learn, please add that too :\).
 
+I also hope that this makes it easier for people wanting to migrate scripts from 2014 -> 2024 (and vice versa? not sure why you'd want that).
+This should be a tool meant to help aid creation of scripts but also ensure backwards compat with older sheet versions.
+
+Building this, I realized that I need to also implement more of a standard for code quality. Here's my findings so far (expanding...):
+
+- [ ] Prefer desc([]) function over raw `description` attribute strings
+
 ## TODO's
 
 Most of these have now shipped. See [What's next](#whats-next) for the live roadmap.
@@ -109,7 +116,7 @@ flowchart LR
         QA["Query analysis<br/>(edition + catalog hints)"]
         Prompt["Prompt builder<br/>(static instructions)"]
         Agent["PydanticAI agent loop"]
-        Tools["MPMB tools<br/>(mpmb_search / mpmb_read /<br/>mpmb_grep / mpmb_function)"]
+        Tools["MPMB tools<br/>(mpmb_search / mpmb_read /<br/>mpmb_grep / mpmb_function /<br/>mpmb_validate)"]
         Retriever["Tier-aware retriever"]
     end
 
@@ -152,6 +159,7 @@ MPMB-Copilot/
 │   ├── setup.ps1             # clone/pull MPMB source repos, run chunker
 │   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
 │   ├── analyze/              # AST source analyzer (feeds the chunker + prompt catalog)
+│   ├── validate/             # ES5/AcroJS static validator (lints scripts without executing)
 │   ├── index.mjs             # trigger /api/index against running backend
 │   ├── mint-key.mjs          # mint a scoped service API key for the ops scripts
 │   ├── service-key.mjs       # shared SERVICE_API_KEY lookup for the scripts
@@ -191,6 +199,7 @@ pnpm run gpu:install        # Linux + NVIDIA only: swap in the CUDA onnxruntime
 # Quality gates
 pnpm run check              # lint + format check + tests
 pnpm run check:full         # also runs mypy + tsc
+pnpm run validate:corpus    # static-validator gate: the engine corpora must lint clean
 ```
 
 ## Features
@@ -199,7 +208,8 @@ pnpm run check:full         # also runs mypy + tsc
 - ✅ **Hybrid retrieval** — dense embeddings (BAAI/bge-small-en-v1.5) + BM25 sparse, RRF-fused for relevance even on rare identifier names
 - ✅ **Tier-aware ranking** — authoritative sources (`_functions/`, `_variables/`, `additional content syntax/`) score above community examples
 - ✅ **Edition-aware** — auto-detects whether your question is about 2014 or 2024 rules and filters accordingly
-- ✅ **Tool use** — `mpmb_search` (indexed search), `mpmb_read` (exact file ranges), `mpmb_grep` (regex across source), and `mpmb_function` (a named function/variable body)
+- ✅ **Tool use** — `mpmb_search` (indexed search), `mpmb_read` (exact file ranges), `mpmb_grep` (regex across source), `mpmb_function` (a named function/variable body), and `mpmb_validate` (static ES5/AcroJS script check)
+- ✅ **Static script validation** — an ESLint-based ES5/AcroJS checker with analyzer-generated, edition-aware sheet globals; the agent validates every script it writes (`mpmb_validate`) and fixes findings before answering
 - ✅ **Prompt caching** — Anthropic cache breakpoints on the system prompt, tool definitions, and chat history; later turns read most of their input from cache
 - ✅ **Streaming** — Server-Sent Events stream tokens as they generate, with intermediate tool-use indicators
 - ✅ **Session persistence** — every conversation is saved to Postgres, lives at its own `/chat/<id>` route, and resumes on refresh
@@ -217,6 +227,14 @@ pnpm run check:full         # also runs mypy + tsc
 - ✅ **GPU acceleration (opt-in)** — route local embedding + reranking onto your GPU with one toggle; see [GPU acceleration](#gpu-acceleration)
 - ✅ **Durable model cache** — local ONNX models live under `data/models/`, not the OS temp dir, so a Windows temp cleanup can't silently break retrieval
 
+## Static validator
+
+`scripts/validate` lints MPMB scripts without executing them: post-ES5 syntax (with teaching messages instead of opaque parse errors), AcroJS rules like `console.println`, and unknown or wrong-edition globals — the whitelist is generated from the AST analyzer's report, never hand-maintained.
+
+- `pnpm run analyze` — regenerates the analysis report and the validator's edition-aware globals (`scripts/validate/globals.generated.json`)
+- `pnpm run validate:corpus` — acceptance gate: both engine corpora must lint with zero errors (append `-- --extra <dir> <edition>` for extra trees)
+- The backend exposes it to the agent as the `mpmb_validate` tool; a validator failure degrades to an error message in chat, never a stalled turn
+
 ## GPU acceleration
 
 Local inference (the embedding model and the reranker) runs on **CPU by default** — safe everywhere, no drivers required. If you have a GPU, you can opt in from **Settings → Compute device → "Use GPU for local models"**. It's a preference, not a demand: cloud embedding providers ignore it, and a model that can't load on the GPU falls back to CPU on its own. The payoff is a much faster full re-index and lower per-search reranking latency.
@@ -232,9 +250,8 @@ Local inference (the embedding model and the reranker) runs on **CPU by default*
 
 ## What's next
 
-The agentic-retrieval migration, auth + scoped API keys, the eval harness + feedback loop, cross-encoder reranking, and GPU acceleration are all shipped. Ahead:
+The agentic-retrieval migration, auth + scoped API keys, the eval harness + feedback loop, cross-encoder reranking, GPU acceleration, and the static script validator are all shipped. Ahead:
 
-- **Static script validator** — an ESLint-based ES5/AcroJS checker for generated and user scripts (no execution), with its globals list generated from the AST source analyzer instead of hand-maintained
 - **Write tools** — let the agent produce or apply diff patches for your own homebrew scripts (with explicit approval — never auto-applied)
 - **Upload API** — endpoints for the existing session/global upload roots, so the model can read user-supplied source bundles (e.g. private homebrew collections)
 - **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs
