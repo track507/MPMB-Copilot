@@ -170,6 +170,20 @@ const RULES = {
 	"no-self-compare": "warn",
 	"no-unreachable-loop": "warn",
 	"no-template-curly-in-string": "warn",
+
+	// ? corpus-driven downgrades: the shipped engine uses these idioms and they run fine in Acrobat
+	"no-redeclare": "warn", // ? 1529x: repeated var declarations of the same name
+	"no-useless-escape": "warn", // ? 195x: over-escaped regexes and strings
+	"no-fallthrough": "warn", // ? 106x: intentional switch fallthrough
+	"no-useless-assignment": "warn", // ? 98x: dead stores
+	"no-dupe-keys": "warn", // ? 12x in shipped content; ES5 is last-key-wins
+	"no-cond-assign": "warn", // ? while ((m = rx.exec(str))) loops
+	"no-self-assign": ["warn", { props: false }], // ? Fld.value = Fld.value re-renders a field; the property form must not be flagged at all
+	"no-regex-spaces": "warn",
+	"no-control-regex": "warn",
+	"no-unreachable": "warn",
+	"no-dupe-else-if": "warn",
+	"no-unused-labels": "warn",
 };
 
 /** @typedef {import("./generate-globals.mjs").GlobalsSets} GlobalsSets */

@@ -97,3 +97,19 @@ describe("quality rules stay warnings", () => {
 		expect(findings.some((f) => f.severity === "error")).toBe(false);
 	});
 });
+
+describe("corpus-driven severities", () => {
+	it("does not flag the field re-render idiom (property self-assign)", () => {
+		expect(lint("var o = { a : 1 }; o.a = o.a;", "2014", GLOBALS).findings).toEqual([]);
+	});
+	it("keeps plain self-assignment a warning", () => {
+		const { findings } = lint("var x = 1; x = x; console.println(x);", "2014", GLOBALS);
+		expect(findings.map((f) => [f.ruleId, f.severity])).toEqual([["no-self-assign", "warning"]]);
+	});
+	it("keeps redeclaration and fallthrough warnings, not errors", () => {
+		const { findings } = lint("var x = 1; var x = 2; switch (x) { case 1: x++; case 2: break; }", "2014", GLOBALS);
+		expect(findings.length).toBeGreaterThan(0);
+		expect(findings.some((f) => f.severity === "error")).toBe(false);
+		expect(findings.map((f) => f.ruleId)).toEqual(expect.arrayContaining(["no-redeclare", "no-fallthrough"]));
+	});
+});

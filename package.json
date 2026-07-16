@@ -25,6 +25,7 @@
 		"index:if-empty": "node ./scripts/index.mjs",
 		"gpu:install": "cd backend && uv pip uninstall onnxruntime onnxruntime-directml && uv pip install onnxruntime-gpu",
 		"analyze": "pnpm --filter @mpmb/analyze run analyze && pnpm --filter @mpmb/validate run globals",
+		"validate:corpus": "pnpm --filter @mpmb/validate run corpus",
 		"rechunk": "pnpm run analyze && pnpm run chunk && pnpm run index",
 		"lint": "pnpm run lint:js && pnpm run lint:ts && pnpm run lint:py && pnpm run lint:md",
 		"lint:js": "eslint .",
