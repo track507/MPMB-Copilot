@@ -150,6 +150,12 @@ class Config(BaseSettings):
     mpmb_repo_branch_2024: str = "main"
     imports_repo_url: str = "https://github.com/safety-orange/Imports-for-MPMB-s-Character-Sheet.git"
 
+    # Static validator (transport 1: per-call node subprocess; see the validator spec)
+    validator_node_bin: str = "node"
+    validator_script_path: str = "./scripts/validate/src/validate.mjs"
+    validator_timeout_sec: float = 10.0
+    validator_max_concurrency: int = 4
+
     # Computed Properties
 
     @field_validator("debug", mode="before")
@@ -219,6 +225,14 @@ class Config(BaseSettings):
         if not self.user_source_dirs:
             return []
         return [Path(d.strip()) for d in self.user_source_dirs.split(",") if d.strip()]
+
+    @property
+    def validator_script(self) -> Path:
+        # ? Anchored to the repo root like fastembed_cache_path (cwd differs between uvicorn and scripts)
+        path = Path(self.validator_script_path)
+        if not path.is_absolute():
+            path = _REPO_ROOT / path
+        return path
 
     @property
     def source_configs(self) -> list[dict]:
