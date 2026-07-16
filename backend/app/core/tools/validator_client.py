@@ -10,6 +10,7 @@ The stateless JSON contract is the transport seam: a warm sidecar (transport 2) 
 
 import asyncio
 import json
+import subprocess
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -30,6 +31,16 @@ class ValidatorResult:
     error: Optional[str] = None
 
 
+def _spawn(payload: bytes) -> "subprocess.CompletedProcess[bytes]":
+    # * subprocess.run enforces the timeout itself and kills the child on expiry
+    return subprocess.run(
+        [config.validator_node_bin, str(config.validator_script)],
+        input=payload,
+        capture_output=True,
+        timeout=config.validator_timeout_sec,
+    )
+
+
 async def run_validator(source: str, edition: str) -> ValidatorResult:
     script = config.validator_script
     if not script.exists():
@@ -38,27 +49,20 @@ async def run_validator(source: str, edition: str) -> ValidatorResult:
     payload = json.dumps({"source": source, "edition": edition}).encode("utf-8")
     async with _semaphore:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                config.validator_node_bin,
-                str(script),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            proc = await asyncio.to_thread(_spawn, payload)
         except FileNotFoundError:
             return ValidatorResult(ok=False, error=f"node binary not found ({config.validator_node_bin})")
-        try:
-            out, err = await asyncio.wait_for(proc.communicate(payload), timeout=config.validator_timeout_sec)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+        except subprocess.TimeoutExpired:
             return ValidatorResult(ok=False, error=f"validator timed out after {config.validator_timeout_sec}s")
+        except Exception as e:
+            # ! repr, not str: this guard exists because NotImplementedError stringifies to ""
+            return ValidatorResult(ok=False, error=f"validator failed to spawn: {e!r}")
 
     if proc.returncode != 0:
-        detail = err.decode("utf-8", errors="replace")[:400]
+        detail = proc.stderr.decode("utf-8", errors="replace")[:400]
         return ValidatorResult(ok=False, error=f"validator exited {proc.returncode}: {detail}")
     try:
-        data = json.loads(out.decode("utf-8"))
+        data = json.loads(proc.stdout.decode("utf-8"))
     except ValueError as e:
         return ValidatorResult(ok=False, error=f"validator returned invalid JSON: {e}")
     return ValidatorResult(
