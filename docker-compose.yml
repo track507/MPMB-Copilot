@@ -61,6 +61,14 @@ services:
             - backend_logs:/app/logs
             - backend_index_cache:/app/data/index_cache
             - backend_uploads:/app/data/uploads
+            # Source trees for the mpmb_read/grep/function tool roots (read-only)
+            - ./data/mpmb_source:/app/data/mpmb_source:ro
+            - ./data/mpmb_source_2024:/app/data/mpmb_source_2024:ro
+            - ./data/imports_source:/app/data/imports_source:ro
+            # Analyzer report for the source catalog (symbol index, layer-1 intent, prompt hints)
+            - ./scripts/analyze/reports:/app/scripts/analyze/reports:ro
+            # Warm model cache from the host - removes the first-search cold start
+            - ./data/models:/app/data/models
         environment:
             # Application
             - ENVIRONMENT=development
