@@ -1,4 +1,4 @@
-"""The four read-only MPMB source tools.
+"""The four read-only MPMB source tools, plus the static validator
 
 `mpmb_search` queries the indexed corpus via the retriever; the other
 three (`mpmb_read`, `mpmb_grep`, `mpmb_function`) read the cloned
@@ -26,6 +26,7 @@ from app.core.tools.source_paths import (
     missing_root_error,
     resolve_safe_path,
 )
+from app.core.tools.validate_client import ValidatorResult, run_validator
 from app.logger import get_logger
 from app.settings import settings
 
@@ -377,4 +378,59 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
         logger.info(f"tool.mpmb_function root={root} name={name}")
         return _mpmb_function_impl(roots, ctx.deps, root, name)
 
+    @toolset.tool
+    async def mpmb_validate(
+        ctx: RunContext[Deps],
+        script: str,
+        edition: Optional[Literal["2014", "2024"]] = None,
+    ) -> str:
+        """
+        Statically validate an MPMB script (ES5/AcroJS rules + the sheet's known globals) without executing it
+
+        Use after writing or fixing ANY MPMB script, and on user-pasted scripts, before answering
+        Returns findings as `L<line>:<col> [rule] message` grouped into ERRORS (break in Acrobat) and WARNINGS, or a clean bill
+        Fix the errors and validate again; stop after two fix passes and explain what remains `edition` defaults to the chat's edition
+        """
+        logger.info(f"tool.mpmb_validate bytes={len(script.encode('utf-8'))} edition={edition}")
+        return await _mpmb_validate_impl(ctx.deps, script, edition)
+
     return toolset
+
+
+async def _mpmb_validate_impl(deps: Deps, script: str, edition: Optional[str] = None, run=run_validator) -> str:
+    resolved = edition or deps.edition
+    size = len(script.encode("utf-8"))
+    if size > settings.tool_max_file_bytes:
+        return f"[error] script too large: {size} bytes (max {settings.tool_max_file_bytes})"
+
+    result: ValidatorResult = await run(script, resolved)
+    # * chunks: [] keeps the retrieval-trace consumers safe on a chunk-less entry
+    entry: dict = {"tool": "mpmb_validate", "edition": resolved, "chunks": []}
+    if not result.ok:
+        entry["error"] = result.error
+        deps.trace.append(entry)
+        return (
+            f"[error] validator unavailable: {result.error}. "
+            "Review the script manually against the ES5/AcroJS rules before answering."
+        )
+
+    errors = [f for f in result.findings if f.get("severity") == "error"]
+    warnings = [f for f in result.findings if f.get("severity") == "warning"]
+    entry["errors"] = len(errors)
+    entry["warnings"] = len(warnings)
+    deps.trace.append(entry)
+
+    if not result.findings:
+        return f"0 errors, 0 warnings - script passes ES5/AcroJS checks (edition {resolved})."
+
+    def _fmt(f: dict) -> str:
+        return f"  L{f.get('line', 0)}:{f.get('column', 0)} [{f.get('ruleId') or 'unknown'}] {f.get('message', '')}"
+
+    sections = [f"{len(errors)} error(s), {len(warnings)} warning(s) (edition {resolved})"]
+    for note in result.notes:
+        sections.append(f"[note] {note}")
+    if errors:
+        sections.append("ERRORS (must fix - these break in Acrobat):\n" + "\n".join(_fmt(f) for f in errors))
+    if warnings:
+        sections.append("WARNINGS (judgment calls - fix unless intentional):\n" + "\n".join(_fmt(f) for f in warnings))
+    return "\n\n".join(sections)
