@@ -64,6 +64,9 @@
 			"eslint --fix --config frontend/eslint.config.mjs",
 			"prettier --write"
 		],
+		"scripts/**/*.ts": [
+			"prettier --write"
+		],
 		"*.py": [
 			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check --fix",
 			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format"

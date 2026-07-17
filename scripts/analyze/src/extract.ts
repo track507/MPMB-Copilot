@@ -130,8 +130,7 @@ export function extractFile(code: string, meta: ExtractMeta): ExtractResult {
 
 	// Scope facts: implicit globals (bare writes, no var) + all unresolved references
 	const global = scopeManager?.globalScope as
-		| { implicit?: { variables?: Array<{ name: string; identifiers?: AnyNode[] }> }; through?: Array<{ identifier?: AnyNode }> }
-		| undefined;
+		{ implicit?: { variables?: Array<{ name: string; identifiers?: AnyNode[] }> }; through?: Array<{ identifier?: AnyNode }> } | undefined;
 	if (global) {
 		for (const v of global.implicit?.variables ?? []) {
 			const id = v.identifiers?.[0];
