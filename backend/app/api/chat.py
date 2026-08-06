@@ -24,8 +24,9 @@ from app.api.deps import Principal, current_principal
 from app.config import config
 from app.core.rag_engine import rag_engine
 from app.logger import get_logger
+from app.model.orm import Message
 from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
-from app.services.db import db, session_service
+from app.services.db import db, session_service, upload_registry
 from app.services.title_generator import generate_session_title
 from app.settings import settings
 
@@ -71,7 +72,7 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None) -> UUI
         return None
 
 
-async def _save_user_message(session_uuid: UUID | None, user_message: str) -> None:
+async def _save_user_message(session_uuid: UUID | None, user_message: str) -> Message | None:
     """
     Save the user message and trigger title generation on the first message
 
@@ -90,8 +91,10 @@ async def _save_user_message(session_uuid: UUID | None, user_message: str) -> No
         # ? First user message in a new session - kick off async title generation
         if user_msg.sequence_number == 1:
             asyncio.create_task(generate_session_title(session_uuid, user_message))
+        return user_msg
     except Exception as e:
         logger.error(f"Failed to save user message: {e}")
+        return None
 
 
 async def _save_assistant_message(
@@ -203,7 +206,13 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before generation so it survives downstream failures
-        await _save_user_message(session_uuid, request.message)
+        user_msg = await _save_user_message(session_uuid, request.message)
+        if user_msg is not None and session_uuid is not None and request.attached_file_ids:
+            await upload_registry.link_message(
+                message_id=user_msg.id,
+                file_ids=request.attached_file_ids,
+                session_id=session_uuid,
+            )
 
         try:
             rag_response = await rag_engine.generate(
@@ -275,7 +284,13 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before streaming so it survives any agent/model failure
-        await _save_user_message(session_uuid, request.message)
+        user_msg = await _save_user_message(session_uuid, request.message)
+        if user_msg is not None and session_uuid is not None and request.attached_file_ids:
+            await upload_registry.link_message(
+                message_id=user_msg.id,
+                file_ids=request.attached_file_ids,
+                session_id=session_uuid,
+            )
 
         async def event_generator():
             """Generate SSE events from the RAG stream."""

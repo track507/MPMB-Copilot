@@ -42,6 +42,7 @@ SourceRoot = Literal[
     "./data/imports_source/",
     "./data/uploads/session/",
     "./data/uploads/global/",
+    "./data/uploads/shared/",
 ]
 
 

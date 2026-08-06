@@ -17,6 +17,7 @@ from app.api import chat, health, index, sessions, settings, tasks
 from app.api import (
     source_catalog as source_catalog_api,
 )
+from app.api import uploads as uploads_api
 from app.api.deps import current_principal, is_loopback, principal_or_service
 from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
@@ -161,6 +162,7 @@ app.include_router(tasks.router, prefix=config.api_prefix, tags=["Tasks"], depen
 app.include_router(settings.router, prefix=config.api_prefix, tags=["Settings"], dependencies=_wall)
 app.include_router(api_keys_api.router, prefix=config.api_prefix, tags=["API Keys"])
 app.include_router(source_catalog_api.router, prefix=config.api_prefix, tags=["Source Catalog"], dependencies=_wall)
+app.include_router(uploads_api.router, prefix=config.api_prefix, tags=["Uploads"], dependencies=_wall)
 
 
 # Root endpoint

@@ -150,8 +150,9 @@ def test_missing_upload_root_gives_friendly_message(tmp_path: Path):
 
 def test_missing_root_error_messages():
     assert "chat session" in missing_root_error("./data/uploads/session/")
-    assert "shared library" in missing_root_error("./data/uploads/global/")
     assert "root directory missing" in missing_root_error("./data/mpmb_source/")
+    assert "library" in missing_root_error("./data/uploads/global/")
+    assert "shared library" in missing_root_error("./data/uploads/shared/")
 
 
 def test_source_root_literal_matches_allowed_roots():

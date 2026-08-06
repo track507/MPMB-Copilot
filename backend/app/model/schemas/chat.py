@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -35,6 +36,9 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = Field(None, gt=0, le=8000, description="Maximum tokens to generate")
     include_source: bool = Field(True, description="Include source code references")
     edition: Optional[str] = Field(None, description="D&D edition (2014/2024)")
+    attached_file_ids: Optional[list[UUID]] = Field(
+        None, description="Session scope upload ids to stamp onto this user message"
+    )
 
 
 class ChatResponse(BaseModel):
