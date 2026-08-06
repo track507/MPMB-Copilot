@@ -25,7 +25,10 @@
 	"[python]": {
 		"editor.defaultFormatter": "charliermarsh.ruff",
 		"editor.insertSpaces": true,
-		"editor.tabSize": 4
+		"editor.tabSize": 4,
+		"editor.codeActionsOnSave": {
+			"source.organizeImports.ruff": "explicit"
+		}
 	},
 	"js/ts.tsdk.path": "frontend/node_modules/typescript/lib",
 	"js/ts.tsdk.promptToUseWorkspaceVersion": true,
