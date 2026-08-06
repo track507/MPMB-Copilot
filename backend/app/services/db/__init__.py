@@ -5,6 +5,7 @@ from app.services.db.auth_service import auth_service
 from app.services.db.connection import Database, db
 from app.services.db.feedback_service import FeedbackService, feedback_service
 from app.services.db.session_service import SessionService, session_service
+from app.services.db.upload_registry import UploadRegistry, upload_registry
 
 __all__ = [
     "Database",
@@ -15,4 +16,6 @@ __all__ = [
     "feedback_service",
     "auth_service",
     "api_key_service",
+    "UploadRegistry",
+    "upload_registry",
 ]

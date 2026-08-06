@@ -51,6 +51,7 @@ class Deps:
 
     session_id: str
     edition: str
+    user_id: str = "default"
     # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
     # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run

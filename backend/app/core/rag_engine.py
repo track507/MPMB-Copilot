@@ -155,6 +155,7 @@ class RAGEngine:
         self,
         query: str,
         conversation_history: Optional[list[dict]] = None,
+        user_id: str = "default",
         session_id: Optional[str] = None,
         edition: Optional[str] = None,
         provider: Optional[str] = None,
@@ -176,7 +177,7 @@ class RAGEngine:
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
-        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition) if toolset else None
+        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
 
         t_generate = time.perf_counter()
         try:
@@ -226,6 +227,7 @@ class RAGEngine:
         self,
         query: str,
         conversation_history: Optional[list[dict]] = None,
+        user_id: str = "default",
         session_id: Optional[str] = None,
         edition: Optional[str] = None,
         provider: Optional[str] = None,
@@ -247,7 +249,7 @@ class RAGEngine:
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
-        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition) if toolset else None
+        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
 
         agent: Agent = build_agent(
             instructions=prompt_builder.get_static_instructions(),

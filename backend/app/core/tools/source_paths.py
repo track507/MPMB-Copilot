@@ -17,15 +17,16 @@ ROOT_MPMB_2024 = "./data/mpmb_source_2024/"
 ROOT_IMPORTS = "./data/imports_source/"
 ROOT_UPLOADS_SESSION = "./data/uploads/session/"
 ROOT_UPLOADS_GLOBAL = "./data/uploads/global/"
+ROOT_UPLOADS_SHARED = "./data/uploads/shared/"
 
 ALLOWED_ROOTS: frozenset[str] = frozenset(
-    {ROOT_MPMB_2014, ROOT_MPMB_2024, ROOT_IMPORTS, ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL}
+    {ROOT_MPMB_2014, ROOT_MPMB_2024, ROOT_IMPORTS, ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL, ROOT_UPLOADS_SHARED}
 )
 
 # ? Upload roots resolve to per-user directories that may simply not exist yet; tools should report that as "nothing uploaded", not as a broken root
-UPLOAD_ROOTS: frozenset[str] = frozenset({ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL})
+UPLOAD_ROOTS: frozenset[str] = frozenset({ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL, ROOT_UPLOADS_SHARED})
 
-ALLOWED_EXTENSIONS: frozenset[str] = frozenset({".js", ".md", ".sample", ".yml", ".yaml", ".txt"})
+ALLOWED_EXTENSIONS: frozenset[str] = frozenset({".js", ".md", ".sample", ".yml", ".yaml", ".txt", ".json"})
 
 DENIED_SUBDIRS: frozenset[str] = frozenset({".git", ".venv", "node_modules"})
 
@@ -46,14 +47,14 @@ def _build_default_roots(deps) -> dict[str, Path]:
     """Resolve the literal root strings to real directories using Deps."""
     from app.config import config
 
-    session_dir = Path(config.upload_dir) / deps.session_id
-    global_dir = Path(config.upload_dir) / "global"
+    base = Path(config.upload_dir)
     return {
         ROOT_MPMB_2014: Path(config.mpmb_source_dir),
         ROOT_MPMB_2024: Path(config.mpmb_source_2024_dir),
         ROOT_IMPORTS: Path(config.imports_source_dir),
-        ROOT_UPLOADS_SESSION: session_dir,
-        ROOT_UPLOADS_GLOBAL: global_dir,
+        ROOT_UPLOADS_SESSION: base / "session" / deps.session_id,
+        ROOT_UPLOADS_GLOBAL: base / "global" / deps.user_id,
+        ROOT_UPLOADS_SHARED: base / "shared",
     }
 
 
@@ -66,6 +67,8 @@ def missing_root_error(root: str) -> str:
     if root == ROOT_UPLOADS_SESSION:
         return "[error] no files uploaded: this chat session has no uploaded files yet"
     if root == ROOT_UPLOADS_GLOBAL:
+        return "[error] no files uploaded: your library is empty"
+    if root == ROOT_UPLOADS_SHARED:
         return "[error] no files uploaded: the shared library is empty"
     return f"[error] root directory missing: {root}"
 

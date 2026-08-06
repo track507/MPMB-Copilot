@@ -71,6 +71,10 @@ class Settings:
     Applied only when the selected model supports it; ignored otherwise. 'high' is the provider default
     """
 
+    # * Upload API caps (independent from tool_max_file_bytes: stored files may exceed a single tool read)
+    upload_max_file_bytes: int = 52_428_800
+    upload_max_files_per_scope: int = 200
+
     # Embedding selection (the model that builds and queries the vector index)
     # Dimension is derived from the catalog via embedding_dim(), not stored here
     embedding_provider: str = "fastembed"

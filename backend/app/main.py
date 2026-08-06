@@ -22,6 +22,7 @@ from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
 from app.services.db import auth_service, db
+from app.services.uploads import upload_service
 
 # Initialize structured logging before anything else
 configure_logging()
@@ -71,6 +72,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.warning("postgres_unavailable", error="Initial database health check failed")
     except Exception as e:
         logger.warning("postgres_unavailable", error=str(e))
+
+    # Connect to the upload service
+    await asyncio.to_thread(upload_service.sweep_stale_temps)
 
     # Connect to Qdrant
     store = get_vector_store()

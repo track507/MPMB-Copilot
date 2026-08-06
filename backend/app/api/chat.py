@@ -17,9 +17,10 @@ import asyncio
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from app.api.deps import Principal, current_principal
 from app.config import config
 from app.core.rag_engine import rag_engine
 from app.logger import get_logger
@@ -189,7 +190,7 @@ def _build_metadata(
     summary="Chat with RAG",
     description="Send a message and receive AI-generated MPMB code assistance",
 )
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Generate a complete RAG-powered response with session persistence."""
     try:
         logger.info(
@@ -208,6 +209,7 @@ async def chat(request: ChatRequest):
             rag_response = await rag_engine.generate(
                 query=request.message,
                 conversation_history=history,
+                user_id=principal.user_id,
                 session_id=session_id,
                 edition=request.edition or settings.default_edition,
                 provider=request.provider,
@@ -260,7 +262,7 @@ async def chat(request: ChatRequest):
     summary="Stream Chat Response",
     description="Stream AI-generated responses via Server-Sent Events (SSE)",
 )
-async def chat_stream(request: ChatRequest):
+async def chat_stream(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Stream a RAG-powered response via SSE with session persistence."""
     try:
         logger.info(
@@ -284,6 +286,7 @@ async def chat_stream(request: ChatRequest):
                 async for event in rag_engine.stream(
                     query=request.message,
                     conversation_history=history,
+                    user_id=principal.user_id,
                     session_id=session_id,
                     edition=request.edition or settings.default_edition,
                     provider=request.provider,

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -212,18 +212,40 @@ class File(Base):
 
     __tablename__ = "files"
 
+    __table_args__ = (
+        CheckConstraint("(scope = 'session') = (session_id IS NOT NULL)", name="ck_files_session_scope"),
+        Index(
+            "uq_files_session_filename",
+            "session_id",
+            "filename",
+            unique=True,
+            postgresql_where=text("scope = 'session'"),
+        ),
+        Index(
+            "uq_files_global_owner_filename",
+            "owner_user_id",
+            "filename",
+            unique=True,
+            postgresql_where=text("scope = 'global'"),
+        ),
+        Index("uq_files_shared_filename", "filename", unique=True, postgresql_where=text("scope = 'shared'")),
+    )
+
     id: UUID = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)
-    session_id: UUID = Column(PGUUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
+    scope: str = Column(String(16), nullable=False)
+    session_id: Optional[UUID] = Column(
+        PGUUID(as_uuid=True), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=True
+    )
     message_id: Optional[UUID] = Column(
         PGUUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=True
     )
-
+    owner_user_id: str = Column(String(255), nullable=False)
     filename: str = Column(String(255), nullable=False)
     original_filename: str = Column(String(255), nullable=False)
     file_path: str = Column(String(512), nullable=False)
     content_type: str = Column(String(100), nullable=False)
     file_size: int = Column(Integer, nullable=False)
-    file_hash: Optional[str] = Column(String(64), nullable=True)
+    file_hash: str = Column(String(64), nullable=False)
     uploaded_at: datetime = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     meta_data: dict = Column(JSONB, nullable=False, server_default="{}")
 
