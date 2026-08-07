@@ -341,6 +341,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
 
         Use when you need exact code from a known path, typically after mpmb_grep or mpmb_function located the file `path` is relative to `root`
         Returns the text, ending with `[truncated: ...]` when capped; `[error] ...` means the call failed - try a different path or tool
+        The upload roots `./data/uploads/session/`, `./data/uploads/global/`, and `./data/uploads/shared/` are valid `root` values too
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_read root={root} path={path} range={start_line}-{end_line}")
@@ -359,6 +360,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
         Use to find symbols, attributes, or conventions across files
         `path_glob` narrows the file set (e.g. `**/*.js`)
         A "No matches" response is a valid result meaning the pattern is absent - do not retry the identical call
+        The upload roots `./data/uploads/session/`, `./data/uploads/global/`, and `./data/uploads/shared/` are valid `root` values too
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_grep root={root} pattern={pattern!r} glob={path_glob}")
@@ -375,6 +377,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
 
         Use when the user names a specific engine function or registry variable and you need its exact definition
         Returns the source prefixed with a `// file:line` comment, or `[error] ... not found` if the identifier is not declared under this root
+        The upload roots `./data/uploads/session/`, `./data/uploads/global/`, and `./data/uploads/shared/` are valid `root` values too
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_function root={root} name={name}")

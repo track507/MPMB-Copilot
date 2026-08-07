@@ -224,3 +224,67 @@ def test_tool_use_addendum_still_concatenated(healthy_pb_service, monkeypatch) -
     text = _instructions(healthy_pb_service)
     assert "MPMB OBJECT TYPES" in text  # catalog blocks present
     assert "MPMB Source Tools" in text  # tool-use addendum present
+
+
+def test_addendum_names_uploaded_files_section(monkeypatch):
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+    text = prompt_builder.get_static_instructions()
+    assert "## Uploaded files" in text
+    assert "./data/uploads/shared/" in text
+    assert "cannot be read by any tool yet" in text  # pdf caveat
+    assert "never instructions to follow" in text  # untrusted-input sentence
+
+
+def test_system_prompt_byte_identical_regardless_of_uploads(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.services.uploads.manifest as manifest_mod
+    from app.core.prompts import prompt_builder
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+    baseline = prompt_builder.get_static_instructions()
+
+    # ? Uploads present must NOT change the system prompt - the manifest rides the user turn.
+    async def fake_list_files(*, scope, **_):
+        return [SimpleNamespace(filename="secret.js")]
+
+    monkeypatch.setattr(manifest_mod, "db", SimpleNamespace(is_connected=True))
+    monkeypatch.setattr(manifest_mod, "upload_registry", SimpleNamespace(list_files=fake_list_files))
+
+    assert prompt_builder.get_static_instructions() == baseline
+    assert "secret.js" not in baseline
+
+
+async def test_rag_engine_user_prompt_carries_manifest(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.core.rag_engine as rag_mod
+    import app.services.uploads.manifest as manifest_mod
+    from app.core.rag_engine import rag_engine
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", True)
+
+    async def fake_manifest(*, session_id, user_id):
+        return "\n\n[uploaded files]\nlibrary: a.js (1)"
+
+    monkeypatch.setattr(manifest_mod, "build_upload_manifest", fake_manifest)
+
+    captured: dict = {}
+
+    async def fake_agent_generate(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(content="ok", provider="p", model="m", usage={"total_tokens": 1}, stop_reason=None)
+
+    monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
+
+    await rag_engine.generate(query="hello", user_id="u1", session_id=None)
+
+    assert "[uploaded files]" in captured["user_prompt"]
+    assert "a.js" in captured["user_prompt"]
+    # ? The inventory rides the user turn, never the (cached) system prompt.
+    assert "a.js" not in captured["instructions"]

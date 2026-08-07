@@ -21,6 +21,7 @@ Usage:
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
+from uuid import UUID
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -178,6 +179,18 @@ class RAGEngine:
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
         deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
+        upload_manifest = ""
+        if toolset:
+            from app.services.uploads.manifest import build_upload_manifest
+
+            try:
+                manifest_session = UUID(session_id) if session_id else None
+            except ValueError:
+                manifest_session = None
+            upload_manifest = await build_upload_manifest(session_id=manifest_session, user_id=user_id)
+
+        if upload_manifest:
+            user_prompt += upload_manifest
 
         t_generate = time.perf_counter()
         try:
@@ -250,6 +263,18 @@ class RAGEngine:
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
         deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
+        upload_manifest = ""
+        if toolset:
+            from app.services.uploads.manifest import build_upload_manifest
+
+            try:
+                manifest_session = UUID(session_id) if session_id else None
+            except ValueError:
+                manifest_session = None
+            upload_manifest = await build_upload_manifest(session_id=manifest_session, user_id=user_id)
+
+        if upload_manifest:
+            user_prompt += upload_manifest
 
         agent: Agent = build_agent(
             instructions=prompt_builder.get_static_instructions(),
@@ -264,9 +289,8 @@ class RAGEngine:
         t_generate = time.perf_counter()
         tool_calls: list[dict[str, Any]] = []
         tool_start_times: dict[str, float] = {}
-        # ? After a tool result, the model's next text part starts mid-sentence
-        # ? with no separator. Inject a paragraph break before the first text
-        # ? chunk that follows a tool_end so sentences don't collide.
+        # * After a tool result, the model's next text part starts mid-sentence with no separator
+        # Inject a paragraph break before the first text chunk that follows a tool_end so sentences don't collide
         needs_separator = False
 
         run_kwargs: dict[str, Any] = {"message_history": pydantic_history}
