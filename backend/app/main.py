@@ -7,7 +7,6 @@ from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from app.api import api_keys as api_keys_api
 from app.api import (
@@ -20,6 +19,7 @@ from app.api import (
 from app.api import uploads as uploads_api
 from app.api.deps import current_principal, is_loopback, principal_or_service
 from app.config import config
+from app.core.problem import register_problem_handlers
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services import get_vector_store, task_manager
 from app.services.db import auth_service, db
@@ -135,19 +135,8 @@ app.add_middleware(
 app.add_middleware(RequestLoggingMiddleware)
 
 
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc: Exception):
-    """Handle uncaught exceptions"""
-    logger.error("unhandled_exception", error=str(exc), error_type=type(exc).__name__)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Internal server error",
-            "message": str(exc) if config.is_development else "An unexpected error occurred",
-            "type": type(exc).__name__,
-        },
-    )
+# * RFC 9457 problem+json for every error (HTTPException, validation, ProblemException, UploadError, unhandled)
+register_problem_handlers(app)
 
 
 _wall = [Depends(current_principal)]

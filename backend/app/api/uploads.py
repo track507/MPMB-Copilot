@@ -6,6 +6,8 @@ Endpoints:
     GET    /uploads               - List a scope
     GET    /uploads/{id}/content  - Download stored bytes
     DELETE /uploads/{id}          - Remove row + disk file
+
+UploadError propagates to the app-level problem handler (see app/core/problem.py)
 """
 
 from typing import Optional
@@ -28,10 +30,6 @@ router = APIRouter()
 def _require_db() -> None:
     if not db.is_connected:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not available")
-
-
-def _http(exc: UploadError) -> HTTPException:
-    return HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})
 
 
 def _to_out(row: File) -> FileOut:
@@ -68,17 +66,11 @@ async def upload_file(
 
     if scope is UploadScope.session and session_id is not None:
         if await session_service.get_session(session_id=session_id) is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "not_found", "message": f"Session {session_id} not found"},
-            )
+            raise UploadError(404, "not_found", f"Session {session_id} not found")
 
-    try:
-        row = await upload_service.store(
-            scope=scope.value, user_id=principal.user_id, role=principal.role, upload=file, session_id=session_id
-        )
-    except UploadError as e:
-        raise _http(e)
+    row = await upload_service.store(
+        scope=scope.value, user_id=principal.user_id, role=principal.role, upload=file, session_id=session_id
+    )
     return _to_out(row=row)
 
 
@@ -95,15 +87,12 @@ async def list_uploads(
     principal: Principal = Depends(current_principal),
 ):
     _require_db()
-    try:
-        rows = await upload_service.list_with_reconcile(
-            scope=scope.value,
-            user_id=principal.user_id,
-            role=principal.role,
-            session_id=session_id,
-        )
-    except UploadError as e:
-        raise _http(e)
+    rows = await upload_service.list_with_reconcile(
+        scope=scope.value,
+        user_id=principal.user_id,
+        role=principal.role,
+        session_id=session_id,
+    )
     return FileListOut(files=[_to_out(r) for r in rows], total=len(rows))
 
 
@@ -115,10 +104,7 @@ async def list_uploads(
 )
 async def download_upload(file_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
-    try:
-        path, row = await upload_service.open_content(file_id=file_id, user_id=principal.user_id, role=principal.role)
-    except UploadError as e:
-        raise _http(e)
+    path, row = await upload_service.open_content(file_id=file_id, user_id=principal.user_id, role=principal.role)
     # ! attachment + nosniff: stored .js served inline would be a stored-XSS vector
     return FileResponse(
         path,
@@ -137,7 +123,4 @@ async def download_upload(file_id: UUID, principal: Principal = Depends(current_
 )
 async def delete_upload(file_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
-    try:
-        await upload_service.delete(file_id=file_id, user_id=principal.user_id, role=principal.role)
-    except UploadError as e:
-        raise _http(e)
+    await upload_service.delete(file_id=file_id, user_id=principal.user_id, role=principal.role)

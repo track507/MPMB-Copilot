@@ -106,7 +106,7 @@ def test_session_upload_unknown_session_is_404(client, svc):
     )
 
     assert resp.status_code == 404
-    assert resp.json()["detail"]["code"] == "not_found"
+    assert resp.json()["type"] == "/api/problems/not-found"
     svc.store.assert_not_awaited()
 
 
@@ -132,7 +132,9 @@ def test_upload_error_surfaces_as_envelope(client, svc, status_code, code):
     resp = client.post("/api/uploads", data={"scope": "global"}, files={"file": ("a.js", b"x", "text/javascript")})
 
     assert resp.status_code == status_code
-    assert resp.json()["detail"] == {"code": code, "message": "boom"}
+    body = resp.json()
+    assert body["type"] == f"/api/problems/{code.replace('_', '-')}"
+    assert body["detail"] == "boom"
 
 
 # * GET /uploads
@@ -154,7 +156,7 @@ def test_list_error_surfaces_as_envelope(client, svc):
     svc.list.side_effect = UploadError(400, "invalid_scope", "nope")
     resp = client.get("/api/uploads", params={"scope": "global"})
     assert resp.status_code == 400
-    assert resp.json()["detail"]["code"] == "invalid_scope"
+    assert resp.json()["type"] == "/api/problems/invalid-scope"
 
 
 # * GET /uploads/{id}/content
@@ -179,7 +181,7 @@ def test_download_missing_surfaces_as_envelope(client, svc):
     svc.open.side_effect = UploadError(404, "file_missing", "gone")
     resp = client.get(f"/api/uploads/{uuid4()}/content")
     assert resp.status_code == 404
-    assert resp.json()["detail"]["code"] == "file_missing"
+    assert resp.json()["type"] == "/api/problems/file-missing"
 
 
 # * DELETE /uploads/{id}
@@ -200,7 +202,7 @@ def test_delete_not_found_surfaces_as_envelope(client, svc):
     svc.delete.side_effect = UploadError(404, "not_found", "gone")
     resp = client.delete(f"/api/uploads/{uuid4()}")
     assert resp.status_code == 404
-    assert resp.json()["detail"]["code"] == "not_found"
+    assert resp.json()["type"] == "/api/problems/not-found"
 
 
 # * DB gate
