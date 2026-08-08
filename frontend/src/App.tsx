@@ -4,7 +4,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import RootLayout from "./components/layout/root-layout";
 import type { ReactElement } from "react";
-import { ApiError } from "@/lib/api-client";
+import { ApiError } from "@/lib/http";
 import { AuthGate } from "@/components/auth/auth-gate";
 import { AdminRoute } from "@/components/auth/admin-route";
 

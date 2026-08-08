@@ -5,7 +5,7 @@ import { SettingsPanel } from "@/components/settings/settings-panel";
 import type { CapabilityEnvelope } from "@/types/settings";
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 
-vi.mock("@/lib/api-client", () => ({ apiClient: { get: mocks.get, patch: vi.fn(), post: vi.fn() }, ApiError: Error }));
+vi.mock("@/lib/http", () => ({ apiClient: { get: mocks.get, patch: vi.fn(), post: vi.fn() }, ApiError: Error }));
 
 const SETTINGS = {
 	default_llm_provider: "anthropic",

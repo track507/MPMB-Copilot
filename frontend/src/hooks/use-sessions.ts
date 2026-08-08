@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/http";
 import type { Session, SessionCreate, SessionDetail, SessionListResponse, SessionUpdate } from "@/types/session";
 
 const SESSIONS_KEY = ["sessions"] as const;

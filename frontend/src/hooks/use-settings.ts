@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/http";
 import type { Settings, SettingsUpdate, IndexStatus, IndexTriggerResponse, TaskStatus, HealthResponse, CapabilityEnvelope } from "@/types/settings";
 
 const SETTINGS_KEY = ["settings"] as const;
