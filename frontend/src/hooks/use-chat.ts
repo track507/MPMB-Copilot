@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { streamChat } from "@/lib/http";
 import { useChatStore } from "@/stores/chat-store";
 import type { ChatRequest, ChatStreamChunk } from "@/types/chat";
 import type { SessionDetail } from "@/types/session";
@@ -111,70 +112,32 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 				...overrides,
 			};
 
-			const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
-
 			void (async (): Promise<void> => {
 				try {
-					const response = await fetch(`${baseUrl}/api/chat/stream`, {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(body),
-						signal: controller.signal,
-					});
-
-					if (!response.ok) {
-						throw new Error(`Chat request failed: ${String(response.status)}`);
-					}
-
-					const reader = response.body?.getReader();
-					if (reader === undefined) {
-						throw new Error("No response body");
-					}
-
-					const decoder = new TextDecoder();
-					let buffer = "";
-
-					for (;;) {
-						const { done, value } = await reader.read();
-						if (done) break;
-
-						buffer += decoder.decode(value, { stream: true });
-
-						// Parse SSE events from buffer
-						const lines = buffer.split("\n");
-						buffer = lines.pop() ?? "";
-
-						for (const line of lines) {
-							if (line.startsWith("data: ")) {
-								const data = line.slice(6).trim();
-								if (data === "[DONE]") continue;
-
-								try {
-									const chunk = JSON.parse(data) as ChatStreamChunk;
-									if (chunk.done) {
-										useChatStore.getState().completeStream(chunk.metadata ?? null);
-										const newSessionId = chunk.metadata?.session_id;
-										// First message in a new conversation: the backend just created the session, so adopt its id into the route (/chat/:id)
-										if (sessionId === null && newSessionId !== undefined && newSessionId !== "") {
-											// ? Prime the detail cache before navigating
-											// ? The route change remounts ChatWindow (key flips new -> id), whose unmount resets the store
-											// ? without this the streamed reply would flash empty until the refetch lands
-											primeSessionDetail(queryClient, newSessionId, message, chunk.metadata);
-											void navigate(`/chat/${newSessionId}`, { replace: true });
-										}
-									} else if (chunk.event === "tool_start" && chunk.tool) {
-										useChatStore.getState().onToolStart(chunk.tool);
-									} else if (chunk.event === "tool_end" && chunk.tool) {
-										useChatStore.getState().onToolEnd(chunk.tool);
-									} else if (chunk.chunk) {
-										useChatStore.getState().appendStreamChunk(chunk.chunk);
-									}
-								} catch {
-									// Skip malformed chunks
+					await streamChat(
+						body,
+						(chunk) => {
+							if (chunk.done) {
+								useChatStore.getState().completeStream(chunk.metadata ?? null);
+								const newSessionId = chunk.metadata?.session_id;
+								// First message in a new conversation: the backend just created the session, so adopt its id into the route (/chat/:id)
+								if (sessionId === null && newSessionId !== undefined && newSessionId !== "") {
+									// ? Prime the detail cache before navigating
+									// ? The route change remounts ChatWindow (key flips new -> id), whose unmount resets the store
+									// ? without this the streamed reply would flash empty until the refetch lands
+									primeSessionDetail(queryClient, newSessionId, message, chunk.metadata);
+									void navigate(`/chat/${newSessionId}`, { replace: true });
 								}
+							} else if (chunk.event === "tool_start" && chunk.tool) {
+								useChatStore.getState().onToolStart(chunk.tool);
+							} else if (chunk.event === "tool_end" && chunk.tool) {
+								useChatStore.getState().onToolEnd(chunk.tool);
+							} else if (chunk.chunk) {
+								useChatStore.getState().appendStreamChunk(chunk.chunk);
 							}
-						}
-					}
+						},
+						controller.signal
+					);
 
 					// Refresh session data after complete response
 					await queryClient.invalidateQueries({ queryKey: ["sessions"] });
