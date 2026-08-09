@@ -11,6 +11,7 @@ export interface ChatRequest {
 	readonly max_tokens?: number | undefined;
 	readonly include_source?: boolean | undefined;
 	readonly edition?: string | undefined;
+	readonly attached_file_ids?: readonly string[];
 }
 
 export interface ChatResponse {

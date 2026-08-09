@@ -1,14 +1,17 @@
-import { Bot, TriangleAlert, User, Zap } from "lucide-react";
+import { Bot, FileText, TriangleAlert, User, Zap } from "lucide-react";
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./code-block";
 import { MessageActions } from "./message-actions";
 import { SourceCitation } from "./source-citation";
+import { uploadContentUrl } from "@/lib/uploads";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 import type { ChatToolsMetadata, SourceReference } from "@/types/chat";
 import type { MessageFeedback } from "@/types/session";
+import type { FileOut } from "@/types/uploads";
 
 interface MessageBubbleProps {
 	readonly role: "user" | "assistant" | "system";
@@ -21,11 +24,12 @@ interface MessageBubbleProps {
 	readonly messageId?: string | undefined;
 	readonly sessionId?: string | undefined;
 	readonly feedback?: MessageFeedback | null | undefined;
+	readonly attachments?: readonly FileOut[] | undefined;
 }
 
 type CodeProps = ComponentPropsWithoutRef<"code">;
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
 	role,
 	content,
 	sources,
@@ -36,6 +40,7 @@ export function MessageBubble({
 	messageId,
 	sessionId,
 	feedback,
+	attachments,
 }: MessageBubbleProps): ReactElement {
 	const isUser = role === "user";
 
@@ -50,6 +55,25 @@ export function MessageBubble({
 			</div>
 
 			<div className={cn("min-w-0 max-w-[85%] space-y-2", isUser && "text-right")}>
+				{attachments !== undefined && attachments.length > 0 && (
+					<div className={cn("flex flex-wrap gap-1.5", isUser && "justify-end")}>
+						{attachments.map((f) => (
+							<a
+								key={f.id}
+								href={uploadContentUrl(f.id)}
+								download={f.filename}
+								className={cn(
+									"inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+									f.missing ? "border-destructive text-destructive" : "border-border text-muted-foreground hover:text-foreground"
+								)}>
+								<FileText className="size-3" />
+								<span className="max-w-40 truncate">{f.filename}</span>
+								{f.missing && <span>(missing on disk)</span>}
+								{f.filename.toLowerCase().endsWith(".pdf") && <span>(not yet readable)</span>}
+							</a>
+						))}
+					</div>
+				)}
 				<div
 					className={cn(
 						"inline-block max-w-full overflow-hidden rounded-lg px-4 py-2.5 text-sm leading-relaxed",
@@ -150,4 +174,4 @@ export function MessageBubble({
 			</div>
 		</div>
 	);
-}
+});
