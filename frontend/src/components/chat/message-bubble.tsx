@@ -146,7 +146,7 @@ export const MessageBubble = memo(function MessageBubble({
 
 				{!isUser && cacheReadTokens !== undefined && cacheReadTokens > 0 && (
 					<div
-						className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+						className="flex w-fit items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] text-muted-foreground"
 						title={`${cacheReadTokens.toLocaleString()} input tokens read from cache`}>
 						<Zap className="size-3" />
 						cached
