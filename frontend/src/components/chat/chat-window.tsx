@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Paperclip, Send, Square } from "lucide-react";
 import { apiClient, uploadFile } from "@/lib/http";
 import { useUploadStore, UPLOAD_EXTENSIONS } from "@/stores/upload-store";
@@ -46,7 +45,6 @@ export function ChatWindow(): ReactElement {
 
 	const { data: session } = useSession(sessionId);
 	const { data: sessionFiles } = useSessionFiles(sessionId);
-	const queryClient = useQueryClient();
 
 	const handleError = useCallback((error: Error) => {
 		toast.error(error.message);
@@ -194,11 +192,7 @@ export function ChatWindow(): ReactElement {
 			...(attachedIds.length > 0 && { attached_file_ids: attachedIds }),
 		});
 		useUploadStore.getState().clearStaged();
-		// * Refetch session uploads so the just-linked files render as chips on the sent message
-		if (targetSessionId !== null && attachedIds.length > 0) {
-			void queryClient.invalidateQueries({ queryKey: ["uploads", "session", targetSessionId] });
-		}
-	}, [input, isStreaming, sessionId, sendMessage, queryClient]);
+	}, [input, isStreaming, sessionId, sendMessage]);
 
 	const handleSubmit: SubmitEventHandler<HTMLFormElement> = useCallback(
 		(e) => {

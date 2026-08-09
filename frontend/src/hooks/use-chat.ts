@@ -141,6 +141,10 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 
 					// Refresh session data after complete response
 					await queryClient.invalidateQueries({ queryKey: ["sessions"] });
+					// ! Attachments link to the user message mid-turn; refetch uploads now the server caught up so chips appear on same-session sends
+					if (body.attached_file_ids !== undefined && body.attached_file_ids.length > 0) {
+						await queryClient.invalidateQueries({ queryKey: ["uploads"] });
+					}
 
 					// Server has caught up - clear optimistic UI but keep metadata for footer
 					useChatStore.getState().clearOptimistic();
