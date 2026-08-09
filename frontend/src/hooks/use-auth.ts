@@ -1,16 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/http";
 import type { AuthState, AuthUser, LoginRequest, SetupRequest } from "@/types/auth";
+import { queryOptions } from "@tanstack/react-query";
 
 export const AUTH_STATE_KEY = ["auth-state"] as const;
 
+export const authStateQueryOptions = queryOptions({
+	queryKey: AUTH_STATE_KEY,
+	queryFn: async () => apiClient.get<AuthState>("/api/auth/state"),
+	staleTime: 60_000,
+	retry: false,
+});
+
 export function useAuthState(): ReturnType<typeof useQuery<AuthState>> {
-	return useQuery({
-		queryKey: AUTH_STATE_KEY,
-		queryFn: async () => apiClient.get<AuthState>("/api/auth/state"),
-		staleTime: 60_000,
-		retry: false,
-	});
+	return useQuery(authStateQueryOptions);
 }
 
 export function useLogin(): ReturnType<typeof useMutation<AuthUser, Error, LoginRequest>> {

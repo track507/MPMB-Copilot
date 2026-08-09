@@ -13,7 +13,7 @@ const { sendMessage, cancelStream, uploadFile, createSession } = vi.hoisted(() =
 	createSession: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({ useParams: () => ({ sessionId: undefined }) }));
+vi.mock("@tanstack/react-router", () => ({ useParams: () => ({}) }));
 vi.mock("@/hooks/use-sessions", () => ({ useSession: () => ({ data: undefined }) }));
 vi.mock("@/hooks/use-chat", () => ({ useChat: () => ({ sendMessage, cancelStream }) }));
 vi.mock("@/hooks/use-smooth-text", () => ({ useSmoothText: (text: string) => text }));

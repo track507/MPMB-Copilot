@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { streamChat } from "@/lib/http";
 import { useChatStore } from "@/stores/chat-store";
@@ -126,7 +126,7 @@ export function useChat({ sessionId, onError }: UseChatOptions): UseChatReturn {
 									// ? The route change remounts ChatWindow (key flips new -> id), whose unmount resets the store
 									// ? without this the streamed reply would flash empty until the refetch lands
 									primeSessionDetail(queryClient, newSessionId, message, chunk.metadata);
-									void navigate(`/chat/${newSessionId}`, { replace: true });
+									void navigate({ to: "/chat/$sessionId", params: { sessionId: newSessionId }, replace: true });
 								}
 							} else if (chunk.event === "tool_start" && chunk.tool) {
 								useChatStore.getState().onToolStart(chunk.tool);

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { NavLink, useNavigate, useParams } from "react-router";
-import { Check, Library, MessageSquarePlus, Pencil, Settings, Trash2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Check, Library, MessageSquarePlus, Pencil, Settings, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSessions, useDeleteSession, useUpdateSession } from "@/hooks/use-sessions";
@@ -8,9 +8,18 @@ import type { Session } from "@/types/session";
 import type { ReactElement } from "react";
 import { useIsAdmin } from "@/hooks/use-auth";
 
+/**
+ * * Footer link styling
+ *
+ * Base classes apply, they're swapped out by TanStack link automatically
+ */
+const FOOTER_LINK = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors";
+const FOOTER_ACTIVE = { className: "bg-sidebar-accent text-sidebar-accent-foreground" };
+const FOOTER_INACTIVE = { className: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground" };
+
 export function SidebarNav(): ReactElement {
 	const navigate = useNavigate();
-	const { sessionId: activeSessionId } = useParams();
+	const { sessionId: activeSessionId } = useParams({ strict: false });
 
 	const { data: sessionList } = useSessions();
 	const deleteSession = useDeleteSession();
@@ -20,7 +29,7 @@ export function SidebarNav(): ReactElement {
 	// * New Chat just opens a blank window
 	// The session is created by the backend on the first message (see use-chat), avoiding empty throwaway sessions
 	const handleNewChat = useCallback(() => {
-		void navigate("/");
+		void navigate({ to: "/" });
 	}, [navigate]);
 
 	const handleDelete = useCallback(
@@ -30,7 +39,7 @@ export function SidebarNav(): ReactElement {
 			deleteSession.mutate(sessionId, {
 				onSuccess: () => {
 					if (activeSessionId === sessionId) {
-						void navigate("/");
+						void navigate({ to: "/" });
 					}
 				},
 				onError: () => {
@@ -71,33 +80,19 @@ export function SidebarNav(): ReactElement {
 
 			{/* Footer links */}
 			<div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-3">
-				<NavLink
-					to="/library"
-					className={({ isActive }) =>
-						cn(
-							"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-							isActive
-								? "bg-sidebar-accent text-sidebar-accent-foreground"
-								: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-						)
-					}>
+				<Link to="/account" className={FOOTER_LINK} activeProps={FOOTER_ACTIVE} inactiveProps={FOOTER_INACTIVE}>
+					<User className="size-4" />
+					Account
+				</Link>
+				<Link to="/library" className={FOOTER_LINK} activeProps={FOOTER_ACTIVE} inactiveProps={FOOTER_INACTIVE}>
 					<Library className="size-4" />
 					Library
-				</NavLink>
+				</Link>
 				{isAdmin && (
-					<NavLink
-						to="/settings"
-						className={({ isActive }) =>
-							cn(
-								"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-								isActive
-									? "bg-sidebar-accent text-sidebar-accent-foreground"
-									: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
-							)
-						}>
+					<Link to="/admin" className={FOOTER_LINK} activeProps={FOOTER_ACTIVE} inactiveProps={FOOTER_INACTIVE}>
 						<Settings className="size-4" />
-						Settings
-					</NavLink>
+						Admin
+					</Link>
 				)}
 			</div>
 		</aside>
@@ -185,9 +180,9 @@ function SessionRow({ session, isActive, onDelete }: SessionRowProps): ReactElem
 
 	return (
 		<div className={rowClass}>
-			<NavLink to={`/chat/${session.id}`} className="min-w-0 flex-1 truncate px-3 py-2">
+			<Link to="/chat/$sessionId" params={{ sessionId: session.id }} className="min-w-0 flex-1 truncate px-3 py-2">
 				{session.title}
-			</NavLink>
+			</Link>
 			<div className="flex shrink-0 items-center gap-1 pr-2 opacity-0 transition-opacity group-hover:opacity-100">
 				<button type="button" onClick={startEditing} title="Rename">
 					<Pencil className="size-3.5 text-muted-foreground hover:text-foreground" />

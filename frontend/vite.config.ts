@@ -28,7 +28,7 @@ export default defineConfig({
 		rollupOptions: {
 			output: {
 				manualChunks(id) {
-					if (["react", "react-dom", "react-router"].some((pkg) => id.includes(`/node_modules/${pkg}/`))) return "react";
+					if (["react", "react-dom", "@tanstack/react-router"].some((pkg) => id.includes(`/node_modules/${pkg}/`))) return "react";
 					if (id.includes("/node_modules/@tanstack/")) return "tanstack";
 					if (["react-hook-form", "@hookform/resolvers", "zod"].some((pkg) => id.includes(`/node_modules/${pkg}/`))) return "form";
 				},

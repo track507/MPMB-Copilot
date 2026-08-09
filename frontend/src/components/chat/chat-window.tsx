@@ -6,7 +6,7 @@ import { useUploadStore, UPLOAD_EXTENSIONS } from "@/stores/upload-store";
 import { AttachmentChips } from "./attachment-chips";
 import type { FileOut } from "@/types/uploads";
 import { toast } from "sonner";
-import { useParams } from "react-router";
+import { useParams } from "@tanstack/react-router";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/hooks/use-sessions";
 import { useSessionFiles } from "@/lib/uploads";
@@ -32,7 +32,7 @@ const MAX_MESSAGE_LENGTH = 50_000;
 const COUNTER_REVEAL_AT = Math.floor(MAX_MESSAGE_LENGTH * 0.9);
 
 export function ChatWindow(): ReactElement {
-	const { sessionId: sessionIdParam } = useParams();
+	const { sessionId: sessionIdParam } = useParams({ strict: false });
 	const sessionId = sessionIdParam ?? null;
 
 	const [input, setInput] = useState("");

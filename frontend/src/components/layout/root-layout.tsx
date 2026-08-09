@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { Outlet } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { SidebarNav } from "./sidebar-nav";
 import { TopBar } from "./top-bar";

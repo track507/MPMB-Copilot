@@ -49,6 +49,16 @@ export default defineConfig(
 			"@typescript-eslint/prefer-nullish-coalescing": "error",
 			"@typescript-eslint/prefer-optional-chain": "error",
 			"@typescript-eslint/no-unnecessary-condition": "error",
+			// TanStack Router control-flow: redirect() throws a Redirect (a Response subtype), not an Error
+			"@typescript-eslint/only-throw-error": [
+				"error",
+				{
+					allow: [
+						{ from: "package", package: "@tanstack/router-core", name: "Redirect" },
+						{ from: "package", package: "@tanstack/router-core", name: "NotFoundError" },
+					],
+				},
+			],
 			"@typescript-eslint/switch-exhaustiveness-check": "error",
 			"@typescript-eslint/prefer-readonly": "error",
 			"@typescript-eslint/no-unsafe-argument": "error",
@@ -114,6 +124,16 @@ export default defineConfig(
 			"@typescript-eslint/prefer-nullish-coalescing": "error",
 			"@typescript-eslint/prefer-optional-chain": "error",
 			"@typescript-eslint/no-unnecessary-condition": "error",
+			// TanStack Router control-flow: redirect() throws a Redirect (a Response subtype), not an Error
+			"@typescript-eslint/only-throw-error": [
+				"error",
+				{
+					allow: [
+						{ from: "package", package: "@tanstack/router-core", name: "Redirect" },
+						{ from: "package", package: "@tanstack/router-core", name: "NotFoundError" },
+					],
+				},
+			],
 			"@typescript-eslint/switch-exhaustiveness-check": "error",
 			"@typescript-eslint/prefer-readonly": "error",
 			"@typescript-eslint/no-unsafe-argument": "error",

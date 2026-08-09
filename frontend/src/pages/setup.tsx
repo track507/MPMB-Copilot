@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAuthState, useSetup } from "@/hooks/use-auth";
@@ -40,7 +40,7 @@ export default function SetupPage(): ReactElement {
 			{ username: data.username, password: data.password, setup_token: data.setup_token ?? undefined },
 			{
 				onSuccess: () => {
-					void navigate("/");
+					void navigate({ to: "/" });
 				},
 				onError: (e) => {
 					toast.error(e.message);

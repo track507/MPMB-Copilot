@@ -1,6 +1,6 @@
 import { Circle, LogOut, Moon, Sun } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useIndexStatus } from "@/hooks/use-settings";
 import { useSession } from "@/hooks/use-sessions";
 import { cn } from "@/lib/utils";
@@ -9,7 +9,7 @@ import { useLogout } from "@/hooks/use-auth";
 
 export function TopBar(): ReactElement {
 	const { data: indexStatus } = useIndexStatus();
-	const { sessionId } = useParams();
+	const { sessionId } = useParams({ strict: false });
 	const { data: session } = useSession(sessionId ?? null);
 	const title = session?.title ?? "MPMB Copilot";
 	const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
@@ -68,7 +68,7 @@ export function TopBar(): ReactElement {
 					onClick={() => {
 						logout.mutate(undefined, {
 							onSettled: () => {
-								void navigate("/login");
+								void navigate({ to: "/login" });
 							},
 						});
 					}}
