@@ -13,6 +13,7 @@ const SettingsPage = lazy(async () => import("./pages/settings"));
 const NotFoundPage = lazy(async () => import("./pages/not-found"));
 const LoginPage = lazy(async () => import("./pages/login"));
 const SetupPage = lazy(async () => import("./pages/setup"));
+const LibraryPage = lazy(async () => import("./pages/library"));
 
 const queryClient = new QueryClient({
 	queryCache: new QueryCache({
@@ -80,6 +81,14 @@ export default function App(): ReactElement {
 							element={
 								<Suspense fallback={<PageLoader />}>
 									<HomePage />
+								</Suspense>
+							}
+						/>
+						<Route
+							path="library"
+							element={
+								<Suspense fallback={<PageLoader />}>
+									<LibraryPage />
 								</Suspense>
 							}
 						/>

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router";
-import { Check, MessageSquarePlus, Pencil, Settings, Trash2 } from "lucide-react";
+import { Check, Library, MessageSquarePlus, Pencil, Settings, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useSessions, useDeleteSession, useUpdateSession } from "@/hooks/use-sessions";
@@ -17,8 +17,8 @@ export function SidebarNav(): ReactElement {
 
 	const { isAdmin } = useIsAdmin();
 
-	// ? New Chat just opens a blank window
-	// ? The session is created by the backend on the first message (see use-chat), avoiding empty throwaway sessions
+	// * New Chat just opens a blank window
+	// The session is created by the backend on the first message (see use-chat), avoiding empty throwaway sessions
 	const handleNewChat = useCallback(() => {
 		void navigate("/");
 	}, [navigate]);
@@ -69,9 +69,22 @@ export function SidebarNav(): ReactElement {
 				))}
 			</nav>
 
-			{/* Settings link (admin only) */}
-			{isAdmin && (
-				<div className="shrink-0 border-t border-sidebar-border p-3">
+			{/* Footer links */}
+			<div className="shrink-0 space-y-0.5 border-t border-sidebar-border p-3">
+				<NavLink
+					to="/library"
+					className={({ isActive }) =>
+						cn(
+							"flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+							isActive
+								? "bg-sidebar-accent text-sidebar-accent-foreground"
+								: "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+						)
+					}>
+					<Library className="size-4" />
+					Library
+				</NavLink>
+				{isAdmin && (
 					<NavLink
 						to="/settings"
 						className={({ isActive }) =>
@@ -85,8 +98,8 @@ export function SidebarNav(): ReactElement {
 						<Settings className="size-4" />
 						Settings
 					</NavLink>
-				</div>
-			)}
+				)}
+			</div>
 		</aside>
 	);
 }
