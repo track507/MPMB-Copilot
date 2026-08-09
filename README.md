@@ -139,7 +139,7 @@ flowchart LR
 - **Frontend:** React 19 + Vite + TanStack Query + Zustand + shadcn/ui
 - **Backend:** FastAPI + PydanticAI + SQLAlchemy + Alembic migrations
 - **Vector store:** Qdrant (hybrid retrieval: dense embeddings via FastEmbed + BM25 sparse, fused with RRF, then reranked by a local cross-encoder)
-- **Database:** Postgres (sessions, messages, users, auth sessions, API keys, answer feedback)
+- **Database:** Postgres (sessions, messages, users, auth sessions, API keys, answer feedback, uploaded-file registry)
 - **LLM providers:** Anthropic, OpenAI, Ollama (configurable)
 - **Auth:** cookie sessions with argon2id passwords; ops scripts authenticate with scoped, revocable API keys
 - **Local inference:** ONNX Runtime on CPU by default, with an opt-in GPU mode (see [GPU acceleration](#gpu-acceleration))
@@ -213,6 +213,7 @@ pnpm run validate:corpus    # static-validator gate: the engine corpora must lin
 - ✅ **Prompt caching** — Anthropic cache breakpoints on the system prompt, tool definitions, and chat history; later turns read most of their input from cache
 - ✅ **Streaming** — Server-Sent Events stream tokens as they generate, with intermediate tool-use indicators
 - ✅ **Session persistence** — every conversation is saved to Postgres, lives at its own `/chat/<id>` route, and resumes on refresh
+- ✅ **File uploads** — attach files in the composer (`.js/.txt/.md/.yml/.yaml/.json/.pdf`, staged then uploaded on send with a progress bar) so the agent can read your own scripts and bundles; per-message attachment chips, plus a **Library** page for a personal (global) and an admin-managed shared collection. Uploads are scoped, content-hashed, and stored on disk with a Postgres registry as the source of truth (PDFs store today but aren't tool-readable yet — that's the next slice)
 - ✅ **Auto-titled sessions** — the first message generates a 4-6 word title via a cheap per-provider model, and auto-titling steps aside once you rename a chat
 - ✅ **Inline citations** — answers reference the source files (path + line range) the model pulled from via its tools
 - ✅ **Model + effort picker** — Settings dropdowns list each provider's models and their supported reasoning-effort levels, fetched live from the backend (no hardcoded lists), with a Custom escape hatch and free-form Ollama input
@@ -250,11 +251,10 @@ Local inference (the embedding model and the reranker) runs on **CPU by default*
 
 ## What's next
 
-The agentic-retrieval migration, auth + scoped API keys, the eval harness + feedback loop, cross-encoder reranking, GPU acceleration, and the static script validator are all shipped. Ahead:
+The agentic-retrieval migration, auth + scoped API keys, the eval harness + feedback loop, cross-encoder reranking, GPU acceleration, file uploads, and the static script validator are all shipped. Ahead:
 
 - **Write tools** — let the agent produce or apply diff patches for your own homebrew scripts (with explicit approval — never auto-applied)
-- **Upload API** — endpoints for the existing session/global upload roots, so the model can read user-supplied source bundles (e.g. private homebrew collections)
-- **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs
+- **PDF ingestion** — read filled MPMB sheet PDFs (AcroForm fields + embedded scripts) and diff them against a fresh sheet to surface the "works on my sheet, errors on theirs" phantom-state bugs (uploads already accept PDFs; this adds the read path)
 - **Provider add-on store** — browse/configure providers by capability (generation, embedding, rerank, OCR, vector store) with curated one-click installs
 - **Opt-in telemetry** — default-off, fully transparent (the receiver code lives in this repo), anonymized aggregate signals only; raw questions and answers never leave your machine
 - **History compaction** — a reliability safety net near the model's context limit (not a cost optimization, given prompt caching)
