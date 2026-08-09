@@ -4,7 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from alembic import op
 
 revision = "0003"
-down_version = "0002"
+down_revision = "0002"
 branch_labels = None
 depends_on = None
 
