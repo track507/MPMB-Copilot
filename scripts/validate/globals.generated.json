@@ -1776,6 +1776,8 @@
 		"u",
 		"undefined",
 		"undoCreaturePersists",
+		"unicodeFractionToNumber",
+		"unicodes",
 		"updateDescr",
 		"updateTxts",
 		"updateVersionBkmrk",

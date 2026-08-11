@@ -1,12 +1,15 @@
 <#
 .SYNOPSIS
-    Clone or update the MPMB source repositories, then run the chunker.
+    Prepare the local environment and rebuild the chunked MPMB corpus.
 
 .DESCRIPTION
     This script is intentionally small in scope. It only:
-    1. Resolves source paths from environment variables or `.env`
-    2. Clones or updates the required repositories
-    3. Starts `scripts/chunk_mpmb.py`
+    1. Creates `.env` from `.env.example` when it is missing
+    2. Resolves source paths from environment variables or `.env`
+    3. Installs the backend Python dependencies with `uv` (skip with -SkipDependencies)
+    4. Reports the ONNX execution provider and, on a first run, opts into GPU inference
+    5. Clones or updates the required repositories
+    6. Runs the source analyzer, then `scripts/chunk_mpmb.py` inside the backend environment
 
     It does not build Docker, start services, or trigger indexing.
 
@@ -24,12 +27,17 @@
 #>
 
 [CmdletBinding(SupportsShouldProcess = $true)]
-param()
+param(
+	# Reuse the existing backend/.venv instead of running `uv sync` first
+	[switch]$SkipDependencies
+)
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $EnvFile = Join-Path $ProjectRoot ".env"
 $ChunkScript = Join-Path $ProjectRoot "scripts\chunk_mpmb.py"
+$BackendDir = Join-Path $ProjectRoot "backend"
+$UvCacheDir = ".uv-cache"
 
 function Write-Log {
 	param(
@@ -266,6 +274,133 @@ function Enable-GitSafeDirectory {
 	}
 }
 
+function Install-PythonDependencies {
+	$lockFile = Join-Path $BackendDir "uv.lock"
+	$syncArgs = @("--cache-dir", $UvCacheDir, "sync", "--project", $BackendDir)
+
+	if (-not (Test-Path -LiteralPath $lockFile)) {
+		Write-Log "No backend/uv.lock found; resolving dependencies and writing one." -Level WARNING
+		if ($script:PSCmdlet.ShouldProcess($BackendDir, "Lock and install backend dependencies")) {
+			Invoke-ExternalCommand -FilePath "uv" -Arguments $syncArgs
+		}
+		return
+	}
+
+	# `--locked` installs exactly what uv.lock pins and fails if pyproject.toml has drifted from it, so a routine setup run can never silently re-resolve to different versions
+	if ($script:PSCmdlet.ShouldProcess($BackendDir, "Install backend dependencies from uv.lock")) {
+		try {
+			Invoke-ExternalCommand -FilePath "uv" -Arguments ($syncArgs + @("--locked"))
+			return
+		}
+		catch {
+			Write-Log "backend/uv.lock does not match backend/pyproject.toml; re-locking." -Level WARNING
+		}
+
+		Invoke-ExternalCommand -FilePath "uv" -Arguments $syncArgs
+		Write-Log "backend/uv.lock was updated - commit it so everyone installs the same versions." -Level WARNING
+	}
+}
+
+function Initialize-EnvFile {
+	if (Test-Path -LiteralPath $EnvFile) {
+		return
+	}
+
+	$examplePath = Join-Path $ProjectRoot ".env.example"
+	if (-not (Test-Path -LiteralPath $examplePath)) {
+		Write-Log "No .env and no .env.example to seed it from; docker compose needs a .env." -Level WARNING
+		return
+	}
+
+	Write-Log "No .env found; creating one from .env.example." -Level INFO
+	if (-not $script:PSCmdlet.ShouldProcess($EnvFile, "Create .env from .env.example")) {
+		return
+	}
+
+	# * Point the service addresses at the host: compose sets its own POSTGRES_HOST/QDRANT_HOST for the container, so one .env serves both the containerized backend and a backend run from backend/.venv
+	$lines = Get-Content -LiteralPath $examplePath |
+	ForEach-Object {
+		$_ -replace '^(POSTGRES_HOST=)postgres(?=\s|$)', '${1}127.0.0.1' `
+			-replace '^(POSTGRES_PORT=)5432(?=\s|$)', '${1}5433' `
+			-replace '^(QDRANT_HOST=)qdrant(?=\s|$)', '${1}127.0.0.1'
+	}
+
+	Set-Content -LiteralPath $EnvFile -Value $lines -Encoding utf8
+	Write-Log "Created $EnvFile - add your ANTHROPIC_API_KEY before starting the app." -Level WARNING
+}
+
+function Get-GpuProviderLabel {
+	<#
+		Human label of the GPU execution provider onnxruntime exposes in the backend venv,
+		or $null when only CPU is available. Asks app.core.onnx_device so the provider
+		preference order lives in exactly one place
+	#>
+	$probe = "from app.core.onnx_device import detect_gpu_provider; d = detect_gpu_provider(); print(d[1] if d else '')"
+
+	$previousErrorActionPreference = $ErrorActionPreference
+	$ErrorActionPreference = "Continue"
+	$output = & uv --cache-dir $UvCacheDir run --no-sync --project $BackendDir python -c $probe 2>&1
+	$exitCode = $LASTEXITCODE
+	$ErrorActionPreference = $previousErrorActionPreference
+
+	if ($exitCode -ne 0 -or $null -eq $output) {
+		return $null
+	}
+
+	$label = @($output | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ }) | Select-Object -Last 1
+	if ([string]::IsNullOrWhiteSpace($label)) {
+		return $null
+	}
+
+	return $label
+}
+
+function Initialize-InferenceDevice {
+	param([string]$SettingsPath)
+
+	$label = Get-GpuProviderLabel
+	if (-not $label) {
+		Write-Log "No GPU execution provider found; embedding and reranking will run on CPU." -Level WARNING
+		Write-Host "  To add one: pnpm run gpu:install" -ForegroundColor DarkGray
+		return
+	}
+
+	Write-Log "GPU execution provider available: $label" -Level SUCCESS
+
+	$settings = $null
+	if (Test-Path -LiteralPath $SettingsPath) {
+		try {
+			$settings = Get-Content -Raw -LiteralPath $SettingsPath | ConvertFrom-Json
+		}
+		catch {
+			Write-Log "Could not parse $SettingsPath; leaving it untouched." -Level WARNING
+			return
+		}
+	}
+
+	# ! Never overwrite a deliberate choice: only an absent key gets the detected default
+	$current = if ($settings) { $settings.PSObject.Properties["inference_device"] } else { $null }
+	if ($current) {
+		if ($current.Value -eq "gpu") {
+			Write-Log "inference_device is already 'gpu'." -Level INFO
+		}
+		else {
+			Write-Log "inference_device is '$($current.Value)'; leaving it as is. Switch it in Settings -> Compute device to use $label." -Level WARNING
+		}
+		return
+	}
+
+	if (-not $settings) {
+		$settings = [pscustomobject]@{}
+	}
+	$settings | Add-Member -NotePropertyName "inference_device" -NotePropertyValue "gpu"
+
+	if ($script:PSCmdlet.ShouldProcess($SettingsPath, "Set inference_device to gpu")) {
+		($settings | ConvertTo-Json -Depth 10) + "`n" | Set-Content -LiteralPath $SettingsPath -Encoding utf8 -NoNewline
+		Write-Log "Set inference_device to 'gpu' in $SettingsPath" -Level SUCCESS
+	}
+}
+
 function Sync-GitRepository {
 	param(
 		[string]$Name,
@@ -432,19 +567,22 @@ if (-not (Test-CommandExists "git")) {
 	exit 1
 }
 
-$pythonCommand = $null
-$pythonPrefixArgs = @()
-if (Test-CommandExists "python") {
-	$pythonCommand = "python"
-}
-elseif (Test-CommandExists "py") {
-	$pythonCommand = "py"
-	$pythonPrefixArgs = @("-3")
-}
-else {
-	Write-Log "Python is required to run scripts/chunk_mpmb.py." -Level ERROR
+if (-not (Test-CommandExists "uv")) {
+	Write-Log "uv is required but was not found in PATH." -Level ERROR
+	Write-Host "  Install it, then re-run this script:" -ForegroundColor DarkGray
+	Write-Host "    https://docs.astral.sh/uv/getting-started/installation/" -ForegroundColor DarkGray
+	Write-Host "    winget install --id=astral-sh.uv -e" -ForegroundColor DarkGray
 	exit 1
 }
+
+# The chunker reads the analyzer report, and the analyzer is a pnpm workspace package
+if (-not (Test-CommandExists "pnpm")) {
+	Write-Log "pnpm is required but was not found in PATH." -Level ERROR
+	Write-Host "  Install it, then re-run this script: https://pnpm.io/installation" -ForegroundColor DarkGray
+	exit 1
+}
+
+Initialize-EnvFile
 
 $dotEnvValues = Get-DotEnvValues -Path $EnvFile
 
@@ -472,6 +610,17 @@ Ensure-Directory -Path $chunkedOutputDir
 Ensure-Directory -Path (Join-Path $dataDir "index_cache")
 Ensure-Directory -Path (Join-Path $dataDir "uploads")
 
+if ($SkipDependencies) {
+	Write-Log "Skipping the backend dependency install (-SkipDependencies)." -Level WARNING
+}
+else {
+	Write-Log "Installing backend Python dependencies with uv..." -Level INFO
+	Install-PythonDependencies
+	Write-Log "Backend environment ready at $(Join-Path $BackendDir '.venv')" -Level SUCCESS
+}
+
+Initialize-InferenceDevice -SettingsPath (Join-Path $dataDir "settings.json")
+
 Sync-GitRepository `
 	-Name "MPMB main repo (2014)" `
 	-RepositoryUrl $mpmbRepoUrl `
@@ -491,9 +640,19 @@ Sync-GitRepository `
 	-TargetDirectory $importsSourceDir `
 	-Branch ""
 
+Write-Log "Running the source analyzer..." -Level INFO
+if ($script:PSCmdlet.ShouldProcess($ProjectRoot, "Run the source analyzer")) {
+	# ! The chunker hard-fails without scripts/analyze/reports/mpmb-analysis.json, and the report has to be rebuilt from the source trees that were just updated
+	Invoke-ExternalCommand -FilePath "pnpm" -Arguments @("run", "analyze")
+}
+
 Write-Log "Starting chunker..." -Level INFO
 if ($script:PSCmdlet.ShouldProcess($ChunkScript, "Run the MPMB chunker")) {
-	Invoke-ExternalCommand -FilePath $pythonCommand -Arguments ($pythonPrefixArgs + @($ChunkScript))
+	Invoke-ExternalCommand -FilePath "uv" -Arguments @(
+		"--cache-dir", $UvCacheDir,
+		"run", "--no-sync", "--project", $BackendDir,
+		"python", $ChunkScript
+	)
 }
 
 Write-Log "Setup complete." -Level SUCCESS

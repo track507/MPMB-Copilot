@@ -48,15 +48,34 @@ class EmbeddingService:
         raise ValueError(f"Unknown embedding backend: {backend}")
 
     def _ensure_provider(self) -> EmbeddingProvider:
+        from app.core.onnx_device import effective_device
         from app.settings import settings
 
-        # ? Reload when the embedding selection changes so a settings switch takes effect
-        selection = (settings.embedding_provider, settings.embedding_model, settings.inference_device)
+        # * Reload when the embedding selection changes so a settings switch (or a GPU fallback) takes effect
+        selection = (settings.embedding_provider, settings.embedding_model, effective_device())
         if self.provider is None or self._selection != selection:
             self.provider = self._load_provider()
             self._selection = selection
-            logger.info(f"Embedding backend loaded: {type(self.provider).__name__} ({selection[1]})")
+            logger.info(
+                f"Embedding backend loaded: {type(self.provider).__name__} ({selection[1]}, device={selection[2]})"
+            )
         return self.provider
+
+    def _embed(self, payload: List[str]) -> List[List[float]]:
+        """
+        Embed a batch, demoting the whole process to CPU if the GPU faults
+
+        A DirectML/CUDA device hang (Windows TDR resets a GPU whose dispatch outran the watchdog) would otherwise fail a long re-index outright; retrying on CPU costs time, not the run
+        """
+        from app.core.onnx_device import force_cpu_fallback, is_device_failure
+
+        try:
+            return self._ensure_provider().embed_texts(payload)
+        except Exception as e:
+            if not (is_device_failure(e) and force_cpu_fallback(str(e))):
+                raise
+            # _ensure_provider reloads on CPU because effective_device() now reports "cpu"
+            return self._ensure_provider().embed_texts(payload)
 
     def _prefixes(self) -> tuple[str, str]:
         # (query_prefix, doc_prefix) for the current model; empty for non-prefix models
@@ -68,17 +87,17 @@ class EmbeddingService:
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         # Raw passthrough (no prefixes); kept for internal callers
-        return self._ensure_provider().embed_texts(texts)
+        return self._embed(texts)
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         _, doc_prefix = self._prefixes()
         payload = [doc_prefix + t for t in texts] if doc_prefix else texts
-        return self._ensure_provider().embed_texts(payload)
+        return self._embed(payload)
 
     def embed_query(self, text: str) -> List[float]:
         query_prefix, _ = self._prefixes()
         payload = query_prefix + text if query_prefix else text
-        return self._ensure_provider().embed_texts([payload])[0]
+        return self._embed([payload])[0]
 
     def identity(self) -> dict:
         """

@@ -32,6 +32,15 @@ logger = get_logger(__name__)
 # * Batch size for embedding generation + upsert
 EMBED_BATCH_SIZE = 128
 
+# ! Smaller batches on GPU: one dispatch has to finish inside the OS watchdog (Windows resets a GPU whose work outruns TdrDelay, ~2s by default) and a reset kills the whole re-index
+GPU_EMBED_BATCH_SIZE = 32
+
+
+def _embed_batch_size() -> int:
+    from app.core.onnx_device import effective_device
+
+    return GPU_EMBED_BATCH_SIZE if effective_device() == "gpu" else EMBED_BATCH_SIZE
+
 
 class IndexingService:
     """Indexes code chunks into the vector store.
@@ -125,8 +134,11 @@ class IndexingService:
         texts = [chunk["content"] for chunk in chunks]
         all_embeddings = []
 
-        for batch_start in range(0, len(texts), EMBED_BATCH_SIZE):
-            batch_end = min(batch_start + EMBED_BATCH_SIZE, len(texts))
+        # Re-read per file: a mid-run GPU fallback shrinks nothing, but a CPU run should keep the larger batch
+        batch_size = _embed_batch_size()
+
+        for batch_start in range(0, len(texts), batch_size):
+            batch_end = min(batch_start + batch_size, len(texts))
             batch_texts = texts[batch_start:batch_end]
 
             batch_embeddings = embedding_service.embed_documents(batch_texts)

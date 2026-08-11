@@ -79,7 +79,8 @@ pnpm install
 cp .env.example .env
 # edit .env, set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 
-# 3. One-shot setup: clones MPMB sources, chunks them, starts Postgres+Qdrant, indexes
+# 3. One-shot setup: installs Python deps, clones MPMB sources, analyzes + chunks them,
+#    starts Postgres+Qdrant, then indexes (on your GPU when one is available)
 pnpm run setup:all
 
 # 4. Run the dev servers (frontend + backend)
@@ -156,7 +157,7 @@ MPMB-Copilot/
 ├── docker-compose.yml        # postgres + qdrant + backend
 ├── docs/                     # policy docs
 ├── scripts/
-│   ├── setup.ps1             # clone/pull MPMB source repos, run chunker
+│   ├── setup.ps1             # bootstrap .env + uv env, pull MPMB source repos, analyze + chunk
 │   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
 │   ├── analyze/              # AST source analyzer (feeds the chunker + prompt catalog)
 │   ├── validate/             # ES5/AcroJS static validator (lints scripts without executing)
@@ -164,7 +165,7 @@ MPMB-Copilot/
 │   ├── mint-key.mjs          # mint a scoped service API key for the ops scripts
 │   ├── service-key.mjs       # shared SERVICE_API_KEY lookup for the scripts
 │   ├── check-port.mjs        # pre-flight check before uvicorn
-│   └── wait-and-index.mjs    # used by setup:all — poll backend then index
+│   └── wait-and-index.mjs    # used by setup:all — start/await a backend, then index
 ├── package.json              # all dev commands
 └── README.md                 # you are here
 ```
@@ -173,16 +174,18 @@ MPMB-Copilot/
 
 ```bash
 # First-time setup
-pnpm run setup              # clone/update MPMB source repos + chunk
-pnpm run setup:docker       # build & start postgres + qdrant + backend containers
-pnpm run setup:index        # wait for backend health then index Qdrant
+pnpm run setup              # .env + Python deps (uv) + clone/update MPMB source repos + analyze + chunk
+pnpm run setup:services     # start postgres + qdrant containers
+pnpm run setup:index        # index Qdrant (starts a backend from backend/.venv if none is running)
 pnpm run setup:all          # all three above, in order
+pnpm run setup:docker       # optional: build & start the full stack incl. the backend container
 
 # Day-to-day
 pnpm run dev                # frontend + backend in parallel (recommended)
+pnpm run dev:full           # same, but starts postgres + qdrant first
 pnpm run dev:backend        # backend only (FastAPI on :8000)
 pnpm run dev:frontend       # frontend only (Vite on :5173)
-pnpm run docker:up          # start postgres + qdrant
+pnpm run docker:up          # start the full compose stack
 pnpm run docker:down        # stop containers
 
 # Refreshing content
@@ -242,12 +245,16 @@ Local inference (the embedding model and the reranker) runs on **CPU by default*
 
 | Platform | What it takes |
 |---|---|
-| **Windows** (AMD, NVIDIA, or Intel — any DX12 GPU) | Nothing — the DirectML runtime ships by default. Just enable the toggle. |
+| **Windows** (AMD, NVIDIA, or Intel — any DX12 GPU) | Nothing — the DirectML runtime ships by default. Just enable the toggle. On a laptop GPU with little VRAM, see the fault note below. |
 | **Linux + NVIDIA** | `pnpm run gpu:install`, restart the backend, enable the toggle (it will read "GPU (CUDA)"). |
 | **Docker + NVIDIA** | Install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), add `gpus: all` to the backend service in `docker-compose.yml`, and run `pnpm run gpu:install` inside the container (advanced; CPU is the supported default in Docker). |
 | **AMD on Linux / macOS** | Not supported yet — the toggle shows "GPU support not installed" and everything runs on CPU. |
 
-**Caveat (Linux):** a plain `uv sync` in `backend/` restores the CPU runtime — re-run `pnpm run gpu:install` afterward. A future add-on installer will make this a one-click install from the settings screen.
+**When the GPU faults.** Windows resets a GPU whose dispatch outruns the TDR watchdog (~2s by default), and a laptop GPU under memory pressure can have its device suspended outright — onnxruntime surfaces these as `887A0006` ("the GPU will not respond to more commands") or `887A0005` ("device instance has been suspended"). Two things keep that from costing you a re-index: embedding runs in 32-chunk batches on GPU (128 on CPU) so a single dispatch stays short, and the first device fault latches embedding *and* reranking onto CPU for the rest of the process — the run finishes slower instead of failing. Restart the backend to try the GPU again. If faults are routine on an NVIDIA card, DirectML (a DX12 path) is not the strongest fit; the CUDA execution provider via `pnpm run gpu:install` is faster and steadier, at the cost of needing the CUDA 12 runtime on your machine.
+
+**Indexing runs where the backend runs.** `setup:index` indexes through a backend started from `backend/.venv` on the host, so a full re-index uses your GPU. The backend *container* is CPU-only (no DirectML, and no GPU passthrough unless you set up nvidia-container-toolkit), which is why `setup:all` starts only postgres + qdrant in Docker. `pnpm run setup` reports the execution provider it detects and, on a first run, writes `inference_device: "gpu"` into `data/settings.json` — an existing value is never overwritten.
+
+**Caveat (Linux):** a plain `uv sync` in `backend/` — including the one `pnpm run setup` runs — restores the CPU runtime; re-run `pnpm run gpu:install` afterward. A future add-on installer will make this a one-click install from the settings screen.
 
 ## What's next
 
