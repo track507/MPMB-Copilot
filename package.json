@@ -9,7 +9,7 @@
 	},
 	"scripts": {
 		"start": "pnpm run dev",
-		"setup": "pwsh -File ./scripts/setup.ps1",
+		"setup": "node ./scripts/setup.mjs",
 		"setup:services": "docker compose up -d postgres qdrant",
 		"setup:docker": "docker compose up -d --build",
 		"setup:index": "node ./scripts/wait-and-index.mjs",
@@ -48,6 +48,7 @@
 		"typecheck": "pnpm run typecheck:py && pnpm run typecheck:ts",
 		"typecheck:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev mypy backend/app",
 		"typecheck:ts": "pnpm --filter ./frontend run typecheck",
+		"typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
 		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest backend/ -v",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run test",
 		"check:full": "pnpm run check && pnpm run typecheck",
@@ -78,12 +79,15 @@
 		"@commitlint/config-conventional": "^21.2.0",
 		"@commitlint/types": "^21.2.0",
 		"@eslint/js": "^10.0.1",
+		"@types/node": "^25.9.5",
 		"concurrently": "^10.0.3",
 		"eslint": "^10.7.0",
 		"globals": "^17.7.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^17.0.8",
 		"markdownlint-cli2": "^0.22.1",
-		"prettier": "^3.9.5"
+		"prettier": "^3.9.5",
+		"temporal-spec": "^1.0.1",
+		"typescript": "^6.0.3"
 	}
 }
