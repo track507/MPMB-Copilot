@@ -39,7 +39,7 @@ services:
             - QDRANT__SERVICE__GRPC_PORT=6334
             - QDRANT__LOG_LEVEL=INFO
         healthcheck:
-            test: ["CMD-SHELL", "curl -f http://localhost:6333/ || exit 1"]
+            test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -69,6 +69,8 @@ services:
             - ./scripts/analyze/reports:/app/scripts/analyze/reports:ro
             # Warm model cache from the host - removes the first-search cold start
             - ./data/models:/app/data/models
+            # Persist settings across recreations
+            - ./data/settings.json:/app/data/settings.json
         environment:
             # Application
             - ENVIRONMENT=development
@@ -102,6 +104,9 @@ services:
         depends_on:
             - postgres
             - qdrant
+        extra_hosts:
+            # Docker Desktop resolves to host.docker.internal, linux needs the additional mapping
+            - "host.docker.internal:host-gateway"
         restart: unless-stopped
         networks:
             - mpmb-network
