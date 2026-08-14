@@ -62,11 +62,8 @@ export default function LibraryPage(): ReactElement {
 	};
 
 	return (
-		<div className="mx-auto max-w-2xl px-4 py-8">
-			<h1 className="text-2xl font-bold tracking-tight">Library</h1>
-			<p className="mt-1 text-sm text-muted-foreground">Files the assistant can read across your chats.</p>
-
-			<div className="mt-6 flex gap-1 border-b border-border">
+		<div className="mx-auto w-full max-w-5xl px-4 py-8">
+			<div className="flex gap-1 border-b border-border">
 				{(["global", "shared"] as const).map((t) => (
 					<button
 						key={t}
