@@ -62,7 +62,9 @@ The backend is normally launched via the root `pnpm run dev` (which starts both 
 pnpm run dev:backend
 ```
 
-Runs the port pre-flight check, then `uvicorn app.main:app --reload --reload-dir backend/app --host 0.0.0.0 --port 8000`.
+Runs the port pre-flight check, then `uvicorn app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8000`.
+
+The loopback bind is deliberate: `AUTH_DISABLED` is honored only while the server is bound to loopback, and a non-loopback bind with no admin account demands a one-time setup token (see `docs/AUTH.md`).
 
 **Inside Docker:**
 

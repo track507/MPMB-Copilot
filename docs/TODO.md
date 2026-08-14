@@ -4,8 +4,7 @@
 
 - [x] Clone the main MPMB source repos (2014 + 2024)
 - [x] Clone the Imports repo
-- [x] Pull official Acrobat JavaScript reference docs
-- [x] Chunk the corpus into semantic units for RAG
+- [x] Chunk the corpus into semantic units
 - [x] Produce JSON chunk outputs for later embedding + Qdrant indexing
 
 ## Core product direction

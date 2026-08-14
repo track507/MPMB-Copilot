@@ -62,10 +62,11 @@ You don't need to be a programmer, but you do need to be comfortable installing 
 
 - **An LLM API key.** Anthropic Claude is the default and works best (the system prompt is tuned for it). OpenAI and Ollama also work. You pay the LLM provider directly for tokens — this project doesn't host anything.
 - **Docker Desktop** (Windows/macOS) or Docker Engine (Linux) — for Postgres and the vector database.
-- **Node.js 24+** and **Python 3.13+** — for running the chunker, the backend, and the web UI.
+- **Node.js 24+** — for the setup script, the ops scripts, and the web UI.
 - **`pnpm`** — Node package manager (the repo is a pnpm workspace, pinned via `packageManager`). [Install instructions](https://pnpm.io/installation).
-- **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/).
-- **About 5 GB of disk** for the chunked source files, vector index, and Docker images.
+- **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/). You do **not** need to install Python yourself: the backend targets 3.13+, and `uv` provisions a matching toolchain if your system lacks one.
+- **`git`** — the setup script clones the MPMB source repositories.
+- **About 3.5 GB of disk** for the chunked source files, vector index, Python/Node dependencies, and Docker images — see [Disk footprint](#disk-footprint).
 
 ## Quick start
 
@@ -95,6 +96,30 @@ Open <http://localhost:5173/>. **On first visit you'll be asked to create an adm
 > - **Proper path:** run `setup:all` (the index step will tell you what it needs), create your admin account in the browser, mint a service key with `pnpm run mint-key`, put it in `.env` as `SERVICE_API_KEY`, then `pnpm run index`.
 
 The first time you start the backend it will take ~30 seconds to load the embedding model. After that, responses stream in a few seconds.
+
+## Disk footprint
+
+Measured on a clean install right after `setup:all` plus `setup:docker`, with the corpus indexed (11,329 vectors) and no chats yet.
+
+| Where | Item | Size |
+|---|---|---:|
+| Docker images | `mpmb-copilot-backend` | 804 MB |
+| | `mpmb-copilot-postgres` | 419 MB |
+| | `qdrant/qdrant` | 275 MB |
+| Docker volumes | `mpmb_qdrant_storage` (dense + BM25 + payload indexes) | 517 MB |
+| | `mpmb_postgres_data` (8 MB of it is the database) | 49 MB |
+| Repo | `backend/.venv` | 365 MB |
+| | `node_modules` (root + frontend) | 288 MB |
+| | `.uv-cache` (prunable) | 330 MB |
+| | `data/` (sources, chunks, ONNX model cache) | 296 MB |
+| **Total** | | **~3.35 GB** |
+
+Notes:
+
+- **Skipping the backend container saves 804 MB.** `setup:all` doesn't build it — only `setup:docker` does — so the default path lands nearer **2.5 GB**.
+- `data/models/` (152 MB) holds the ONNX embedding + reranker; it grows if you switch models. The optional `sbert` extra pulls torch and adds **~10 GB**.
+- Docker's build cache is separate and not counted here — `docker builder du` reports it, `docker builder prune` reclaims it.
+- To re-measure: `docker system df -v` (use the per-image rows, not the summary line, which folds build cache into its image total) and `docker builder du`. Docker Desktop labels its sizes "MB" but computes MiB, so its numbers run ~5% below the CLI's for the same bytes.
 
 ## Updating the MPMB sources
 
@@ -157,7 +182,7 @@ MPMB-Copilot/
 ├── docker-compose.yml        # postgres + qdrant + backend
 ├── docs/                     # policy docs
 ├── scripts/
-│   ├── setup.ps1             # bootstrap .env + uv env, pull MPMB source repos, analyze + chunk
+│   ├── setup.mjs             # bootstrap .env + uv env, pull MPMB source repos, analyze + chunk
 │   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
 │   ├── analyze/              # AST source analyzer (feeds the chunker + prompt catalog)
 │   ├── validate/             # ES5/AcroJS static validator (lints scripts without executing)
@@ -269,10 +294,16 @@ The agentic-retrieval migration, auth + scoped API keys, the eval harness + feed
 ## Troubleshooting
 
 **Backend won't start / port 8000 is busy.**
-A previous backend process is still alive. On Windows:
+A previous backend process is still alive — or the backend *container* is holding the port (`docker compose stop backend` frees it). To clear a stray host process:
 
 ```powershell
+# Windows
 Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+```bash
+# macOS / Linux
+lsof -ti:8000 | xargs kill -9
 ```
 
 **Page refresh takes 30+ seconds.**

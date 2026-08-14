@@ -28,7 +28,7 @@ The bundle intentionally excludes:
 - cloned MPMB source repos in `data/mpmb_source`, `data/mpmb_source_2024`, and `data/imports_source`
 - generated chunks, indexes, uploads, logs, and analyzer reports
 
-Users should run `pnpm run setup` or `scripts/setup.ps1` after unpacking to clone/update the external MPMB source repositories.
+Users should run `pnpm run setup` after unpacking. It needs `git`, `uv`, and `pnpm` on `PATH`, and it creates `.env`, installs the backend Python dependencies with `uv sync --locked`, clones/updates the external MPMB source repositories, then runs the analyzer and the chunker.
 
 ## CI/CD Workflows
 
@@ -80,8 +80,9 @@ These were checked against primary GitHub project pages before adding the workfl
 - `actions/setup-python@v6`
 - `actions/upload-artifact@v7`
 - `github/codeql-action/*@v4`
-- `actions/dependency-review-action@v4`
-- `astral-sh/setup-uv@v8.1.0`
+- `actions/dependency-review-action@v5`
+- `astral-sh/setup-uv@v8.2.0`
+- `pnpm/action-setup@v6`
 - `aquasecurity/trivy-action@v0.35.0`
 - `anchore/sbom-action@v0.24.0`
 - `ossf/scorecard-action@v2.4.3`
