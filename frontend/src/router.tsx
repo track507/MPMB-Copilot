@@ -47,8 +47,19 @@ const authLayoutRoute = createRoute({
 
 const indexRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/", component: HomePage, staticData: { title: "New chat", chat: true } });
 const chatRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "chat/$sessionId", component: HomePage, staticData: { chat: true } });
-const libraryRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "library", component: LibraryPage, staticData: { title: "Library" } });
-const accountRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "account", component: AccountPage, staticData: { title: "Account" } });
+// * staticData titles/descriptions render in the top bar; a route without one leaves the bar on the chat title
+const libraryRoute = createRoute({
+	getParentRoute: () => authLayoutRoute,
+	path: "library",
+	component: LibraryPage,
+	staticData: { title: "Library", description: "Files the assistant can read across your chats." },
+});
+const accountRoute = createRoute({
+	getParentRoute: () => authLayoutRoute,
+	path: "account",
+	component: AccountPage,
+	staticData: { title: "Account", description: "Your personal settings." },
+});
 
 // * Admin console: its own layout shell + admin guard; hosts the existing panel intact
 const adminLayoutRoute = createRoute({
@@ -56,9 +67,7 @@ const adminLayoutRoute = createRoute({
 	path: "admin",
 	beforeLoad: async ({ context }) => requireAdmin(context.queryClient),
 	component: AdminLayout,
-	staticData: {
-		title: "Admin",
-	},
+	staticData: { title: "Admin", description: "Instance configuration and operations." },
 });
 const adminSettingsRoute = createRoute({ getParentRoute: () => adminLayoutRoute, path: "/", component: SettingsPage });
 
@@ -82,8 +91,11 @@ declare module "@tanstack/react-router" {
 	interface Register {
 		router: typeof router;
 	}
+
+	// * Per-route header the top bar reads; chat routes flag themselves so the index status shows only there
 	interface StaticDataRouteOption {
 		readonly title?: string;
+		readonly description?: string;
 		readonly chat?: boolean;
 	}
 }

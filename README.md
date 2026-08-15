@@ -62,10 +62,11 @@ You don't need to be a programmer, but you do need to be comfortable installing 
 
 - **An LLM API key.** Anthropic Claude is the default and works best (the system prompt is tuned for it). OpenAI and Ollama also work. You pay the LLM provider directly for tokens — this project doesn't host anything.
 - **Docker Desktop** (Windows/macOS) or Docker Engine (Linux) — for Postgres and the vector database.
-- **Node.js 24+** and **Python 3.13+** — for running the chunker, the backend, and the web UI.
+- **Node.js 24+** — for the setup script, the ops scripts, and the web UI.
 - **`pnpm`** — Node package manager (the repo is a pnpm workspace, pinned via `packageManager`). [Install instructions](https://pnpm.io/installation).
-- **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/).
-- **About 5 GB of disk** for the chunked source files, vector index, and Docker images.
+- **`uv`** — Python package manager. [Install instructions](https://docs.astral.sh/uv/getting-started/installation/). You do **not** need to install Python yourself: the backend targets 3.13+, and `uv` provisions a matching toolchain if your system lacks one.
+- **`git`** — the setup script clones the MPMB source repositories.
+- **About 3.5 GB of disk** for the chunked source files, vector index, Python/Node dependencies, and Docker images — see [Disk footprint](#disk-footprint).
 
 ## Quick start
 
@@ -79,7 +80,8 @@ pnpm install
 cp .env.example .env
 # edit .env, set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 
-# 3. One-shot setup: clones MPMB sources, chunks them, starts Postgres+Qdrant, indexes
+# 3. One-shot setup: installs Python deps, clones MPMB sources, analyzes + chunks them,
+#    starts Postgres+Qdrant, then indexes (on your GPU when one is available)
 pnpm run setup:all
 
 # 4. Run the dev servers (frontend + backend)
@@ -94,6 +96,30 @@ Open <http://localhost:5173/>. **On first visit you'll be asked to create an adm
 > - **Proper path:** run `setup:all` (the index step will tell you what it needs), create your admin account in the browser, mint a service key with `pnpm run mint-key`, put it in `.env` as `SERVICE_API_KEY`, then `pnpm run index`.
 
 The first time you start the backend it will take ~30 seconds to load the embedding model. After that, responses stream in a few seconds.
+
+## Disk footprint
+
+Measured on a clean install right after `setup:all` plus `setup:docker`, with the corpus indexed (11,329 vectors) and no chats yet.
+
+| Where | Item | Size |
+|---|---|---:|
+| Docker images | `mpmb-copilot-backend` | 804 MB |
+| | `mpmb-copilot-postgres` | 419 MB |
+| | `qdrant/qdrant` | 275 MB |
+| Docker volumes | `mpmb_qdrant_storage` (dense + BM25 + payload indexes) | 517 MB |
+| | `mpmb_postgres_data` (8 MB of it is the database) | 49 MB |
+| Repo | `backend/.venv` | 365 MB |
+| | `node_modules` (root + frontend) | 288 MB |
+| | `.uv-cache` (prunable) | 330 MB |
+| | `data/` (sources, chunks, ONNX model cache) | 296 MB |
+| **Total** | | **~3.35 GB** |
+
+Notes:
+
+- **Skipping the backend container saves 804 MB.** `setup:all` doesn't build it — only `setup:docker` does — so the default path lands nearer **2.5 GB**.
+- `data/models/` (152 MB) holds the ONNX embedding + reranker; it grows if you switch models. The optional `sbert` extra pulls torch and adds **~10 GB**.
+- Docker's build cache is separate and not counted here — `docker builder du` reports it, `docker builder prune` reclaims it.
+- To re-measure: `docker system df -v` (use the per-image rows, not the summary line, which folds build cache into its image total) and `docker builder du`. Docker Desktop labels its sizes "MB" but computes MiB, so its numbers run ~5% below the CLI's for the same bytes.
 
 ## Updating the MPMB sources
 
@@ -156,7 +182,7 @@ MPMB-Copilot/
 ├── docker-compose.yml        # postgres + qdrant + backend
 ├── docs/                     # policy docs
 ├── scripts/
-│   ├── setup.ps1             # clone/pull MPMB source repos, run chunker
+│   ├── setup.mjs             # bootstrap .env + uv env, pull MPMB source repos, analyze + chunk
 │   ├── chunk_mpmb.py         # chunk MPMB JS into JSON files for indexing
 │   ├── analyze/              # AST source analyzer (feeds the chunker + prompt catalog)
 │   ├── validate/             # ES5/AcroJS static validator (lints scripts without executing)
@@ -164,7 +190,7 @@ MPMB-Copilot/
 │   ├── mint-key.mjs          # mint a scoped service API key for the ops scripts
 │   ├── service-key.mjs       # shared SERVICE_API_KEY lookup for the scripts
 │   ├── check-port.mjs        # pre-flight check before uvicorn
-│   └── wait-and-index.mjs    # used by setup:all — poll backend then index
+│   └── wait-and-index.mjs    # used by setup:all — start/await a backend, then index
 ├── package.json              # all dev commands
 └── README.md                 # you are here
 ```
@@ -173,16 +199,18 @@ MPMB-Copilot/
 
 ```bash
 # First-time setup
-pnpm run setup              # clone/update MPMB source repos + chunk
-pnpm run setup:docker       # build & start postgres + qdrant + backend containers
-pnpm run setup:index        # wait for backend health then index Qdrant
+pnpm run setup              # .env + Python deps (uv) + clone/update MPMB source repos + analyze + chunk
+pnpm run setup:services     # start postgres + qdrant containers
+pnpm run setup:index        # index Qdrant (starts a backend from backend/.venv if none is running)
 pnpm run setup:all          # all three above, in order
+pnpm run setup:docker       # optional: build & start the full stack incl. the backend container
 
 # Day-to-day
 pnpm run dev                # frontend + backend in parallel (recommended)
+pnpm run dev:full           # same, but starts postgres + qdrant first
 pnpm run dev:backend        # backend only (FastAPI on :8000)
 pnpm run dev:frontend       # frontend only (Vite on :5173)
-pnpm run docker:up          # start postgres + qdrant
+pnpm run docker:up          # start the full compose stack
 pnpm run docker:down        # stop containers
 
 # Refreshing content
@@ -242,12 +270,16 @@ Local inference (the embedding model and the reranker) runs on **CPU by default*
 
 | Platform | What it takes |
 |---|---|
-| **Windows** (AMD, NVIDIA, or Intel — any DX12 GPU) | Nothing — the DirectML runtime ships by default. Just enable the toggle. |
+| **Windows** (AMD, NVIDIA, or Intel — any DX12 GPU) | Nothing — the DirectML runtime ships by default. Just enable the toggle. On a laptop GPU with little VRAM, see the fault note below. |
 | **Linux + NVIDIA** | `pnpm run gpu:install`, restart the backend, enable the toggle (it will read "GPU (CUDA)"). |
 | **Docker + NVIDIA** | Install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html), add `gpus: all` to the backend service in `docker-compose.yml`, and run `pnpm run gpu:install` inside the container (advanced; CPU is the supported default in Docker). |
 | **AMD on Linux / macOS** | Not supported yet — the toggle shows "GPU support not installed" and everything runs on CPU. |
 
-**Caveat (Linux):** a plain `uv sync` in `backend/` restores the CPU runtime — re-run `pnpm run gpu:install` afterward. A future add-on installer will make this a one-click install from the settings screen.
+**When the GPU faults.** Windows resets a GPU whose dispatch outruns the TDR watchdog (~2s by default), and a laptop GPU under memory pressure can have its device suspended outright — onnxruntime surfaces these as `887A0006` ("the GPU will not respond to more commands") or `887A0005` ("device instance has been suspended"). Two things keep that from costing you a re-index: embedding runs in 32-chunk batches on GPU (128 on CPU) so a single dispatch stays short, and the first device fault latches embedding *and* reranking onto CPU for the rest of the process — the run finishes slower instead of failing. Restart the backend to try the GPU again. If faults are routine on an NVIDIA card, DirectML (a DX12 path) is not the strongest fit; the CUDA execution provider via `pnpm run gpu:install` is faster and steadier, at the cost of needing the CUDA 12 runtime on your machine.
+
+**Indexing runs where the backend runs.** `setup:index` indexes through a backend started from `backend/.venv` on the host, so a full re-index uses your GPU. The backend *container* is CPU-only (no DirectML, and no GPU passthrough unless you set up nvidia-container-toolkit), which is why `setup:all` starts only postgres + qdrant in Docker. `pnpm run setup` reports the execution provider it detects and, on a first run, writes `inference_device: "gpu"` into `data/settings.json` — an existing value is never overwritten.
+
+**Caveat (Linux):** a plain `uv sync` in `backend/` — including the one `pnpm run setup` runs — restores the CPU runtime; re-run `pnpm run gpu:install` afterward. A future add-on installer will make this a one-click install from the settings screen.
 
 ## What's next
 
@@ -262,10 +294,16 @@ The agentic-retrieval migration, auth + scoped API keys, the eval harness + feed
 ## Troubleshooting
 
 **Backend won't start / port 8000 is busy.**
-A previous backend process is still alive. On Windows:
+A previous backend process is still alive — or the backend *container* is holding the port (`docker compose stop backend` frees it). To clear a stray host process:
 
 ```powershell
+# Windows
 Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+```bash
+# macOS / Linux
+lsof -ti:8000 | xargs kill -9
 ```
 
 **Page refresh takes 30+ seconds.**

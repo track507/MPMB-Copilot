@@ -287,5 +287,8 @@ export default [
 				...globals.node,
 			},
 		},
+		rules: {
+			"no-restricted-globals": ["error", { name: "Date", message: "Use Temporal (Temporal.Now.instant() for timestamps)" }],
+		},
 	},
 ];

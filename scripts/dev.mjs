@@ -19,7 +19,7 @@ const QDRANT_HOST = "127.0.0.1";
 const QDRANT_PORT = process.env.QDRANT_PORT || "6333";
 
 function log(msg) {
-	const time = new Date().toLocaleTimeString();
+	const time = Temporal.Now.plainDateTimeISO();
 	console.log(`[${time}] ${msg}`);
 }
 

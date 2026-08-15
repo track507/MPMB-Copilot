@@ -175,7 +175,8 @@ jobs:
                   - cloned MPMB source repositories under data/
                   - generated Qdrant/Postgres/runtime data
 
-                  Run scripts/setup.ps1 or pnpm run setup to clone/update the external MPMB sources.
+                  Run pnpm run setup to prepare the environment and clone/update the external MPMB sources.
+                  It requires git, uv, and pnpm on PATH.
                   INFO
 
                   {

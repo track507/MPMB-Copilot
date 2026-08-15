@@ -20,10 +20,12 @@ class RerankService:
     _selection: Optional[tuple[str, str]] = None
 
     def _ensure_model(self) -> object | None:
+        from app.core.onnx_device import effective_device
         from app.settings import settings
 
-        selection = (settings.rerank_provider, settings.rerank_model, settings.inference_device)
-        # ? Cache per selection; a cached None means "known-unavailable", so we don't reload every call
+        # effective_device (not the raw setting) so a GPU that faulted mid-run reloads the reranker on CPU
+        selection = (settings.rerank_provider, settings.rerank_model, effective_device())
+        # Cache per selection; a cached None means "known-unavailable", so we don't reload every call
         if self._selection == selection:
             return self._model
 
@@ -46,7 +48,7 @@ class RerankService:
             if providers is not None:
                 kwargs["providers"] = providers
             self._model = TextCrossEncoder(**kwargs)
-            logger.info(f"Reranker loaded: {settings.rerank_model} (device={settings.inference_device})")
+            logger.info(f"Reranker loaded: {settings.rerank_model} (device={selection[2]})")
         except Exception as e:
             logger.warning(f"Reranker load failed ({e}); reranking disabled")
             self._model = None

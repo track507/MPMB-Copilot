@@ -1,6 +1,13 @@
 # MPMB-Copilot: Complete Project Plan
 
-> **Goal:** A one-command-installable, locally-run RAG chatbot that helps anyone write MPMB automation scripts for D&D 5e (2014 & 2024 editions) using Adobe Acrobat JavaScript (ES5).
+> **HISTORICAL — do not treat as current design.** This is pre-implementation planning
+> from before the agentic-retrieval pivot. It describes a forced retrieve-then-generate
+> "RAG Engine", a `scripts/setup.sh` that was never built, and an npm/port-3000 frontend
+> that does not match the current tree. Retrieval is now a tool the model invokes, not a
+> pipeline stage. For live direction see `docs/superpowers/specs/ROADMAP.md`; for the
+> current architecture see `README.md` and `CLAUDE.md`.
+>
+> **Goal (as originally written):** A one-command-installable, locally-run RAG chatbot that helps anyone write MPMB automation scripts for D&D 5e (2014 & 2024 editions) using Adobe Acrobat JavaScript (ES5).
 
 ---
 
