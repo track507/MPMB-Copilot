@@ -129,7 +129,7 @@ function ensureDir(dir) {
 function initializeEnvFile() {
 	if (existsSync(ENV_FILE)) return;
 
-	if (!existsSync(ENV_FILE)) {
+	if (!existsSync(ENV_EXAMPLE)) {
 		log("No .env and no .env.example found to seed it from; docker compose needs a .env.", "WARNING");
 		return;
 	}
