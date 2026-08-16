@@ -44,6 +44,9 @@ importers:
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
+      temporal-polyfill:
+        specifier: ^0.3.2
+        version: 0.3.2
       temporal-spec:
         specifier: ^1.0.1
         version: 1.0.1

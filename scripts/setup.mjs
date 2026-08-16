@@ -15,6 +15,8 @@
  * Usage: pn run setup [--skip-dependencies] [--dry-run]
  */
 
+// ! Temporal has no Node runtime (V8 ships none through Node 24); install the global polyfill before any use
+import "temporal-polyfill/global";
 import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import path from "path";

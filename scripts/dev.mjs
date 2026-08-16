@@ -11,6 +11,8 @@
  *   pnpm run dev:full            # same, via pnpm script
  */
 
+// ! Temporal has no Node runtime (V8 ships none through Node 24); install the global polyfill before any use
+import "temporal-polyfill/global";
 import { execSync, spawn } from "node:child_process";
 
 const POSTGRES_HOST = "127.0.0.1";
