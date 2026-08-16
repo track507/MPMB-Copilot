@@ -204,7 +204,7 @@ pygments==2.20.0
     #   rich
 pypdf==6.10.2
     # via mpmb-copilot-backend
-pytest==9.0.3
+pytest==9.1.1
     # via
     #   pytest-asyncio
     #   pytest-cov
