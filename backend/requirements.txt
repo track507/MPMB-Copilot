@@ -22,15 +22,21 @@ anyio==4.13.0
     #   openai
     #   starlette
     #   watchfiles
+argon2-cffi==25.1.0
+    # via mpmb-copilot-backend
+argon2-cffi-bindings==25.1.0
+    # via argon2-cffi
 asyncpg==0.31.0
     # via mpmb-copilot-backend
 beautifulsoup4==4.14.3
     # via mpmb-copilot-backend
-certifi==2026.4.22
+certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
     #   requests
+cffi==2.0.0
+    # via argon2-cffi-bindings
 charset-normalizer==3.4.7
     # via requests
 click==8.4.1
@@ -60,7 +66,9 @@ fastembed==0.8.0
 filelock==3.29.0
     # via huggingface-hub
 flatbuffers==25.12.19
-    # via onnxruntime
+    # via
+    #   onnxruntime
+    #   onnxruntime-directml
 fsspec==2026.4.0
     # via huggingface-hub
 genai-prices==0.0.66
@@ -116,15 +124,13 @@ idna==3.18
     #   httpx
     #   httpx2
     #   requests
-importlib-metadata==8.7.1
-    # via opentelemetry-api
 iniconfig==2.3.0
     # via pytest
 jiter==0.14.0
     # via
     #   anthropic
     #   openai
-librt==0.9.0 ; platform_python_implementation != 'PyPy'
+librt==0.15.0 ; platform_python_implementation != 'PyPy'
     # via mypy
 logfire-api==4.32.1
     # via pydantic-graph
@@ -140,6 +146,8 @@ mdurl==0.1.2
     # via markdown-it-py
 mmh3==5.2.1
     # via fastembed
+mpmath==1.3.0 ; sys_platform == 'win32'
+    # via sympy
 mypy==1.20.2
 mypy-extensions==1.1.0
     # via mypy
@@ -147,17 +155,21 @@ numpy==2.4.4
     # via
     #   fastembed
     #   onnxruntime
+    #   onnxruntime-directml
     #   qdrant-client
-onnxruntime==1.25.1
+onnxruntime==1.25.1 ; sys_platform != 'win32'
     # via fastembed
+onnxruntime-directml==1.24.4 ; sys_platform == 'win32'
+    # via mpmb-copilot-backend
 openai==2.33.0
     # via pydantic-ai-slim
-opentelemetry-api==1.41.1
+opentelemetry-api==1.44.0
     # via pydantic-ai-slim
 packaging==26.2
     # via
     #   huggingface-hub
     #   onnxruntime
+    #   onnxruntime-directml
     #   pytest
 pathspec==1.1.1
     # via mypy
@@ -174,11 +186,14 @@ portalocker==3.2.0
 protobuf==7.34.1
     # via
     #   onnxruntime
+    #   onnxruntime-directml
     #   qdrant-client
 psycopg2-binary==2.9.12
     # via mpmb-copilot-backend
 py-rust-stemmers==0.1.5
     # via fastembed
+pycparser==3.0 ; implementation_name != 'PyPy'
+    # via cffi
 pydantic==2.13.3
     # via
     #   anthropic
@@ -227,7 +242,7 @@ pyyaml==6.0.3
     #   uvicorn
 qdrant-client==1.17.1
     # via mpmb-copilot-backend
-regex==2026.4.4
+regex==2026.7.19
     # via tiktoken
 requests==2.33.1
     # via
@@ -252,6 +267,8 @@ starlette==1.0.0
     # via fastapi
 structlog==25.5.0
     # via mpmb-copilot-backend
+sympy==1.14.0 ; sys_platform == 'win32'
+    # via onnxruntime-directml
 tiktoken==0.12.0
     # via
     #   mpmb-copilot-backend
@@ -309,5 +326,3 @@ win32-setctime==1.2.0 ; sys_platform == 'win32'
     # via loguru
 wsproto==1.3.2
     # via httpx-ws
-zipp==3.23.1
-    # via importlib-metadata
