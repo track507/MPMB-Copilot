@@ -211,7 +211,7 @@ pydantic-core==2.46.3
     # via pydantic
 pydantic-graph==1.107.0
     # via pydantic-ai-slim
-pydantic-settings==2.14.0
+pydantic-settings==2.15.0
     # via mpmb-copilot-backend
 pygments==2.20.0
     # via
