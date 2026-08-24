@@ -63,7 +63,7 @@ fastapi==0.136.1
     # via mpmb-copilot-backend
 fastembed==0.8.0
     # via mpmb-copilot-backend
-filelock==3.29.0
+filelock==3.32.3
     # via huggingface-hub
 flatbuffers==25.12.19
     # via
