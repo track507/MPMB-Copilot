@@ -75,7 +75,7 @@ genai-prices==0.0.66
     # via pydantic-ai-slim
 greenlet==3.5.0 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
     # via sqlalchemy
-griffelib==2.0.2
+griffelib==2.2.0
     # via pydantic-ai-slim
 grpcio==1.80.0
     # via qdrant-client
