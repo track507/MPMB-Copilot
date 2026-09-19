@@ -541,3 +541,5 @@ __marimo__/
 # Runtime logs
 /logs/
 /backend/logs/
+# Claude planning docs
+docs/superpowers
