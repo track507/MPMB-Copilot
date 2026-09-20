@@ -45,5 +45,7 @@
 	},
 	"eslint.validate": ["javascript", "typescript", "typescriptreact"],
 	"eslint.workingDirectories": [{ "directory": "frontend", "changeProcessCWD": true }],
-	"eslint.trace.server": "messages"
+	"eslint.trace.server": "messages",
+	"python.languageServer": "None",
+	"ty.diagnosticMode": "workspace"
 }

@@ -1,0 +1,12 @@
+[environment]
+python = "backend/.venv"
+root = ["backend"]
+
+[src]
+include = ["backend/app"]
+
+[rules]
+missing-type-argument = "error"
+unsound-return-statement = "error"
+dynamic-function-decorator-return = "error"
+possibly-unresolved-reference = "warn"

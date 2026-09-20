@@ -75,14 +75,21 @@ pnpm run typecheck:scripts  # tsc over scripts/*.mjs (not in the aggregate typec
 ## Quality gates
 
 `pnpm run check` = lint (js/ts/py/md) + format:check + pytest. It deliberately
-**excludes all typechecking**, and it is the required CI job. `check:full` adds mypy
+**excludes all typechecking**, and it is the required CI job. `check:full` adds ty
 and `tsc` and is a local-only tool.
 
-- **`typecheck:py` is expected red** - existing backend typing debt, tracked as the
-  SQLAlchemy 2.0 `Mapped[]` migration. `docs/RELEASE_PROCESS.md:70` is the tracked
-  record: CI runs `check` as the gate and turns typechecking on only behind
+- **`typecheck:py` is expected red** - it runs **ty** (Astral, Rust) in about a
+  second and reports 293 diagnostics. Two distinct debts sit behind that number: the
+  SQLAlchemy 2.0 `Mapped[]` migration (83 in `model/orm.py`, plus the `services/db`
+  callers that consume those models) and missing generic parameters
+  (`missing-type-argument`, 97). Do not treat either as a regression.
+- **The old 180-error figure understated it.** Until 2026-09-19 this script ran mypy
+  from the repo root, where mypy reports `Config File: Default` - it never found
+  `backend/pyproject.toml`, so `strict = true` was never in effect. Run with its real
+  config, mypy reported 375 errors in 45 files. `docs/RELEASE_PROCESS.md:70` is the
+  tracked record: CI runs `check` as the gate and turns typechecking on only behind
   `vars.ENABLE_TYPECHECK`, which is also `continue-on-error`, so it can never fail a
-  build. Do not treat those errors as regressions.
+  build.
 - **`typecheck:scripts` is in no gate.** It runs `tsc` over `scripts/*.mjs` with
   `checkJs: true`; the older ops scripts have pre-existing errors, so wiring it into
   `typecheck` would turn the gate red. Run it manually.
@@ -106,6 +113,13 @@ and `tsc` and is a local-only tool.
 - **The backend container is CPU-only.** DirectML/CUDA exist only in a host backend from
   `backend/.venv`; `setup:all` runs postgres + qdrant in Docker and indexes through a host
   backend. "GPU support not installed" in Settings usually means a container is holding `:8000`.
+- **Use `127.0.0.1`, not `localhost`, in database URLs.** On Windows `localhost` can resolve to
+  `::1` first and stall ~20s per connection before falling back to IPv4. The db integration suite
+  runs in 5s over `127.0.0.1` and over 7 minutes over `localhost` - it looks like a hang, not a
+  slowdown.
+- **The `tests/services/db` suite needs `TEST_DATABASE_URL`** or it skips silently. Point it at a
+  throwaway database, never `mpmb_copilot`: the conftest truncates `files, messages, sessions` on
+  every test. CI now provides one (`ci.yml`, quality job).
 - **Postgres is on host port 5433** (compose maps `5433:5432`, dodging a native install on
   5432). `.env` needs host-facing values for `pnpm run dev`; compose overrides them for the container.
 - **Indexing is never implicit.** Chunking is offline (`scripts/chunk_mpmb.py`, which requires
@@ -150,6 +164,9 @@ Tailwind v4 CSS-first, shadcn/ui + radix, react-hook-form + zod, TanStack Virtua
   `temporal-polyfill/global` (runtime + types, `frontend/src/main.tsx`) - TypeScript ships no Temporal
   types of its own. **Display local, store and transmit UTC:** `Temporal.Now.instant()` for anything
   persisted or sent; `plainDateTimeISO()` only for console output a human reads, since it carries no zone.
+- **Style: `docs/toolchain/code-style.md`** is the house style - comments, docstrings,
+  the two backend test styles, and the rule that comments never cite uncommitted docs.
+  Read it before writing code or a plan that contains code.
 - Better Comments markers, single-line: `// !` critical, `// *` important, `// ?` context.
 - ASCII only in source.
 - Commits are commitlint-clean: conventional type/scope, sentence-case subject, never `--no-verify`.
