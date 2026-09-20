@@ -12,10 +12,10 @@ Usage:
 """
 
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.logger import get_logger
@@ -23,6 +23,16 @@ from app.model.orm import Message, MessageRetrieval, Session
 from app.services.db.connection import db
 
 logger = get_logger(__name__)
+
+
+def _owned(user_id: str) -> list[ColumnElement[bool]]:
+    """
+    Owner predicate for every session-scoped query
+
+    Admins deliberately do not bypass this: chat history is personal data
+    That differs from uploads, where role == "admin" bypasses (services/uploads/service.py:46)
+    """
+    return [Session.user_id == user_id]
 
 
 class SessionService:
@@ -34,33 +44,34 @@ class SessionService:
         title: str = "New Conversation",
         edition: Optional[str] = None,
         settings: Optional[dict[str, Any]] = None,
-        user_id: Optional[str] = None,
+        *,
+        user_id: str,
     ) -> Session:
-        """Create a new conversation session."""
+        """
+        Create a new conversation session owned by user_id
+        """
         session_settings = settings or {}
         if edition:
             session_settings["edition"] = edition
 
         async with db.session() as s:
-            session = Session(
-                title=title,
-                settings=session_settings,
-                user_id=user_id,
-                meta_data={},
-            )
+            session = Session(title=title, settings=session_settings, user_id=user_id, meta_data={})
             s.add(session)
             await s.flush()
             await s.refresh(session)
-            logger.info(f"Created session {session.id}: {title}")
+            logger.info(f"Created session {session.id} for {user_id}: {title}")
             return session
 
-    async def get_session(self, session_id: UUID) -> Optional[Session]:
-        """Get a session by ID (excludes soft-deleted)."""
+    async def get_session(self, session_id: UUID, *, user_id: str) -> Optional[Session]:
+        """
+        Get a session by ID, scoped to its owner (excludes soft-deleted)
+        """
         async with db.session() as s:
             result = await s.execute(
                 select(Session).where(
                     Session.id == session_id,
                     Session.deleted_at.is_(None),
+                    *_owned(user_id),
                 )
             )
             return result.scalar_one_or_none()
@@ -68,9 +79,13 @@ class SessionService:
     async def get_session_with_messages(
         self,
         session_id: UUID,
+        *,
+        user_id: str,
         message_limit: int = 100,
     ) -> Optional[Session]:
-        """Get a session with its messages eagerly loaded."""
+        """
+        Get a session with its messages eagerly loaded, scoped to its owner
+        """
         async with db.session() as s:
             result = await s.execute(
                 select(Session)
@@ -78,6 +93,7 @@ class SessionService:
                 .where(
                     Session.id == session_id,
                     Session.deleted_at.is_(None),
+                    *_owned(user_id),
                 )
             )
             session = result.scalar_one_or_none()
@@ -87,55 +103,59 @@ class SessionService:
                     session.messages = session.messages[-message_limit:]
             return session
 
-    async def list_sessions(
-        self,
-        user_id: Optional[str] = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Session]:
-        """List active sessions, most recently updated first."""
+    async def list_sessions(self, *, user_id: str, limit: int = 50, offset: int = 0) -> list[Session]:
+        """
+        List a user's active sessions, most recently updated first
+        """
         async with db.session() as s:
             query = (
                 select(Session)
-                .where(Session.deleted_at.is_(None))
+                .where(Session.deleted_at.is_(None), *_owned(user_id))
                 .order_by(Session.updated_at.desc())
                 .limit(limit)
                 .offset(offset)
             )
-            if user_id:
-                query = query.where(Session.user_id == user_id)
-
             result = await s.execute(query)
             return list(result.scalars().all())
 
     async def update_session(
         self,
         session_id: UUID,
+        *,
+        user_id: str,
         **kwargs: Any,
     ) -> Optional[Session]:
-        """Update session fields (title, settings, meta_data)."""
+        """
+        Update session fields (title, settings, meta_data), scoped to its owner
+        """
         allowed = {"title", "settings", "meta_data"}
         updates = {k: v for k, v in kwargs.items() if k in allowed}
 
         if not updates:
-            return await self.get_session(session_id)
+            return await self.get_session(session_id, user_id=user_id)
 
         async with db.session() as s:
             await s.execute(
                 update(Session)
-                .where(Session.id == session_id, Session.deleted_at.is_(None))
+                .where(Session.id == session_id, Session.deleted_at.is_(None), *_owned(user_id))
                 .values(**updates, updated_at=datetime.now(timezone.utc))
             )
-            result = await s.execute(select(Session).where(Session.id == session_id))
+            # ! The re-select needs the predicate too, or a non-owner reads the row back unchanged
+            result = await s.execute(select(Session).where(Session.id == session_id, *_owned(user_id)))
             return result.scalar_one_or_none()
 
-    async def delete_session(self, session_id: UUID) -> bool:
-        """Soft-delete a session."""
+    async def delete_session(self, session_id: UUID, *, user_id: str) -> bool:
+        """
+        Soft-delete a session owned by user_id
+        """
         async with db.session() as s:
-            result = await s.execute(
-                update(Session)
-                .where(Session.id == session_id, Session.deleted_at.is_(None))
-                .values(deleted_at=datetime.now(timezone.utc))
+            result = cast(
+                CursorResult[Any],
+                await s.execute(
+                    update(Session)
+                    .where(Session.id == session_id, Session.deleted_at.is_(None), *_owned(user_id))
+                    .values(deleted_at=datetime.now(timezone.utc))
+                ),
             )
             deleted = result.rowcount > 0
             if deleted:
@@ -198,10 +218,18 @@ class SessionService:
     async def get_messages(
         self,
         session_id: UUID,
+        *,
+        user_id: str,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Message]:
-        """Get messages for a session, ordered by sequence number."""
+        """
+        Get messages for a session the caller owns, ordered by sequence number
+        """
+        # ! Ownership gate first: a foreign session id returns nothing, not another user's messages
+        if await self.get_session(session_id, user_id=user_id) is None:
+            return []
+
         async with db.session() as s:
             result = await s.execute(
                 select(Message)
@@ -213,15 +241,14 @@ class SessionService:
             return list(result.scalars().all())
 
     async def get_conversation_history(
-        self,
-        session_id: UUID,
-        limit: int = 50,
+        self, session_id: UUID, *, user_id: str, limit: int = 50
     ) -> list[dict[str, Any]]:
-        """Get conversation history formatted for the LLM context.
-
-        Returns dicts with 'role' and 'content' keys, suitable for
-        passing directly to the RAG engine.
         """
+        Get conversation history formatted for the LLM context, scoped to its owner
+        """
+        # ! A foreign session id reads as empty, never as someone else's turns
+        if await self.get_session(session_id, user_id=user_id) is None:
+            return []
         messages = await self.get_messages(session_id, limit=limit)
         history = []
         for msg in messages:
@@ -268,12 +295,12 @@ class SessionService:
             return retrievals
 
     # * Stats
-    async def get_session_count(self, user_id: Optional[str] = None) -> int:
-        """Count active (non-deleted) sessions."""
+    async def get_session_count(self, *, user_id: str) -> int:
+        """
+        Count a user's active sessions
+        """
         async with db.session() as s:
-            query = select(func.count(Session.id)).where(Session.deleted_at.is_(None))
-            if user_id:
-                query = query.where(Session.user_id == user_id)
+            query = select(func.count(Session.id)).where(Session.deleted_at.is_(None), *_owned(user_id))
             result = await s.execute(query)
             return result.scalar_one()
 
