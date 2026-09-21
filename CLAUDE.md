@@ -66,7 +66,7 @@ tier (`authoritative` / `official_example` / `community_example`) and edition fi
 pnpm run dev              # frontend + backend (expects postgres + qdrant already up)
 pnpm run dev:full         # same, but starts postgres + qdrant first
 pnpm run setup:all        # setup -> setup:services -> setup:index
-pnpm run check            # lint + format check + tests  <- THE gate
+pnpm run check            # lint + format check + typecheck + tests  <- THE gate
 pnpm run test             # backend pytest
 pnpm run index            # force re-index (backend must be running)
 pnpm run typecheck:scripts  # tsc over scripts/*.mjs (not in the aggregate typecheck yet)
@@ -74,25 +74,26 @@ pnpm run typecheck:scripts  # tsc over scripts/*.mjs (not in the aggregate typec
 
 ## Quality gates
 
-`pnpm run check` = lint (js/ts/py/md) + format:check + pytest. It deliberately
-**excludes all typechecking**, and it is the required CI job. `check:full` adds ty
-and `tsc` and is a local-only tool.
+`pnpm run check` = lint (js/ts/py/md) + format:check + typecheck (ty + `tsc`) +
+pytest, and it is the required CI job. Typechecking joined the gate on 2026-09-20,
+which makes `check:full` (`check && typecheck`) a duplicate - it now runs typecheck
+twice.
 
-- **`typecheck:py` is expected red** - it runs **ty** (Astral, Rust) in about a
-  second and reports 293 diagnostics. Two distinct debts sit behind that number: the
-  SQLAlchemy 2.0 `Mapped[]` migration (83 in `model/orm.py`, plus the `services/db`
-  callers that consume those models) and missing generic parameters
-  (`missing-type-argument`, 97). Do not treat either as a regression.
-- **The old 180-error figure understated it.** Until 2026-09-19 this script ran mypy
-  from the repo root, where mypy reports `Config File: Default` - it never found
-  `backend/pyproject.toml`, so `strict = true` was never in effect. Run with its real
-  config, mypy reported 375 errors in 45 files. `docs/RELEASE_PROCESS.md:70` is the
-  tracked record: CI runs `check` as the gate and turns typechecking on only behind
-  `vars.ENABLE_TYPECHECK`, which is also `continue-on-error`, so it can never fail a
-  build.
-- **`typecheck:scripts` is in no gate.** It runs `tsc` over `scripts/*.mjs` with
-  `checkJs: true`; the older ops scripts have pre-existing errors, so wiring it into
-  `typecheck` would turn the gate red. Run it manually.
+- **`typecheck:py` is green and gating** - it runs **ty** (Astral, Rust) in about a
+  second and reports zero diagnostics. A new one is a regression, not debt. Two
+  debts used to sit behind the old 293: the SQLAlchemy 2.0 `Mapped[]` migration
+  (item 19) and missing generic parameters, both cleared.
+- **The old 180-error figure understated it.** Until 2026-09-19 `typecheck:py` ran
+  mypy from the repo root, where mypy reports `Config File: Default` - it never
+  found `backend/pyproject.toml`, so `strict = true` was never in effect. Run with
+  its real config, mypy reported 375 errors in 45 files. The `vars.ENABLE_TYPECHECK`
+  job in `ci.yml` and the paragraph at `docs/RELEASE_PROCESS.md:70` still describe
+  the old arrangement, where typechecking was opt-in and `continue-on-error`; both
+  are now redundant, since `check` typechecks unconditionally.
+- **`typecheck:scripts` is in no gate, deliberately.** It runs `tsc` over
+  `scripts/*.mjs` with `checkJs: true`; the older ops scripts have pre-existing
+  errors, so wiring it into `typecheck` would now turn the required gate red. Run it
+  manually.
 - **`git push` runs the whole gate.** `.husky/pre-push` is `pnpm run check`, pytest
   included - expect it to be slow. `pre-commit` is lint-staged only; `commit-msg` is
   commitlint (sentence-case subject, header <= 100 chars, scope-enum only warns).

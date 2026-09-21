@@ -543,3 +543,6 @@ __marimo__/
 /backend/logs/
 # Claude planning docs
 docs/superpowers
+
+# CI writes audit JSON here; a local run should not dirty the tree
+security-reports/
