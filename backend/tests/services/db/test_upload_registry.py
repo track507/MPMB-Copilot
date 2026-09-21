@@ -226,7 +226,7 @@ async def test_link_message_ignores_other_session_files(session_id, message_id):
     row = await _upsert(scope="session", session_id=session_id, filename="a.js")
 
     # ! A different session's message must not stamp this session's file.
-    other = await session_service.create_session(title="other")
+    other = await session_service.create_session(title="other", user_id="u1")
     other_message = await session_service.add_message(other.id, "user", {"text": "hi"})
 
     linked = await upload_registry.link_message(message_id=other_message.id, file_ids=[row.id], session_id=other.id)
