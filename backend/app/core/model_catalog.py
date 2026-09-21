@@ -67,7 +67,15 @@ def _openai_effort_levels(model_id: str) -> tuple[str, ...]:
         from openai.types.shared import ReasoningEffort
         from pydantic_ai.profiles.openai import openai_model_profile
 
-        if not getattr(openai_model_profile(model_id), "openai_supports_reasoning", False):
+        # ! pydantic-ai returns a plain dict here now; it used to return an object
+        # ! getattr on a dict reads False without raising, which silently empties the effort dropdown
+        profile = openai_model_profile(model_id)
+        supports = (
+            profile.get("openai_supports_reasoning", False)
+            if isinstance(profile, dict)
+            else getattr(profile, "openai_supports_reasoning", False)
+        )
+        if not supports:
             return ()
         # ? ReasoningEffort is Optional[Literal[...]]; unwrap to the literal's string members
         literal = next((arg for arg in typing.get_args(ReasoningEffort) if typing.get_args(arg)), ReasoningEffort)

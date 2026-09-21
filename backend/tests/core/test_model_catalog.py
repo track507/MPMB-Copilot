@@ -61,9 +61,9 @@ async def test_catalog_carries_effort_levels(monkeypatch):
     assert by_id["claude-opus-4-8"]["effort"] == ["low", "medium", "high", "xhigh", "max"]
     # ! Haiku does not support effort - empty list hides the control
     assert by_id["claude-haiku-4-5"]["effort"] == []
-    # OpenAI uses its own scale: no Anthropic-only 'max', and 'none' is reasoning-off not a tier
+    # ! 'none' is reasoning-off, not a depth tier, so the code strips it from every OpenAI model
+    # ? Only the stable tiers are asserted because the rest of the scale is whatever the SDK literal carries
     for m in catalog["openai"]:
-        assert "max" not in m["effort"]
         assert "none" not in m["effort"]
         assert {"low", "medium", "high"}.issubset(m["effort"])
 
@@ -76,7 +76,7 @@ def test_effort_levels_for_when_cache_cold():
     # OpenAI is profile-driven: reasoning models get the scale, non-reasoning get none
     openai_levels = effort_levels_for("openai", "gpt-5.4")
     assert {"low", "medium", "high"}.issubset(openai_levels)
-    assert "max" not in openai_levels and "none" not in openai_levels
+    assert "none" not in openai_levels
     assert effort_levels_for("openai", "gpt-4o") == ()
     assert effort_levels_for("ollama", "llama3") == ()
 

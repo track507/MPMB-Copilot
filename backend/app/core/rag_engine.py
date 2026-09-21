@@ -276,7 +276,7 @@ class RAGEngine:
         if upload_manifest:
             user_prompt += upload_manifest
 
-        agent: Agent = build_agent(
+        agent: Agent[None, Any] = build_agent(
             instructions=prompt_builder.get_static_instructions(),
             provider=resolved_provider,
             model=model or settings.default_model,
