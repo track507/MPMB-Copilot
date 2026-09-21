@@ -105,10 +105,11 @@ class CodeChunk:
 # Utilities
 
 
-def detect_edition(content: str, file_path: Path, source_config: dict) -> str:
+def detect_edition(content: str, file_path: Path, source_config: dict[str, Any]) -> str:
     """Detect edition from file content and path context."""
     if source_config.get("edition") not in ("auto", None):
-        return source_config["edition"]
+        # ? source_config is JSON, so coerce rather than trust the declared type
+        return str(source_config["edition"])
 
     path_str = str(file_path)
     if "WotC 2024" in path_str:
@@ -126,7 +127,7 @@ def detect_edition(content: str, file_path: Path, source_config: dict) -> str:
     return "unknown"
 
 
-def determine_source_tier(file_path: Path, source_config: dict) -> str:
+def determine_source_tier(file_path: Path, source_config: dict[str, Any]) -> str:
     """Determine the source tier for a file based on its location.
 
     Returns:

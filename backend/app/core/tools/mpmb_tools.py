@@ -15,7 +15,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets.function import FunctionToolset
@@ -56,7 +56,7 @@ class Deps:
     # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
     # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run
-    trace: list[dict] = field(default_factory=list)
+    trace: list[dict[str, Any]] = field(default_factory=list)
 
 
 # * Implementations (testable without PydanticAI)
@@ -72,6 +72,10 @@ def _mpmb_read_impl(
     if resolution.error:
         return resolution.error
     resolved = resolution.resolved_path
+    if resolved is None:
+        # ! Unreachable by construction - resolve_safe_path sets error or resolved_path, never neither
+        # ! Guarded because PathResolution's shape allows both to be None
+        return resolution.error or "[error] path resolution produced no path"
 
     try:
         text = resolved.read_text(encoding="utf-8", errors="replace")
@@ -179,7 +183,7 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
             + ". Rephrase the query, or use mpmb_grep for exact symbols."
         )
 
-    def _chunk_key(chunk: dict) -> str:
+    def _chunk_key(chunk: dict[str, Any]) -> str:
         return f"{chunk.get('source_file', '?')}:{chunk.get('start_line')}-{chunk.get('end_line')}"
 
     all_chunks = [*result.authoritative, *result.examples]
@@ -410,7 +414,7 @@ async def _mpmb_validate_impl(deps: Deps, script: str, edition: Optional[str] = 
 
     result: ValidatorResult = await run(script, resolved)
     # * chunks: [] keeps the retrieval-trace consumers safe on a chunk-less entry
-    entry: dict = {"tool": "mpmb_validate", "edition": resolved, "chunks": []}
+    entry: dict[str, Any] = {"tool": "mpmb_validate", "edition": resolved, "chunks": []}
     if not result.ok:
         entry["error"] = result.error
         deps.trace.append(entry)
@@ -428,7 +432,7 @@ async def _mpmb_validate_impl(deps: Deps, script: str, edition: Optional[str] = 
     if not result.findings:
         return f"0 errors, 0 warnings - script passes ES5/AcroJS checks (edition {resolved})."
 
-    def _fmt(f: dict) -> str:
+    def _fmt(f: dict[str, Any]) -> str:
         return f"  L{f.get('line', 0)}:{f.get('column', 0)} [{f.get('ruleId') or 'unknown'}] {f.get('message', '')}"
 
     sections = [f"{len(errors)} error(s), {len(warnings)} warning(s) (edition {resolved})"]

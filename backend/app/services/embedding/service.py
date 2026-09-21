@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Protocol
+from typing import Any, List, Optional, Protocol
 
 from app.config import config
 from app.logger import get_logger
@@ -16,7 +16,8 @@ class EmbeddingProvider(Protocol):
 @dataclass
 class EmbeddingService:
     provider: Optional[EmbeddingProvider] = None
-    _selection: Optional[tuple[str, str]] = None
+    # ? (provider, model, device) - the device joins the key so a GPU fallback reloads the provider
+    _selection: Optional[tuple[str, str, str]] = None
 
     def _load_provider(self) -> EmbeddingProvider:
         from app.settings import settings
@@ -27,6 +28,9 @@ class EmbeddingService:
         if backend == "openai":
             from app.services.embedding.providers.openai import OpenAIEmbeddingProvider
 
+            # ! Fail here with the cause named, the way llm/providers.py does for generation
+            if not config.openai_api_key:
+                raise ValueError("Embedding provider 'openai' selected but OPENAI_API_KEY is not set")
             return OpenAIEmbeddingProvider(model=model, api_key=config.openai_api_key)
 
         if backend == "ollama":
@@ -99,7 +103,7 @@ class EmbeddingService:
         payload = query_prefix + text if query_prefix else text
         return self._embed([payload])[0]
 
-    def identity(self) -> dict:
+    def identity(self) -> dict[str, Any]:
         """
         Identity of the selected embedding model
 

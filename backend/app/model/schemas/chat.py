@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -70,8 +70,10 @@ class ChatResponse(BaseModel):
 
     response: str = Field(..., description="Assistant's generated response")
     session_id: str = Field(..., description="Session UUID")
-    sources: Optional[list[dict]] = Field(None, description="List of source code references used in generation")
-    metadata: dict = Field(..., description="Generation metadata (model, tokens, timing, retrieval info)")
+    sources: Optional[list[dict[str, Any]]] = Field(
+        None, description="List of source code references used in generation"
+    )
+    metadata: dict[str, Any] = Field(..., description="Generation metadata (model, tokens, timing, retrieval info)")
 
 
 class ChatStreamChunk(BaseModel):
@@ -84,5 +86,7 @@ class ChatStreamChunk(BaseModel):
     chunk: str = Field("", description="Partial response text")
     done: bool = Field(False, description="Whether stream is complete")
     event: Optional[str] = Field(None, description="Stream event type: tool_start | tool_end")
-    tool: Optional[dict] = Field(None, description="Tool call info for tool_start/tool_end events")
-    metadata: Optional[dict] = Field(None, description="Generation metadata (only in final chunk when done=True)")
+    tool: Optional[dict[str, Any]] = Field(None, description="Tool call info for tool_start/tool_end events")
+    metadata: Optional[dict[str, Any]] = Field(
+        None, description="Generation metadata (only in final chunk when done=True)"
+    )

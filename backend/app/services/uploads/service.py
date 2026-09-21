@@ -10,7 +10,7 @@ import hashlib
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, TypedDict
 from uuid import UUID, uuid4
 
 from fastapi import UploadFile
@@ -24,6 +24,26 @@ from app.services.uploads.sanitize import sanitize_filename
 from app.settings import settings
 
 logger = get_logger(__name__)
+
+
+class _RowValues(TypedDict):
+    """
+    Keyword arguments for upload_registry.upsert_file
+
+    Declared so the ** unpack below keeps per-key types
+    A plain dict literal widens every value into one union and the call site loses them
+    """
+
+    scope: str
+    filename: str
+    original_filename: str
+    file_path: str
+    content_type: str
+    file_size: int
+    file_hash: str
+    owner_user_id: str
+    session_id: Optional[UUID]
+
 
 _SCOPES = frozenset({"session", "global", "shared"})
 _CHUNK_BYTES = 1024 * 1024
@@ -51,7 +71,7 @@ class UploadService:
         if scope == "shared" and write:
             raise UploadError(403, "forbidden", "The shared library is admin-managed")
 
-    def _registry_target(self, *, scope: str, user_id: str, session_id: Optional[UUID]) -> dict:
+    def _registry_target(self, *, scope: str, user_id: str, session_id: Optional[UUID]) -> dict[str, Any]:
         """
         Filters identifying one scope target for count/get_by_name/list
         """
@@ -100,7 +120,7 @@ class UploadService:
         final_path = scope_dir / filename
         rel_path = final_path.relative_to(Path(config.upload_dir)).as_posix()
         content_type = upload.content_type or "application/octet-stream"
-        row_values = dict(
+        row_values: _RowValues = dict(
             scope=scope,
             filename=filename,
             original_filename=(upload.filename or filename)[:255],

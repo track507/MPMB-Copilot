@@ -3,7 +3,7 @@
 import asyncio
 import secrets
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,7 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Warm the model catalog cache so the first settings visit is a cache hit, not two provider round trips
     from app.core.model_catalog import get_model_catalog
 
-    def _warmup_done(task: asyncio.Task) -> None:
+    def _warmup_done(task: asyncio.Task[Any]) -> None:
         if not task.cancelled() and task.exception() is not None:
             logger.warning("model_catalog_warmup_failed", error=str(task.exception()))
 

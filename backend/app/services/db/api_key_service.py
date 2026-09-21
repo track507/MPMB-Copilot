@@ -5,10 +5,10 @@ Follows the auth_service idiom (async with db.session()); only token hashes are 
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 
 from app.core import security
 from app.logger import get_logger
@@ -79,8 +79,11 @@ class ApiKeyService:
 
     async def revoke_key(self, key_id: UUID) -> bool:
         async with db.session() as session:
-            result = await session.execute(
-                update(ApiKey).where(ApiKey.id == key_id, ApiKey.revoked_at.is_(None)).values(revoked_at=_utcnow())
+            result = cast(
+                CursorResult[Any],
+                await session.execute(
+                    update(ApiKey).where(ApiKey.id == key_id, ApiKey.revoked_at.is_(None)).values(revoked_at=_utcnow())
+                ),
             )
             return bool(result.rowcount or 0)
 

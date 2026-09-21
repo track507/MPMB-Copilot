@@ -170,7 +170,9 @@ class _CentroidStore:
 
     def get_centroids(self) -> dict[QueryIntent, list[float]]:
         """Return intent centroids, computing them if necessary."""
-        if not self._needs_recompute():
+        # ! Check the cache itself, not only staleness
+        # ! A first call can have a matching mtime, so _needs_recompute is False while _centroids is None
+        if self._centroids is not None and not self._needs_recompute():
             return self._centroids
 
         self._centroids = self._compute_centroids()

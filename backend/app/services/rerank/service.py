@@ -7,7 +7,11 @@ non-fastembed provider falls back to the input order so a rerank problem never b
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    # ? Type-only: keeps the real import deferred to first use, as it is below
+    from fastembed.rerank.cross_encoder import TextCrossEncoder
 
 from app.logger import get_logger
 
@@ -16,10 +20,11 @@ logger = get_logger(__name__)
 
 @dataclass
 class RerankService:
-    _model: object | None = None
-    _selection: Optional[tuple[str, str]] = None
+    _model: Optional["TextCrossEncoder"] = None
+    # ? (provider, model, device) - the device joins the key so a faulted GPU reloads on CPU
+    _selection: Optional[tuple[str, str, str]] = None
 
-    def _ensure_model(self) -> object | None:
+    def _ensure_model(self) -> Optional["TextCrossEncoder"]:
         from app.core.onnx_device import effective_device
         from app.settings import settings
 
@@ -43,7 +48,10 @@ class RerankService:
             from app.config import config
             from app.core.onnx_device import onnx_providers
 
-            kwargs: dict = {"model_name": settings.rerank_model, "cache_dir": str(config.fastembed_cache_path)}
+            kwargs: dict[str, Any] = {
+                "model_name": settings.rerank_model,
+                "cache_dir": str(config.fastembed_cache_path),
+            }
             providers = onnx_providers()
             if providers is not None:
                 kwargs["providers"] = providers
@@ -54,7 +62,7 @@ class RerankService:
             self._model = None
         return self._model
 
-    def rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+    def rerank(self, query: str, candidates: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
         if not candidates:
             return []
         model = self._ensure_model()

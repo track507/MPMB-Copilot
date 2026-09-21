@@ -4,7 +4,7 @@ Per-query manifest of uploaded files
 Rides the user prompt, never the system prefix (keeps cached system prompt)
 """
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from app.services.db import db, upload_registry
@@ -20,7 +20,7 @@ async def build_upload_manifest(*, session_id: Optional[UUID], user_id: str) -> 
         return ""
 
     sections: list[str] = []
-    targets: list[tuple[str, dict]] = [
+    targets: list[tuple[str, dict[str, Any]]] = [
         ("library", {"scope": "global", "owner_user_id": user_id}),
         ("shared", {"scope": "shared"}),
     ]

@@ -5,6 +5,7 @@ Rerankers have no vector-space dimension to match, so entries are simpler than e
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from app.core.catalog_common import Requirement  # * shared catalog logic
 from app.core.catalog_common import status_for as _status_for
@@ -67,7 +68,7 @@ def status_for(entry: RerankModel) -> str:
     return _status_for(entry.requires, _PROVIDER_ENV_KEY.get(entry.provider))
 
 
-def serialize() -> list[dict]:
+def serialize() -> list[dict[str, Any]]:
     return [
         {"provider": e.provider, "id": e.id, "label": e.label, "pinned": e.pinned, "status": status_for(e)}
         for e in CATALOG

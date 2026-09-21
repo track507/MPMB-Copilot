@@ -66,10 +66,10 @@ class TaskManager:
     def __init__(self, max_workers: int = 4):
         self.tasks: Dict[str, TaskInfo] = {}
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.active_tasks: Dict[str, asyncio.Task[Any]] = {}
         logger.info(f"TaskManager initialized with {max_workers} workers")
 
-    async def submit_task(self, name: str, func: Callable, *args, **kwargs) -> str:
+    async def submit_task(self, name: str, func: Callable[..., Any], *args, **kwargs) -> str:
         """Submit a background task for execution
 
         Args:
@@ -100,7 +100,7 @@ class TaskManager:
         logger.info(f"Task submitted: {name} (id: {task_id})")
         return task_id
 
-    async def _run_task(self, task_id: str, func: Callable, *args, **kwargs):
+    async def _run_task(self, task_id: str, func: Callable[..., Any], *args, **kwargs):
         """Internal: Execute task in thread pool"""
         task_info = self.tasks[task_id]
 

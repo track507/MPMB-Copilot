@@ -30,7 +30,7 @@ class CapabilitySpec:
     label: str
     kind: str  # "curated" (installable entries w/ status) | "live_models" (provider-grouped, fetched live)
     entries: Callable[[], Any]  # returns the entries, or a coroutine that resolves to them
-    current: Callable[[], dict]  # the active selection, read from settings/config
+    current: Callable[[], dict[str, Any]]  # the active selection, read from settings/config
 
 
 _REGISTRY: dict[Capability, CapabilitySpec] = {}
@@ -48,7 +48,7 @@ def all_specs() -> list[CapabilitySpec]:
     return list(_REGISTRY.values())
 
 
-def _vector_store_entries() -> list[dict]:
+def _vector_store_entries() -> list[dict[str, Any]]:
     # ? Curated: qdrant is bundled/pinned; others are forward-compat stubs. Switching a store rebuilds the index
     return [
         {"provider": "qdrant", "id": "qdrant", "label": "Qdrant (default)", "pinned": True, "status": "ready"},
@@ -57,7 +57,7 @@ def _vector_store_entries() -> list[dict]:
     ]
 
 
-def _auth_entries() -> list[dict]:
+def _auth_entries() -> list[dict[str, Any]]:
     import importlib.util
 
     # ? Password is the pinned, non-removable method; OIDC becomes one-click once authlib is installable via the store
@@ -74,7 +74,7 @@ def _auth_entries() -> list[dict]:
     ]
 
 
-def _compute_entries() -> list[dict]:
+def _compute_entries() -> list[dict[str, Any]]:
     from app.core import onnx_device
 
     # ? Detection reports the RUNTIME (is a GPU-capable onnxruntime installed); "installable" is the item-13 installer hook

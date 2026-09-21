@@ -66,7 +66,7 @@ class RAGResponse:
     stop_reason: Optional[str] = None
     timing: dict[str, float] = field(default_factory=dict)
     tools: dict[str, Any] = field(default_factory=dict)
-    retrieval: list[dict] = field(default_factory=list)
+    retrieval: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -81,7 +81,7 @@ class RAGStreamEvent:
     event: Optional[str] = None
     tool: Optional[dict[str, Any]] = None
     tools: Optional[dict[str, Any]] = None
-    retrieval: Optional[list[dict]] = None
+    retrieval: Optional[list[dict[str, Any]]] = None
 
 
 # * Hard net for runaway loops; matches pydantic-ai's own default request_limit
@@ -130,7 +130,7 @@ def _build_catalog_hints(qa, settings_ref) -> Optional[str]:
         else:
             object_type_match = match
 
-    matched_symbols: list = []
+    matched_symbols: list[Any] = []
     # We don't have the symbol name in IntentResult today; v1 leaves matched_symbols empty.
     # Future: thread the matched symbol through IntentResult.
 
@@ -155,7 +155,7 @@ class RAGEngine:
     async def generate(
         self,
         query: str,
-        conversation_history: Optional[list[dict]] = None,
+        conversation_history: Optional[list[dict[str, Any]]] = None,
         user_id: str = "default",
         session_id: Optional[str] = None,
         edition: Optional[str] = None,
@@ -239,7 +239,7 @@ class RAGEngine:
     async def stream(
         self,
         query: str,
-        conversation_history: Optional[list[dict]] = None,
+        conversation_history: Optional[list[dict[str, Any]]] = None,
         user_id: str = "default",
         session_id: Optional[str] = None,
         edition: Optional[str] = None,

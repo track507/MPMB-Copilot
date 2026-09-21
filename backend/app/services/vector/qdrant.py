@@ -15,7 +15,7 @@ Collection schema:
                 source_tier, start_line, end_line, chunk_index, metadata.*
 """
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from qdrant_client import QdrantClient
@@ -129,11 +129,12 @@ class QdrantStore:
             )
         return sparse_vectors
 
-    def _resolve_source_tier(self, chunk: dict) -> str:
+    def _resolve_source_tier(self, chunk: dict[str, Any]) -> str:
         """Use the chunk's declared tier, or infer a safe fallback for older JSON."""
         source_tier = chunk.get("source_tier")
         if source_tier:
-            return source_tier
+            # ? Chunk payloads come from JSON on disk, so coerce rather than trust
+            return str(source_tier)
 
         if not self._warned_missing_source_tier:
             logger.warning(
@@ -187,6 +188,19 @@ class QdrantStore:
             self._connected = False
             return False
 
+    @property
+    def _require_client(self) -> QdrantClient:
+        """
+        The client, or a clear error if connect() has not run
+
+        The helpers below run only after connect(), where the client exists
+        This states that invariant rather than assuming it
+        A NoneType AttributeError becomes a message that names the cause
+        """
+        if self.client is None:
+            raise RuntimeError("Qdrant client not connected. Call connect() first.")
+        return self.client
+
     async def _ensure_collection(self):
         """Create the collection if it doesn't exist."""
         from app.settings import settings
@@ -194,11 +208,11 @@ class QdrantStore:
         # ! Refresh so a reindex after an embedding-model change creates the collection with the new dimension
         self.dense_dim = settings.embedding_dim()
         try:
-            self.client.get_collection(self.collection_name)
+            self._require_client.get_collection(self.collection_name)
             logger.info(f"Collection '{self.collection_name}' exists")
         except (UnexpectedResponse, Exception):
             logger.info(f"Creating collection '{self.collection_name}'")
-            self.client.create_collection(
+            self._require_client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config={
                     "dense": VectorParams(
@@ -220,7 +234,7 @@ class QdrantStore:
         """Create payload indexes for fast filtering if they don't exist."""
         for field_name, schema_type in INDEXED_PAYLOAD_FIELDS.items():
             try:
-                self.client.create_payload_index(
+                self._require_client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name=field_name,
                     field_schema=schema_type,
@@ -231,7 +245,7 @@ class QdrantStore:
 
         for field_name in FULLTEXT_PAYLOAD_FIELDS:
             try:
-                self.client.create_payload_index(
+                self._require_client.create_payload_index(
                     collection_name=self.collection_name,
                     field_name=field_name,
                     field_schema=PayloadSchemaType.TEXT,
@@ -246,7 +260,7 @@ class QdrantStore:
 
     # * Embedding-model identity stamp
 
-    def read_identity(self) -> Optional[dict]:
+    def read_identity(self) -> Optional[dict[str, Any]]:
         """Return the embedding stamp stored on the collection, or None if unstamped"""
         if not self.client:
             return None
@@ -263,7 +277,7 @@ class QdrantStore:
         identity = (points[0].payload or {}).get(_IDENTITY_PAYLOAD_KEY)
         return identity if isinstance(identity, dict) else None
 
-    async def write_identity(self, identity: dict) -> None:
+    async def write_identity(self, identity: dict[str, Any]) -> None:
         """
         Stamp the embedding-model identity onto the collection (reserved point)
 
@@ -292,9 +306,10 @@ class QdrantStore:
     def _collection_dense_dim(self) -> Optional[int]:
         """Return the dimension the collection's dense vectors were created with, if readable"""
         try:
-            vectors = self.client.get_collection(self.collection_name).config.params.vectors
+            vectors = self._require_client.get_collection(self.collection_name).config.params.vectors
             dense = vectors["dense"] if isinstance(vectors, dict) else vectors
-            return getattr(dense, "size", None)
+            size = getattr(dense, "size", None)
+            return int(size) if size is not None else None
         except Exception:
             return None
 
@@ -344,7 +359,7 @@ class QdrantStore:
         if stored is None:
             count = 0
             try:
-                count = self.client.get_collection(self.collection_name).points_count or 0
+                count = self._require_client.get_collection(self.collection_name).points_count or 0
             except Exception:
                 pass
             if count == 0:
@@ -411,7 +426,7 @@ class QdrantStore:
 
     async def upsert_chunks(
         self,
-        chunks: list[dict],
+        chunks: list[dict[str, Any]],
         dense_embeddings: list[list[float]],
         batch_size: int = 64,
     ) -> int:
@@ -485,7 +500,7 @@ class QdrantStore:
 
     # * Search
 
-    def _build_qdrant_filter(self, filters: Optional[dict]) -> Optional[Filter]:
+    def _build_qdrant_filter(self, filters: Optional[dict[str, Any]]) -> Optional[Filter]:
         """Convert a simple filter dict into a Qdrant Filter object.
 
         Supports top-level fields and nested metadata fields:
@@ -522,7 +537,7 @@ class QdrantStore:
         # ! Never return the reserved embedding-identity stamp as a search result
         return Filter(must=conditions or None, must_not=[HasIdCondition(has_id=[_IDENTITY_POINT_ID])])
 
-    def _format_results(self, scored_points) -> list[dict]:
+    def _format_results(self, scored_points) -> list[dict[str, Any]]:
         """Convert Qdrant ScoredPoint objects to plain dicts."""
         results = []
         for point in scored_points:
@@ -549,11 +564,11 @@ class QdrantStore:
         self,
         query_text: str,
         query_embedding: list[float],
-        filters: Optional[dict] = None,
+        filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
         dense_limit: int = 20,
         sparse_limit: int = 20,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Hybrid search: dense + BM25 sparse, fused with RRF.
 
         Both dense and sparse sub-queries run in parallel via Qdrant's
@@ -607,9 +622,9 @@ class QdrantStore:
     async def dense_search(
         self,
         query_embedding: list[float],
-        filters: Optional[dict] = None,
+        filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Dense-only vector search (no BM25 component)."""
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
@@ -646,13 +661,13 @@ class QdrantStore:
             logger.error(f"Failed to delete collection: {e}")
             return False
 
-    async def collection_info(self) -> dict:
+    async def collection_info(self) -> dict[str, Any]:
         """Return collection statistics."""
         if not self.client:
             return {"error": "Not connected"}
 
         try:
-            info = self.client.get_collection(self.collection_name)
+            info = self._require_client.get_collection(self.collection_name)
             # ? Don't count the reserved identity stamp as a chunk
             chunk_count = max((info.points_count or 0) - (1 if self._has_identity_point else 0), 0)
             return {

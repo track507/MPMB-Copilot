@@ -35,7 +35,7 @@ router = APIRouter()
 
 
 # * Helpers
-async def _load_history(session_id_str: str | None) -> tuple[UUID | None, list[dict]]:
+async def _load_history(session_id_str: str | None) -> tuple[UUID | None, list[dict[str, Any]]]:
     """Load conversation history from the session store.
 
     Returns (resolved_session_uuid, history_list).
@@ -158,12 +158,12 @@ def _build_metadata(
     session_id: str = "",
     provider: str = "",
     model: str = "",
-    usage: dict | None = None,
-    timing: dict | None = None,
-    tools: dict | None = None,
-    retrieval: list | None = None,
+    usage: dict[str, Any] | None = None,
+    timing: dict[str, Any] | None = None,
+    tools: dict[str, Any] | None = None,
+    retrieval: list[Any] | None = None,
     stop_reason: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Build nested metadata matching the frontend `ChatMetadata` type
 

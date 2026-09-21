@@ -16,6 +16,8 @@ per-turn RAG context are passed via `Agent(instructions=...)` and the
 user-prompt argument, not via message history.
 """
 
+from typing import Any
+
 from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
@@ -29,7 +31,7 @@ from app.logger import get_logger
 logger = get_logger(__name__)
 
 
-def to_pydantic_messages(history: list[dict]) -> list[ModelMessage]:
+def to_pydantic_messages(history: list[dict[str, Any]]) -> list[ModelMessage]:
     """Convert stored conversation history dicts to PydanticAI messages.
 
     Args:

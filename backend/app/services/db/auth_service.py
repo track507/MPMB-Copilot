@@ -6,10 +6,10 @@ Only token hashes are persisted; the raw token exists in the login response cook
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 
 from app.core import security
 from app.logger import get_logger
@@ -58,7 +58,10 @@ class AuthService:
 
     async def claim_orphan_sessions(self, admin_id: str) -> int:
         async with db.session() as session:
-            result = await session.execute(update(Session).where(Session.user_id.is_(None)).values(user_id=admin_id))
+            result = cast(
+                CursorResult[Any],
+                await session.execute(update(Session).where(Session.user_id.is_(None)).values(user_id=admin_id)),
+            )
             return int(result.rowcount or 0)
 
     async def create_session(self, user_id: UUID) -> str:
@@ -93,7 +96,9 @@ class AuthService:
             row = result.first()
             if row is None:
                 return None
-            auth_session, user = row
+            # ? result.first() hands back an untyped Row, so name the column types here
+            auth_session: AuthSession = row[0]
+            user: User = row[1]
             if user.disabled:
                 return None
             if (

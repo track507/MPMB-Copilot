@@ -7,6 +7,7 @@ forward-compatible `requires`/status metadata so the future add-on installer can
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from app.core.catalog_common import Requirement  # * shared catalog logic; Requirement re-exported
 from app.core.catalog_common import status_for as _status_for
@@ -83,7 +84,7 @@ def dimension_for(provider: str, model: str) -> int:
     return entry.dimension if entry is not None else _DEFAULT.dimension
 
 
-def serialize() -> list[dict]:
+def serialize() -> list[dict[str, Any]]:
     return [
         {
             "provider": e.provider,

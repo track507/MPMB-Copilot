@@ -12,7 +12,7 @@ import asyncio
 import json
 import subprocess
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from app.config import config
 from app.logger import get_logger
@@ -25,8 +25,8 @@ _semaphore = asyncio.Semaphore(config.validator_max_concurrency)
 @dataclass
 class ValidatorResult:
     ok: bool
-    findings: list[dict] = field(default_factory=list)
-    counts: dict = field(default_factory=dict)
+    findings: list[dict[str, Any]] = field(default_factory=list)
+    counts: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     error: Optional[str] = None
 

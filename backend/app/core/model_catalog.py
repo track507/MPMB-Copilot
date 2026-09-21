@@ -15,7 +15,9 @@ Ollama is intentionally free-form (empty list) - local model names are arbitrary
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 from app.config import config
 from app.logger import get_logger
@@ -154,7 +156,7 @@ async def _fetch_openai() -> list[ModelOption]:
         return list(OPENAI_CURATED)
 
 
-async def _cached(provider: str, fetch) -> list[ModelOption]:
+async def _cached(provider: str, fetch: Callable[[], Awaitable[list[ModelOption]]]) -> list[ModelOption]:
     now = time.time()
     hit = _cache.get(provider)
     if hit is not None and now - hit[0] < _CACHE_TTL_SEC:
@@ -184,7 +186,7 @@ def effort_levels_for(provider: str, model: str) -> tuple[str, ...]:
     return ()
 
 
-async def get_model_catalog() -> dict[str, list[dict]]:
+async def get_model_catalog() -> dict[str, list[dict[str, Any]]]:
     """
     Return selectable models per provider as `{provider: [{id, label, effort}]}`
 
@@ -202,5 +204,5 @@ async def get_model_catalog() -> dict[str, list[dict]]:
     }
 
 
-def _serialize(option: ModelOption) -> dict:
+def _serialize(option: ModelOption) -> dict[str, Any]:
     return {"id": option.id, "label": option.label, "effort": list(option.effort_levels)}

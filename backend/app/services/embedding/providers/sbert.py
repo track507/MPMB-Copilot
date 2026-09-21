@@ -1,18 +1,20 @@
-from typing import List
+from typing import Any, List, cast
 
 
 class SBERTProvider:
     def __init__(self, model: str):
         self.model_name = model
         self.dimension = 0
-        self._model = None
+        # ? Any because sentence_transformers is an optional extra and may not be importable
+        self._model: Any = None
 
     def _load(self):
         if self._model is not None:
             return
 
         try:
-            from sentence_transformers import SentenceTransformer
+            # ? Optional extra: absent unless installed with uv sync --extra sbert
+            from sentence_transformers import SentenceTransformer  # ty: ignore[unresolved-import]
         except ImportError as e:
             raise ImportError(
                 "sentence-transformers is not installed, but embedding_backend='sbert' was selected. "
@@ -26,4 +28,4 @@ class SBERTProvider:
         self._load()
         # keep output format consistent: List[List[float]]
         embeddings = self._model.encode(texts, convert_to_numpy=True)
-        return embeddings.tolist()
+        return cast(List[List[float]], embeddings.tolist())

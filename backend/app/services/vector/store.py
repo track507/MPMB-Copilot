@@ -16,7 +16,7 @@ Usage:
     results = await store.hybrid_search(query_text, query_embedding, filters)
 """
 
-from typing import Optional, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
 from app.config import config
 from app.logger import get_logger
@@ -43,7 +43,7 @@ class VectorStore(Protocol):
 
     async def upsert_chunks(
         self,
-        chunks: list[dict],
+        chunks: list[dict[str, Any]],
         dense_embeddings: list[list[float]],
     ) -> int:
         """Upload chunks with their dense embeddings to the store.
@@ -66,11 +66,11 @@ class VectorStore(Protocol):
         self,
         query_text: str,
         query_embedding: list[float],
-        filters: Optional[dict] = None,
+        filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
         dense_limit: int = 20,
         sparse_limit: int = 20,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search using both dense vectors and keyword/BM25 matching.
 
         dense_limit/sparse_limit are the per-branch prefetch ceilings before fusion
@@ -100,9 +100,9 @@ class VectorStore(Protocol):
     async def dense_search(
         self,
         query_embedding: list[float],
-        filters: Optional[dict] = None,
+        filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search using only dense vectors (no keyword matching).
 
         Useful as a fallback or for queries that are purely semantic.
@@ -110,7 +110,7 @@ class VectorStore(Protocol):
         """
         ...
 
-    async def write_identity(self, identity: dict) -> None:
+    async def write_identity(self, identity: dict[str, Any]) -> None:
         """Stamp the embedding-model identity (provider/model/dimension) onto the index.
 
         Called after (re)indexing so stored vectors record the model that built them.
@@ -136,7 +136,7 @@ class VectorStore(Protocol):
         """Delete and recreate the collection. Returns True on success."""
         ...
 
-    async def collection_info(self) -> dict:
+    async def collection_info(self) -> dict[str, Any]:
         """Return collection stats (point count, index status, etc.)."""
         ...
 

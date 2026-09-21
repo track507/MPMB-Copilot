@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
@@ -14,12 +14,12 @@ class TaskStatusResponse(BaseModel):
     completed_at: Optional[str]
     progress: float
     progress_message: str
-    result: Optional[dict]
+    result: Optional[dict[str, Any]]
     error: Optional[str]
 
 
 class TaskListResponse(BaseModel):
     """Response model for task listing"""
 
-    tasks: list[dict]
+    tasks: list[dict[str, Any]]
     total: int

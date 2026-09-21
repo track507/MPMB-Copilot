@@ -8,11 +8,11 @@ This module owns the provider switch. Anything that wants an `Agent`
 goes through `core.agent.build_agent`, which calls `build_model` here.
 """
 
-from typing import Tuple
+from typing import Tuple, cast
 
 from pydantic_ai.models import Model
-from pydantic_ai.models.anthropic import AnthropicModel, AnthropicModelSettings
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
+from pydantic_ai.models.anthropic import AnthropicEffort, AnthropicModel, AnthropicModelSettings
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings, ReasoningEffort
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -55,7 +55,8 @@ def build_model(
             anthropic_cache_tool_definitions=settings.anthropic_cache_tool_definitions,
         )
         if effort is not None:
-            model_settings["anthropic_effort"] = effort
+            # ? Already checked against effort_levels_for above, which ty cannot follow
+            model_settings["anthropic_effort"] = cast(AnthropicEffort, effort)
         if settings.enable_extended_thinking:
             # ? Adaptive thinking is the only form newer models accept; budget_tokens is rejected
             model_settings["anthropic_thinking"] = {"type": "adaptive"}
@@ -71,7 +72,8 @@ def build_model(
         )
         openai_settings = OpenAIChatModelSettings(temperature=temperature, max_tokens=max_tokens)
         if effort is not None:
-            openai_settings["openai_reasoning_effort"] = effort
+            # ? Already checked against effort_levels_for above, which ty cannot follow
+            openai_settings["openai_reasoning_effort"] = cast(ReasoningEffort, effort)
         return openai_model, openai_settings
 
     if provider == "ollama":

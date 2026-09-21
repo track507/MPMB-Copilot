@@ -1,9 +1,9 @@
 """Answer-feedback persistence (thumbs up/down + optional note on assistant messages)."""
 
-from typing import Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select
 
 from app.logger import get_logger
 from app.model.orm import Message, MessageFeedback
@@ -38,7 +38,10 @@ class FeedbackService:
         True if a row was removed
         """
         async with db.session() as s:
-            result = await s.execute(delete(MessageFeedback).where(MessageFeedback.message_id == message_id))
+            result = cast(
+                CursorResult[Any],
+                await s.execute(delete(MessageFeedback).where(MessageFeedback.message_id == message_id)),
+            )
             return result.rowcount > 0
 
     async def get_message(self, message_id: UUID) -> Optional[Message]:

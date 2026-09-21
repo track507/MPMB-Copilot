@@ -6,7 +6,7 @@ Import `config` from this module anywhere in the app.
 
 import json
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -235,7 +235,7 @@ class Config(BaseSettings):
         return path
 
     @property
-    def source_configs(self) -> list[dict]:
+    def source_configs(self) -> list[dict[str, Any]]:
         """Build the list of source configurations for chunking/indexing.
 
         Each dict has: key, path, edition, repo, description.

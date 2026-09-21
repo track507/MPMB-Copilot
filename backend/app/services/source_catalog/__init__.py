@@ -10,7 +10,7 @@ import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from app.logger import get_logger
 from app.model.schemas.source_catalog import (
@@ -29,6 +29,9 @@ from app.services.source_catalog.prompt_render import (
 from app.services.source_catalog.staleness import StalenessTTLCache
 
 logger = get_logger(__name__)
+
+# ? One shared empty mapping, so the "no catalog" path allocates nothing and stays typed
+_NO_SYMBOLS: Mapping[str, SymbolEntry] = {}
 
 _DEFAULT_CATALOG_RELATIVE = Path("scripts/analyze/reports/mpmb-analysis.json")
 
@@ -65,7 +68,7 @@ class SourceCatalogService:
         self._catalog_path: Path = Path()
         self._file_mtime: Optional[datetime] = None
         self._generated_at: Optional[str] = None
-        self._repos: dict = {}
+        self._repos: dict[str, Any] = {}
         self._live_repo_commits: dict[str, str] = {}
         self._indexes: Optional[Indexes] = None
         self._registry_block: str = ""
@@ -135,7 +138,7 @@ class SourceCatalogService:
     def symbol_index(self) -> Mapping[str, SymbolEntry]:
         idx = self._indexes
         if idx is None:
-            return {}
+            return _NO_SYMBOLS
         return idx.symbols
 
     def registry_names(self) -> tuple[str, ...]:

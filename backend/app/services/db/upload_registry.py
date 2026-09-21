@@ -6,10 +6,10 @@ Bytes live on disk under config.upload_dir - UploadService owns that side
 Nothing in this module touches the fs
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import CursorResult, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
 from app.logger import get_logger
@@ -19,7 +19,7 @@ from app.services.db.connection import db
 logger = get_logger(__name__)
 
 
-def _scope_filters(scope: str, owner_user_id: Optional[str], session_id: Optional[UUID]) -> list:
+def _scope_filters(scope: str, owner_user_id: Optional[str], session_id: Optional[UUID]) -> list[Any]:
     """WHERE clauses identifying one scope target (a session, a user's library, or shared)."""
     filters = [File.scope == scope]
     if scope == "session":
@@ -46,18 +46,17 @@ class UploadRegistry:
         session_id: Optional[UUID] = None,
     ) -> File:
         # * Conflict target is the partial unique index for the scope
+        # ? Separate arguments, not a ** unpack: ty resolves an unpack to the union of its value types
+        # ? That would check index_where against index_elements' parameter, which fails
         if scope == "session":
-            conflict: dict[str, Any] = {
-                "index_elements": ["session_id", "filename"],
-                "index_where": text("scope = 'session'"),
-            }
+            index_elements = ["session_id", "filename"]
+            index_where = text("scope = 'session'")
         elif scope == "global":
-            conflict = {
-                "index_elements": ["owner_user_id", "filename"],
-                "index_where": text("scope = 'global'"),
-            }
+            index_elements = ["owner_user_id", "filename"]
+            index_where = text("scope = 'global'")
         else:
-            conflict = {"index_elements": ["filename"], "index_where": text("scope = 'shared'")}
+            index_elements = ["filename"]
+            index_where = text("scope = 'shared'")
 
         stmt = (
             insert(File)
@@ -74,7 +73,8 @@ class UploadRegistry:
                 meta_data={},
             )
             .on_conflict_do_update(
-                **conflict,
+                index_elements=index_elements,
+                index_where=index_where,
                 set_={
                     "original_filename": original_filename,
                     "content_type": content_type,
@@ -131,7 +131,7 @@ class UploadRegistry:
 
     async def delete_file(self, file_id: UUID) -> bool:
         async with db.session() as s:
-            result = await s.execute(delete(File).where(File.id == file_id))
+            result = cast(CursorResult[Any], await s.execute(delete(File).where(File.id == file_id)))
             return result.rowcount > 0
 
     async def link_message(self, *, message_id: UUID, file_ids: list[UUID], session_id: UUID) -> int:
@@ -139,10 +139,13 @@ class UploadRegistry:
         if not file_ids:
             return 0
         async with db.session() as s:
-            result = await s.execute(
-                update(File)
-                .where(File.id.in_(file_ids), File.scope == "session", File.session_id == session_id)
-                .values(message_id=message_id)
+            result = cast(
+                CursorResult[Any],
+                await s.execute(
+                    update(File)
+                    .where(File.id.in_(file_ids), File.scope == "session", File.session_id == session_id)
+                    .values(message_id=message_id)
+                ),
             )
             return result.rowcount
 

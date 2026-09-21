@@ -243,7 +243,7 @@ class PromptBuilder:
         placeholders are replaced with deterministic catalog blocks.
         Otherwise placeholders are stripped cleanly.
         """
-        custom = getattr(settings, "system_prompt", None)
+        custom: Optional[str] = getattr(settings, "system_prompt", None)
         base = custom.strip() if custom and custom.strip() else DEFAULT_SYSTEM_PROMPT
 
         inject = getattr(settings, "inject_catalog_context", True)

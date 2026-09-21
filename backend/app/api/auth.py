@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import COOKIE_NAME, Principal, current_principal, resolve_optional_principal
+from app.api.deps import COOKIE_NAME, Principal, current_principal
 from app.config import config
 from app.core import security
 from app.logger import get_logger
@@ -80,10 +80,14 @@ async def auth_state(request: Request) -> dict[str, Any]:
             "state": "setup_required",
             "setup_token_required": getattr(request.app.state, "setup_token", None) is not None,
         }
-    principal = await resolve_optional_principal(request)
-    if principal is not None:
-        user = await auth_service.resolve_session(request.cookies.get(COOKIE_NAME, ""))
-        return {"state": "authenticated", "user": {"username": user.username, "role": user.role}}
+    # ! One lookup, not two: this used to resolve the principal and then re-resolve the session
+    # ! A session expiring between the two calls raised on a None user
+    # ? No cookie or no database means login_required without touching the store
+    raw = request.cookies.get(COOKIE_NAME)
+    if raw and db.is_connected:
+        user = await auth_service.resolve_session(raw)
+        if user is not None:
+            return {"state": "authenticated", "user": {"username": user.username, "role": user.role}}
     return {"state": "login_required"}
 
 

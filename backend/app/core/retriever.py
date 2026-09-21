@@ -31,7 +31,7 @@ Usage:
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from app.core.intent import IntentResult, intent_classifier
 from app.core.query_analysis import QueryAnalysis, analyze_query
@@ -49,16 +49,16 @@ logger = get_logger(__name__)
 class RetrievalResult:
     """Structured retrieval output with tier-grouped chunks."""
 
-    authoritative: list[dict] = field(default_factory=list)
+    authoritative: list[dict[str, Any]] = field(default_factory=list)
     """Syntax templates, engine functions - "what is valid"."""
 
-    examples: list[dict] = field(default_factory=list)
+    examples: list[dict[str, Any]] = field(default_factory=list)
     """Official and community examples - "how people build it"."""
 
-    intent: IntentResult = field(default=None)
+    intent: Optional[IntentResult] = None
     """Detected intent with confidence and blend info."""
 
-    query_analysis: QueryAnalysis = field(default=None)
+    query_analysis: Optional[QueryAnalysis] = None
     """Inferred edition, object type, function name."""
 
     timing_ms: float = 0.0
@@ -72,7 +72,7 @@ class RetrievalResult:
     def is_empty(self) -> bool:
         return self.total_chunks == 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize for API responses and logging."""
         return {
             "authoritative_count": len(self.authoritative),
@@ -196,9 +196,9 @@ class Retriever:
         self,
         query: str,
         query_embedding: list[float],
-        base_filters: dict,
+        base_filters: dict[str, Any],
         budget: dict[str, int],
-    ) -> tuple[list[dict], list[dict]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Two separate searches: one for authoritative, one for examples.
 
         Guarantees both tiers are represented. When reranking is enabled, each tier fetches a wider candidate pool and is reranked down to its budget
@@ -266,9 +266,9 @@ class Retriever:
         self,
         query: str,
         query_embedding: list[float],
-        base_filters: dict,
+        base_filters: dict[str, Any],
         budget: dict[str, int],
-    ) -> tuple[list[dict], list[dict]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """One search, then split results by tier.
 
         When reranking is enabled, fetch a wider pool and rerank each tier split down to its budget
@@ -318,7 +318,7 @@ class Retriever:
         """Embed the query text using the configured embedding service (applies any query prefix)."""
         return embedding_service.embed_query(query)
 
-    def _rerank_tier(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
+    def _rerank_tier(self, query: str, candidates: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
         """Rerank one tier's candidate pool down to its budget, timed for the debug log."""
         if not candidates:
             return candidates
@@ -331,7 +331,7 @@ class Retriever:
         self,
         analysis: QueryAnalysis,
         edition: Optional[str],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build metadata filters from query analysis.
 
         Only includes filters when we have high-confidence signals.
@@ -341,7 +341,7 @@ class Retriever:
         Engine function chunks are now properly windowed so BM25
         lexical matching surfaces them without needing a hard filter.
         """
-        filters: dict = {}
+        filters: dict[str, Any] = {}
 
         if edition:
             filters["edition"] = edition
@@ -377,9 +377,9 @@ class Retriever:
 
     def _deduplicate(
         self,
-        results: list[dict],
-        seen_ids: Optional[set] = None,
-    ) -> list[dict]:
+        results: list[dict[str, Any]],
+        seen_ids: Optional[set[str]] = None,
+    ) -> list[dict[str, Any]]:
         """Remove duplicate chunks by ID, preserving order."""
         seen = seen_ids or set()
         deduped = []

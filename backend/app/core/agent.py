@@ -54,7 +54,7 @@ def build_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     toolset: Optional[AbstractToolset[Any]] = None,
-) -> Agent:
+) -> Agent[None, Any]:
     """Construct an `Agent` for the given provider, optionally with a toolset.
 
     Tool attachment is controlled by the caller; `build_agent` stays
@@ -112,7 +112,7 @@ def _extract_stop_reason_from_messages(messages: list[Any]) -> Optional[str]:
 async def generate(
     instructions: str,
     user_prompt: str,
-    history: Optional[list[dict]] = None,
+    history: Optional[list[dict[str, Any]]] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
     temperature: Optional[float] = None,
@@ -160,7 +160,7 @@ async def generate(
 async def stream(
     instructions: str,
     user_prompt: str,
-    history: Optional[list[dict]] = None,
+    history: Optional[list[dict[str, Any]]] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
     temperature: Optional[float] = None,

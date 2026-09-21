@@ -26,12 +26,13 @@ import os
 import secrets
 import sys
 import time
+from collections.abc import MutableMapping
 from contextlib import asynccontextmanager, contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, cast
 
-import structlog  # type: ignore[import-not-found]
+import structlog
 
 # Context variables (thread/task-safe, works with asyncio)
 _request_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
@@ -74,7 +75,9 @@ def _get_config() -> dict[str, Any]:
 
 
 # Structlog processors
-def _inject_context_vars(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
+def _inject_context_vars(
+    logger: logging.Logger, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Pull correlation IDs from contextvars into every log entry."""
     request_id = _request_id_ctx.get()
     session_id = _session_id_ctx.get()
@@ -90,13 +93,17 @@ def _inject_context_vars(logger: logging.Logger, method_name: str, event_dict: d
     return event_dict
 
 
-def _add_service_info(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
+def _add_service_info(
+    logger: logging.Logger, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Tag every log with the service name for multi-container stacks."""
     event_dict.setdefault("service", "mpmb-copilot-backend")
     return event_dict
 
 
-def _censor_sensitive(logger: logging.Logger, method_name: str, event_dict: dict) -> dict:
+def _censor_sensitive(
+    logger: logging.Logger, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Redact API keys and other secrets from log output."""
     sensitive_keys = {"api_key", "token", "secret", "password", "authorization"}
     for key in list(event_dict.keys()):
@@ -239,7 +246,8 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """
     if not _configured:
         configure_logging()
-    return structlog.get_logger(name)
+    # ? structlog.get_logger is typed Any, and this is the concrete type it hands back
+    return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name))
 
 
 # Context managers
@@ -286,7 +294,7 @@ def pipeline_stage(stage_name: str, **extra: Any):
     log = get_logger("pipeline")
     log.info("stage_start", stage=stage_name, **extra)
     t0 = time.perf_counter()
-    error = None
+    error: Optional[BaseException] = None
     try:
         yield
     except Exception as exc:
@@ -296,7 +304,9 @@ def pipeline_stage(stage_name: str, **extra: Any):
         duration_ms = round((time.perf_counter() - t0) * 1000, 1)
         config = _get_config()
         slow = duration_ms > config["slow_query_threshold_ms"]
-        if error:
+        # ? ty reads `raise` as ending the flow into `finally`, so it thinks error is still None
+        # ? Python runs finally during propagation, and error was bound before the raise
+        if error:  # ty: ignore[redundant-condition]
             log.error(
                 "stage_error",
                 stage=stage_name,
