@@ -1,7 +1,7 @@
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/http";
 
-// Single app-wide client: the router (loaders/guards via ensureQueryData) and the component hooks (useQuery) must share one cache
+// Single app-wide client: the router (loaders/guards via query) and the component hooks (useQuery) must share one cache
 export const queryClient = new QueryClient({
 	queryCache: new QueryCache({
 		onError: (error) => {
