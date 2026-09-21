@@ -5,6 +5,8 @@ import pytest
 
 from app.services import title_generator
 
+OWNER = "11111111-1111-1111-1111-111111111111"
+
 
 def test_sanitize_strips_quotes_and_punctuation():
     assert title_generator._sanitize('"Add a new spell to PHB."') == "Add a new spell to PHB"
@@ -35,7 +37,7 @@ def test_fallback_title_handles_empty():
 
 
 def _patch_get_session(monkeypatch, title: str = "New Conversation"):
-    async def fake_get(session_id):
+    async def fake_get(session_id, *, user_id):
         return SimpleNamespace(title=title)
 
     monkeypatch.setattr(title_generator.session_service, "get_session", fake_get)
@@ -58,10 +60,12 @@ async def test_generate_session_title_uses_llm_response(monkeypatch: pytest.Monk
     _patch_get_session(monkeypatch)
 
     sid = uuid4()
-    await title_generator.generate_session_title(sid, "Show me AbilityScores")
+    await title_generator.generate_session_title(sid, "Show me AbilityScores", OWNER)
 
     assert captured["kwargs"]["user_prompt"] == "Show me AbilityScores"
     assert captured["update"][0] == sid
+    # ! The background task carries the owner, or it renames a session it cannot read
+    assert captured["update"][1]["user_id"] == OWNER
     assert captured["update"][1]["title"] == "AbilityScores Object Lookup"
 
 
@@ -80,7 +84,7 @@ async def test_generate_session_title_uses_cheap_model(monkeypatch: pytest.Monke
     monkeypatch.setattr(title_generator.session_service, "update_session", fake_update)
     _patch_get_session(monkeypatch)
 
-    await title_generator.generate_session_title(uuid4(), "Show me AbilityScores")
+    await title_generator.generate_session_title(uuid4(), "Show me AbilityScores", OWNER)
 
     provider = title_generator.settings.default_llm_provider
     assert captured["kwargs"]["provider"] == provider
@@ -102,7 +106,7 @@ async def test_generate_session_title_skips_when_user_renamed(monkeypatch: pytes
     monkeypatch.setattr(title_generator.session_service, "update_session", fake_update)
     _patch_get_session(monkeypatch, title="My Custom Title")
 
-    await title_generator.generate_session_title(uuid4(), "Show me AbilityScores")
+    await title_generator.generate_session_title(uuid4(), "Show me AbilityScores", OWNER)
     assert captured["updated"] is False
 
 
@@ -121,5 +125,5 @@ async def test_generate_session_title_falls_back_on_llm_error(monkeypatch: pytes
     monkeypatch.setattr(title_generator.session_service, "update_session", fake_update)
     _patch_get_session(monkeypatch)
 
-    await title_generator.generate_session_title(uuid4(), "Find every place that calls processStats()")
+    await title_generator.generate_session_title(uuid4(), "Find every place that calls processStats()", OWNER)
     assert "processStats" in captured["update"]["title"]

@@ -40,7 +40,7 @@ async def session_id(db_session_scope):
     from app.model.orm import Session
 
     async with db.session() as s:
-        row = Session(title="test")
+        row = Session(title="test", user_id="test-owner")
         s.add(row)
         await s.flush()  # assigns row.id (uuid7 default) before commit
         return row.id

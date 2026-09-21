@@ -91,19 +91,30 @@ def test_list_and_count_are_scoped_to_the_caller(as_user, monkeypatch):
     assert seen["count"] == BOB
 
 
+def _miss(seen: dict, name: str, result=None):
+    """
+    Service stub that records the owner it was asked for and reports a miss
+
+    user_id is keyword-only and required, so an endpoint that drops it raises here
+    A stub taking *args, **kwargs would swallow that and pass on the status code alone
+    """
+
+    async def stub(session_id, *, user_id, **_fields):
+        seen[name] = user_id
+        return result
+
+    return stub
+
+
 def test_another_owners_session_reads_as_404_not_403(as_user, monkeypatch):
     from app.api import sessions as sessions_mod
 
-    async def not_found(*args, **kwargs):
-        return None
+    seen: dict = {}
 
-    async def delete_missed(*args, **kwargs):
-        return False
-
-    monkeypatch.setattr(sessions_mod.session_service, "get_session_with_messages", not_found)
-    monkeypatch.setattr(sessions_mod.session_service, "get_session", not_found)
-    monkeypatch.setattr(sessions_mod.session_service, "update_session", not_found)
-    monkeypatch.setattr(sessions_mod.session_service, "delete_session", delete_missed)
+    monkeypatch.setattr(sessions_mod.session_service, "get_session_with_messages", _miss(seen, "detail"))
+    monkeypatch.setattr(sessions_mod.session_service, "get_session", _miss(seen, "messages"))
+    monkeypatch.setattr(sessions_mod.session_service, "update_session", _miss(seen, "update"))
+    monkeypatch.setattr(sessions_mod.session_service, "delete_session", _miss(seen, "delete", result=False))
 
     bob = as_user(BOB)
     sid = uuid4()
@@ -113,11 +124,17 @@ def test_another_owners_session_reads_as_404_not_403(as_user, monkeypatch):
     assert bob.put(f"/api/sessions/{sid}", json={"title": "stolen"}).status_code == 404
     assert bob.delete(f"/api/sessions/{sid}").status_code == 404
 
+    # ! Every route reached the service scoped to Bob, rather than 404ing for some unrelated reason
+    assert seen == {"detail": BOB, "messages": BOB, "update": BOB, "delete": BOB}
+
 
 def test_feedback_is_gated_on_session_ownership(as_user, monkeypatch):
     from app.api import sessions as sessions_mod
 
-    async def not_found(*args, **kwargs):
+    seen: list[str] = []
+
+    async def not_found(session_id, *, user_id):
+        seen.append(user_id)
         return None
 
     monkeypatch.setattr(sessions_mod.session_service, "get_session", not_found)
@@ -126,6 +143,8 @@ def test_feedback_is_gated_on_session_ownership(as_user, monkeypatch):
     bob = as_user(BOB)
     assert bob.put(f"/api/sessions/{sid}/messages/{mid}/feedback", json={"rating": "up"}).status_code == 404
     assert bob.delete(f"/api/sessions/{sid}/messages/{mid}/feedback").status_code == 404
+    # ! Both verbs gate, and both gate on the caller: a verb that skips the gate records nothing
+    assert seen == [BOB, BOB]
 
 
 async def test_load_history_scopes_to_the_caller(monkeypatch):
