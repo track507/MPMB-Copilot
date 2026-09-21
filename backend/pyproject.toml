@@ -40,7 +40,8 @@ dependencies = [
 [project.optional-dependencies]
 # Optional sbert embedding provider. Pulls torch (~10 GB with CUDA wheels);
 # install only if embedding_provider=sbert: uv sync --extra sbert
-sbert = ["sentence-transformers>=5.5.1"]
+# ! >=6.0: the code calls get_embedding_dimension, which 5.x does not have
+sbert = ["sentence-transformers>=6.0.0"]
 
 [build-system]
 requires = ["hatchling"]

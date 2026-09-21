@@ -22,7 +22,13 @@ class SBERTProvider:
             ) from e
 
         self._model = SentenceTransformer(self.model_name)
-        self.dimension = int(self._model.get_sentence_embedding_dimension())
+
+        # ! sentence-transformers 6 renamed this accessor, and the old name still works but warns
+        # ! get_embedding_dimension returns None when no dimension can be inferred, which int() rejects
+        dimension = self._model.get_embedding_dimension()
+        if dimension is None:
+            raise RuntimeError(f"sentence-transformers could not report an embedding dimension for {self.model_name}")
+        self.dimension = int(dimension)
 
     def embed_texts(self, texts: List[str]) -> List[List[float]]:
         self._load()
