@@ -47,6 +47,9 @@ const port = env.get("POSTGRES_HOST_PORT") ?? "5433";
 
 // ! 127.0.0.1 not localhost: localhost can resolve to ::1 first and stall ~20s per
 // ! connection before falling back to IPv4, turning a 6s suite into a 7 minute one
+// ! pnpm forwards the -- separator itself, and pytest reads it as "every arg after this is a path"
+const passthrough = process.argv.slice(2).filter((arg) => arg !== "--");
+
 const url = `postgresql+asyncpg://${user}:${encodeURIComponent(password)}@127.0.0.1:${port}/${TEST_DB}`;
 
 // ! Never point this at the development database: the conftest truncates files, messages and sessions
@@ -60,7 +63,7 @@ console.log(`If this fails to connect, create it first:\n  docker exec mpmb-post
 
 const result = spawnSync(
 	"uv",
-	["--cache-dir", ".uv-cache", "run", "--no-sync", "--project", "backend", "--group", "dev", "pytest", "backend/tests/services/db", ...process.argv.slice(2)],
+	["--cache-dir", ".uv-cache", "run", "--no-sync", "--project", "backend", "--group", "dev", "pytest", "backend/tests/services/db", ...passthrough],
 	{ cwd: REPO_ROOT, stdio: "inherit", env: { ...process.env, TEST_DATABASE_URL: url }, shell: process.platform === "win32" }
 );
 
