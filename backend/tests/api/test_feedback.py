@@ -5,14 +5,29 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+OWNER = "11111111-1111-1111-1111-111111111111"
+
 
 @pytest.fixture
 def client(monkeypatch):
-    # Endpoints gate on db.is_connected; pretend the DB is up
-    monkeypatch.setattr("app.api.sessions.db", SimpleNamespace(is_connected=True))
+    """
+    Authenticated client with the db check and the ownership gate satisfied
+
+    Both feedback endpoints verify the session belongs to the caller before reading the message
+    These tests cover the feedback rules, so the gate is stubbed open and proven in test_session_ownership
+    """
+    from app.api.deps import Principal, current_principal
     from app.main import app
 
-    return TestClient(app)
+    async def owned_session(session_id, *, user_id):
+        return SimpleNamespace(id=session_id, user_id=user_id)
+
+    monkeypatch.setattr("app.api.sessions.db", SimpleNamespace(is_connected=True))
+    monkeypatch.setattr("app.api.sessions.session_service.get_session", owned_session)
+    app.dependency_overrides[current_principal] = lambda: Principal(user_id=OWNER, role="user")
+
+    yield TestClient(app)
+    app.dependency_overrides.pop(current_principal, None)
 
 
 def _assistant_message(session_id, message_id):

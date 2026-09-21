@@ -14,8 +14,9 @@ Endpoints:
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from app.api.deps import Principal, current_principal
 from app.logger import get_logger
 from app.model.schemas.session import (
     FeedbackOut,
@@ -52,11 +53,11 @@ def _require_db() -> None:
 async def list_sessions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    principal: Principal = Depends(current_principal),
 ):
     _require_db()
-
-    sessions = await session_service.list_sessions(limit=limit, offset=offset)
-    total = await session_service.get_session_count()
+    sessions = await session_service.list_sessions(user_id=principal.user_id, limit=limit, offset=offset)
+    total = await session_service.get_session_count(user_id=principal.user_id)
 
     session_list = []
     for s in sessions:
@@ -90,13 +91,13 @@ async def list_sessions(
     summary="Create Session",
     description="Create a new conversation session",
 )
-async def create_session(body: SessionCreate):
+async def create_session(body: SessionCreate, principal: Principal = Depends(current_principal)):
     _require_db()
-
     session = await session_service.create_session(
         title=body.title,
         edition=body.edition,
         settings=body.settings,
+        user_id=principal.user_id,
     )
 
     return SessionOut(
@@ -236,8 +237,16 @@ async def get_messages(
     summary="Set Message Feedback",
     description="Upsert thumbs up/down (+ optional note) on an assistant message",
 )
-async def set_message_feedback(session_id: UUID, message_id: UUID, body: FeedbackUpsert):
+async def set_message_feedback(
+    session_id: UUID,
+    message_id: UUID,
+    body: FeedbackUpsert,
+    principal: Principal = Depends(current_principal),
+):
     _require_db()
+    # ! Ownership gate: the path carries session_id, so verify it belongs to the caller
+    if await session_service.get_session(session_id, user_id=principal.user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} not found")
 
     message = await feedback_service.get_message(message_id)
     if message is None or message.session_id != session_id:
@@ -262,6 +271,13 @@ async def set_message_feedback(session_id: UUID, message_id: UUID, body: Feedbac
     summary="Clear Message Feedback",
     description="Remove any feedback vote on a message",
 )
-async def clear_message_feedback(session_id: UUID, message_id: UUID):
+async def clear_message_feedback(
+    session_id: UUID,
+    message_id: UUID,
+    principal: Principal = Depends(current_principal),
+):
     _require_db()
+    # ! Ownership gate: the path carries session_id, so verify it belongs to the caller
+    if await session_service.get_session(session_id, user_id=principal.user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Session {session_id} not found")
     await feedback_service.clear_feedback(message_id)
