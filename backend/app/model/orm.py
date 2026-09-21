@@ -95,6 +95,7 @@ class Session(Base):
     # Relationships
     messages: Mapped[list["Message"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     files: Mapped[list["File"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
 class Message(Base):
