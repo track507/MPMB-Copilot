@@ -35,26 +35,23 @@ router = APIRouter()
 
 
 # * Helpers
-async def _load_history(session_id_str: str | None) -> tuple[UUID | None, list[dict[str, Any]]]:
-    """Load conversation history from the session store.
-
-    Returns (resolved_session_uuid, history_list).
-    If DB is unavailable or session_id is None, returns (None, []).
-    """
+async def _load_history(session_id_str: str | None, user_id: str) -> tuple[UUID | None, list[dict[str, Any]]]:
+    """Load conversation history for a session the caller owns."""
     if not session_id_str or not db.is_connected:
         return None, []
 
     try:
         session_uuid = UUID(session_id_str)
-        history = await session_service.get_conversation_history(session_uuid)
+        # ! Scoped read: a foreign session id returns empty history, never another user's turns
+        history = await session_service.get_conversation_history(session_uuid, user_id=user_id)
         return session_uuid, history
     except (ValueError, Exception) as e:
         logger.warning(f"Failed to load session history: {e}")
         return None, []
 
 
-async def _ensure_session(session_uuid: UUID | None, edition: str | None) -> UUID | None:
-    """Ensure a session exists. Creates one if needed and DB is available."""
+async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_id: str) -> UUID | None:
+    """Ensure a session exists. Creates one owned by user_id if needed."""
     if not db.is_connected:
         return None
 
@@ -65,6 +62,7 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None) -> UUI
         session = await session_service.create_session(
             title="New Conversation",
             edition=edition,
+            user_id=user_id,
         )
         return session.id
     except Exception as e:
@@ -200,8 +198,8 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             f"Chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id)
-        session_uuid = await _ensure_session(session_uuid, request.edition)
+        session_uuid, history = await _load_history(request.session_id, principal.user_id)
+        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id)
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
@@ -278,8 +276,8 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
             f"Streaming chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id)
-        session_uuid = await _ensure_session(session_uuid, request.edition)
+        session_uuid, history = await _load_history(request.session_id, principal.user_id)
+        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id)
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 

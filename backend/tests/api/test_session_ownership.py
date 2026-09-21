@@ -126,3 +126,37 @@ def test_feedback_is_gated_on_session_ownership(as_user, monkeypatch):
     bob = as_user(BOB)
     assert bob.put(f"/api/sessions/{sid}/messages/{mid}/feedback", json={"rating": "up"}).status_code == 404
     assert bob.delete(f"/api/sessions/{sid}/messages/{mid}/feedback").status_code == 404
+
+
+async def test_load_history_scopes_to_the_caller(monkeypatch):
+    """A foreign session id must read as empty, not as someone else's turns."""
+    from app.api import chat as chat_mod
+
+    captured: dict = {}
+
+    async def fake_history(session_id, *, user_id):
+        captured["user_id"] = user_id
+        return []
+
+    monkeypatch.setattr(chat_mod.session_service, "get_conversation_history", fake_history)
+    monkeypatch.setattr(chat_mod, "db", SimpleNamespace(is_connected=True))
+
+    await chat_mod._load_history(str(uuid4()), BOB)
+    # ! Scoped to the caller, not to the id they supplied
+    assert captured["user_id"] == BOB
+
+
+async def test_ensure_session_stamps_the_owner(monkeypatch):
+    from app.api import chat as chat_mod
+
+    captured: dict = {}
+
+    async def fake_create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(chat_mod.session_service, "create_session", fake_create)
+    monkeypatch.setattr(chat_mod, "db", SimpleNamespace(is_connected=True))
+
+    await chat_mod._ensure_session(None, "2024", ALICE)
+    assert captured["user_id"] == ALICE

@@ -25,7 +25,7 @@ def chat_client(monkeypatch):
 def _wire_chat(monkeypatch, user_msg_id):
     """Mock enough of the chat pipeline that POST /chat returns 200."""
 
-    async def fake_history(_session_uuid):
+    async def fake_history(_session_uuid, *, user_id):
         return []
 
     async def fake_add_message(**_kwargs):
