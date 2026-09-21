@@ -70,7 +70,7 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_i
         return None
 
 
-async def _save_user_message(session_uuid: UUID | None, user_message: str) -> Message | None:
+async def _save_user_message(session_uuid: UUID | None, user_message: str, user_id: str) -> Message | None:
     """
     Save the user message and trigger title generation on the first message
 
@@ -88,7 +88,7 @@ async def _save_user_message(session_uuid: UUID | None, user_message: str) -> Me
 
         # ? First user message in a new session - kick off async title generation
         if user_msg.sequence_number == 1:
-            asyncio.create_task(generate_session_title(session_uuid, user_message))
+            asyncio.create_task(generate_session_title(session_uuid, user_message, user_id))
         return user_msg
     except Exception as e:
         logger.error(f"Failed to save user message: {e}")
@@ -204,7 +204,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before generation so it survives downstream failures
-        user_msg = await _save_user_message(session_uuid, request.message)
+        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,
@@ -282,7 +282,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before streaming so it survives any agent/model failure
-        user_msg = await _save_user_message(session_uuid, request.message)
+        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,

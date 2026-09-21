@@ -51,7 +51,7 @@ def _sanitize(title: str) -> str:
     return cleaned
 
 
-async def generate_session_title(session_id: UUID, user_message: str) -> None:
+async def generate_session_title(session_id: UUID, user_message: str, user_id: str) -> None:
     """
     Generate and persist a session title from the first user message
 
@@ -76,11 +76,11 @@ async def generate_session_title(session_id: UUID, user_message: str) -> None:
 
     try:
         # ? Don't clobber a title the user renamed before this background task ran
-        current = await session_service.get_session(session_id)
+        current = await session_service.get_session(session_id, user_id=user_id)
         if current is not None and current.title != _DEFAULT_TITLE:
             logger.info(f"Skipping auto-title for {session_id}; user already set {current.title!r}")
             return
-        await session_service.update_session(session_id, title=title)
+        await session_service.update_session(session_id, user_id=user_id, title=title)
         logger.info(f"Session {session_id} titled: {title!r}")
     except Exception as e:
         logger.error(f"Failed to update session title for {session_id}: {e}")

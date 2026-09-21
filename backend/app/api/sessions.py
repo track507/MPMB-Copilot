@@ -119,10 +119,10 @@ async def create_session(body: SessionCreate, principal: Principal = Depends(cur
     summary="Get Session",
     description="Get a session with its messages",
 )
-async def get_session(session_id: UUID):
+async def get_session(session_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
 
-    session = await session_service.get_session_with_messages(session_id)
+    session = await session_service.get_session_with_messages(session_id, user_id=principal.user_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -151,7 +151,11 @@ async def get_session(session_id: UUID):
     summary="Update Session",
     description="Update session title, settings, or metadata",
 )
-async def update_session(session_id: UUID, body: SessionUpdate):
+async def update_session(
+    session_id: UUID,
+    body: SessionUpdate,
+    principal: Principal = Depends(current_principal),
+):
     _require_db()
 
     updates = body.model_dump(exclude_none=True)
@@ -161,7 +165,8 @@ async def update_session(session_id: UUID, body: SessionUpdate):
             detail="No fields to update",
         )
 
-    session = await session_service.update_session(session_id, **updates)
+    # ! Owner passed explicitly, never folded into updates: ty cannot check a ** unpack for a missing argument
+    session = await session_service.update_session(session_id, user_id=principal.user_id, **updates)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -189,10 +194,10 @@ async def update_session(session_id: UUID, body: SessionUpdate):
     summary="Delete Session",
     description="Soft-delete a session",
 )
-async def delete_session(session_id: UUID):
+async def delete_session(session_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
 
-    deleted = await session_service.delete_session(session_id)
+    deleted = await session_service.delete_session(session_id, user_id=principal.user_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -211,11 +216,12 @@ async def get_messages(
     session_id: UUID,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    principal: Principal = Depends(current_principal),
 ):
     _require_db()
 
-    # Verify session exists
-    session = await session_service.get_session(session_id)
+    # ! Ownership gate: a session the caller does not own reads as 404, never as an empty message list
+    session = await session_service.get_session(session_id, user_id=principal.user_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -224,6 +230,7 @@ async def get_messages(
 
     messages = await session_service.get_messages(
         session_id,
+        user_id=principal.user_id,
         limit=limit,
         offset=offset,
     )

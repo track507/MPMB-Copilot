@@ -249,7 +249,7 @@ class SessionService:
         # ! A foreign session id reads as empty, never as someone else's turns
         if await self.get_session(session_id, user_id=user_id) is None:
             return []
-        messages = await self.get_messages(session_id, limit=limit)
+        messages = await self.get_messages(session_id, user_id=user_id, limit=limit)
         history = []
         for msg in messages:
             text = msg.content.get("text", "") if isinstance(msg.content, dict) else str(msg.content)

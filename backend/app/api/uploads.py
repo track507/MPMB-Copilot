@@ -65,7 +65,8 @@ async def upload_file(
     _require_db()
 
     if scope is UploadScope.session and session_id is not None:
-        if await session_service.get_session(session_id=session_id) is None:
+        # ! Ownership, not just existence: without user_id any caller can attach to another user's session
+        if await session_service.get_session(session_id, user_id=principal.user_id) is None:
             raise UploadError(404, "not_found", f"Session {session_id} not found")
 
     row = await upload_service.store(
