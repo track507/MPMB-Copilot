@@ -2,6 +2,8 @@
 Alembic environment - sync engine (psycopg2) against the app's resolved database URL
 """
 
+from logging.config import fileConfig
+
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
@@ -10,6 +12,11 @@ from app.model.orm import Base
 
 config = context.config
 target_metadata = Base.metadata
+
+# ! Without this the ini logging sections are dead config and the CLI runs silently
+# ? Only the CLI carries a file; services/db/migrations.py builds Config() in process, so app logging is left alone
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
 # ? CLI runs may not carry a URL; fall back to the app config (env/.env driven)
 if not config.get_main_option("sqlalchemy.url"):
