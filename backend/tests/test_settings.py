@@ -119,3 +119,18 @@ def test_settings_update_schema_validates_inference_device():
     assert SettingsUpdate(inference_device="gpu").model_dump(exclude_none=True) == {"inference_device": "gpu"}
     with pytest.raises(ValidationError):
         SettingsUpdate(inference_device="tpu")
+
+
+def test_a_partial_documents_update_keeps_the_other_defaults():
+    # ! A PATCH replaces the whole documents dict, so an omitted knob must fall back rather than vanish
+    s = Settings()
+    s._apply({"documents": {"grep_extract_budget": 7}})
+    assert s.document_setting("grep_extract_budget") == 7
+    assert s.document_setting("max_extracted_bytes") == 8_388_608
+
+
+def test_settings_update_schema_accepts_documents():
+    from app.api.settings import SettingsUpdate
+
+    body = SettingsUpdate(documents={"grep_extract_budget": 5, "libreoffice_enabled": False})
+    assert body.model_dump(exclude_none=True) == {"documents": {"grep_extract_budget": 5, "libreoffice_enabled": False}}

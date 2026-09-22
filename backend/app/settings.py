@@ -49,6 +49,17 @@ _DEFAULT_TIER_BUDGETS: dict[str, dict[str, int]] = {
     "lookup": {"authoritative": 4, "examples": 2},
 }
 
+# * Document extraction knobs, nested so one provider can later own several capability slots without a migration
+_DEFAULT_DOCUMENTS: dict[str, Any] = {
+    # ? Documents a single mpmb_grep call may extract; a repeat call reaches the next batch because the first is cached
+    "grep_extract_budget": 3,
+    # ? Above this raw size grep never extracts opportunistically; an explicit mpmb_read or mpmb_outline must
+    "grep_extract_max_file_bytes": 10_485_760,
+    # ? A 300-page guide extracts to roughly 1-3 MB, so this bounds the pathological case without rejecting real ones
+    "max_extracted_bytes": 8_388_608,
+    "libreoffice_enabled": False,
+}
+
 
 @dataclass
 class Settings:
@@ -173,6 +184,9 @@ class Settings:
 
     tool_grep_pattern_max_len: int = 500
     """Reject grep patterns longer than this many characters."""
+
+    documents: dict[str, Any] = field(default_factory=lambda: dict(_DEFAULT_DOCUMENTS))
+    """Document extraction knobs; read them through document_setting(), which fills keys a partial update left out"""
 
     tool_grep_file_timeout_sec: float = 1.0
     """Per-file regex timeout for mpmb_grep (approximate; enforced via elapsed-time check)."""
@@ -334,6 +348,14 @@ class Settings:
         if provider == "ollama":
             return self.ollama_cheap_model or self.default_model
         return self.default_model
+
+    def document_setting(self, key: str) -> Any:
+        """
+        One document extraction knob, falling back to its default
+
+        A PATCH replaces the whole documents dict, so a partial update must not silently zero the keys it omitted
+        """
+        return self.documents.get(key, _DEFAULT_DOCUMENTS[key])
 
     def get_tier_budget(self, intent: str) -> dict[str, int]:
         """Return the tier budget for a given intent.

@@ -35,6 +35,9 @@ dependencies = [
 	"pillow>=10.2.0",
 	"uuid-utils>=0.12.0",
 	"argon2-cffi>=25.1.0",
+	# ! pypdfium2 handles text: pypdf splits words mid-token, which silently breaks grep on the extracted stream
+	# * pypdf stays for the object model (AcroForm, Names tree, embedded JS), which is a different job
+	"pypdfium2>=5.13.0",
 ]
 
 [project.optional-dependencies]
@@ -83,3 +86,25 @@ dev = [
 [tool.uv]
 # ! onnxruntime distributions all provide the same module and must not coexist: on Windows the DirectML build (declared above) replaces fastembed's plain onnxruntime
 override-dependencies = ["onnxruntime>=1.22; sys_platform != 'win32'"]
+
+
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "Domain core does not know about HTTP"
+type = "forbidden"
+source_modules = ["app.core"]
+forbidden_modules = ["app.api"]
+
+[[tool.importlinter.contracts]]
+name = "Domain core does not touch persistence directly"
+type = "forbidden"
+source_modules = ["app.core"]
+forbidden_modules = ["app.services.db"]
+
+[[tool.importlinter.contracts]]
+name = "Services never import the API layer"
+type = "forbidden"
+source_modules = ["app.services"]
+forbidden_modules = ["app.api"]
