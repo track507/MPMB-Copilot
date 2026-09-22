@@ -1,9 +1,12 @@
+from types import SimpleNamespace
+from typing import Any, cast
+
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from app.core.rag_engine import rag_engine
+from app.core.rag_engine import RAGEngine
 from app.core.tools import build_mpmb_toolset
 
 
@@ -20,6 +23,9 @@ async def test_stream_emits_tool_events_when_model_calls_tool(
     (mpmb / "X.js").write_text("var AbilityScores = { name: 'A' };\n")
     monkeypatch.setattr(config, "mpmb_source_dir", str(mpmb))
     monkeypatch.setattr(settings, "enable_tool_use", True)
+
+    # ? This test drives tools that never search, so the retriever and factory stay unused
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
 
     call_counter = {"n": 0}
 
@@ -47,7 +53,7 @@ async def test_stream_emits_tool_events_when_model_calls_tool(
     monkeypatch.setattr("app.core.rag_engine.build_agent", fake_build_agent)
 
     events = []
-    async for ev in rag_engine.stream(
+    async for ev in engine.stream(
         query="show AbilityScores",
         conversation_history=[],
         session_id="sess-1",
@@ -67,17 +73,16 @@ async def test_stream_emits_tool_events_when_model_calls_tool(
 
 
 def _setup_tool_stream_env(tmp_path, monkeypatch):
-    """Shared scaffolding: temp source dir, tool use on, stubbed retriever.
+    """Shared scaffolding: temp source dir, tool use on, stubbed retriever
 
-    The retriever stub patches the singleton in `app.core.retriever` - the
-    request path no longer touches it, only the mpmb_search tool does.
-    Returns `(settings, fake_retrieve)` so tests can assert on retriever use.
+    The retriever is injected into the engine and reaches the mpmb_search tool through Deps
+    Returns (settings, fake_retrieve, engine) so tests can assert on retriever use
     """
     from unittest.mock import AsyncMock
 
     from app.config import config
     from app.core.query_analysis import QueryAnalysis
-    from app.core.retriever import RetrievalResult, retriever
+    from app.core.retriever import RetrievalResult
     from app.settings import settings
 
     mpmb = tmp_path / "mpmb_source"
@@ -105,8 +110,12 @@ def _setup_tool_stream_env(tmp_path, monkeypatch):
             timing_ms=0.0,
         )
     )
-    monkeypatch.setattr(retriever, "retrieve", fake_retrieve)
-    return settings, fake_retrieve
+    engine = RAGEngine(
+        retriever=cast(Any, SimpleNamespace(retrieve=fake_retrieve)),
+        # ? build_agent is stubbed in these tests, so the factory is never called
+        model_factory=cast(Any, None),
+    )
+    return settings, fake_retrieve, engine
 
 
 def _fake_build_agent_factory(fake_stream):
@@ -124,7 +133,7 @@ def _fake_build_agent_factory(fake_stream):
 @pytest.mark.asyncio
 async def test_stream_soft_budget_lets_model_finish_answering(tmp_path, monkeypatch):
     """Over-budget tool calls get a stop notice; the model still answers normally."""
-    settings, _ = _setup_tool_stream_env(tmp_path, monkeypatch)
+    settings, _, engine = _setup_tool_stream_env(tmp_path, monkeypatch)
     monkeypatch.setattr(settings, "max_tool_calls", 1)
 
     call_counter = {"n": 0}
@@ -145,7 +154,7 @@ async def test_stream_soft_budget_lets_model_finish_answering(tmp_path, monkeypa
     monkeypatch.setattr("app.core.rag_engine.build_agent", _fake_build_agent_factory(fake_stream))
 
     events = []
-    async for ev in rag_engine.stream(
+    async for ev in engine.stream(
         query="show AbilityScores",
         conversation_history=[],
         session_id="sess-1",
@@ -166,7 +175,7 @@ async def test_stream_soft_budget_lets_model_finish_answering(tmp_path, monkeypa
 async def test_stream_hard_limit_degrades_gracefully(tmp_path, monkeypatch):
     """A model that never stops calling tools hits the hard net; the stream still
     ends with a done event and a notice instead of raising."""
-    settings, _ = _setup_tool_stream_env(tmp_path, monkeypatch)
+    settings, _, engine = _setup_tool_stream_env(tmp_path, monkeypatch)
     monkeypatch.setattr(settings, "max_tool_calls", 2)
 
     call_counter = {"n": 0}
@@ -184,7 +193,7 @@ async def test_stream_hard_limit_degrades_gracefully(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.rag_engine.build_agent", _fake_build_agent_factory(fake_stream))
 
     events = []
-    async for ev in rag_engine.stream(
+    async for ev in engine.stream(
         query="show AbilityScores",
         conversation_history=[],
         session_id="sess-1",
@@ -202,7 +211,7 @@ async def test_stream_hard_limit_degrades_gracefully(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_does_not_pre_retrieve(tmp_path, monkeypatch):
     """The request path must not call the retriever; retrieval is agent-driven."""
-    _, fake_retrieve = _setup_tool_stream_env(tmp_path, monkeypatch)
+    _, fake_retrieve, engine = _setup_tool_stream_env(tmp_path, monkeypatch)
 
     async def fake_stream(messages: list[ModelMessage], info: AgentInfo):
         yield "Hello! How can I help with your MPMB sheet?"
@@ -210,7 +219,7 @@ async def test_stream_does_not_pre_retrieve(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.rag_engine.build_agent", _fake_build_agent_factory(fake_stream))
 
     events = []
-    async for ev in rag_engine.stream(
+    async for ev in engine.stream(
         query="Hi",
         conversation_history=[],
         session_id="sess-1",
@@ -229,7 +238,7 @@ async def test_stream_does_not_pre_retrieve(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_stream_mpmb_search_drives_retriever(tmp_path, monkeypatch):
     """When the model calls mpmb_search, the retriever runs and tool events flow."""
-    _, fake_retrieve = _setup_tool_stream_env(tmp_path, monkeypatch)
+    _, fake_retrieve, engine = _setup_tool_stream_env(tmp_path, monkeypatch)
 
     call_counter = {"n": 0}
 
@@ -249,7 +258,7 @@ async def test_stream_mpmb_search_drives_retriever(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.rag_engine.build_agent", _fake_build_agent_factory(fake_stream))
 
     events = []
-    async for ev in rag_engine.stream(
+    async for ev in engine.stream(
         query="How do I make a 2014 race?",
         conversation_history=[],
         session_id="sess-1",
@@ -282,5 +291,6 @@ async def test_generate_surfaces_retrieval_trace(monkeypatch):
     monkeypatch.setattr(re_mod, "agent_generate", fake_agent_generate)
     monkeypatch.setattr(re_mod.settings, "enable_tool_use", True)
 
-    resp = await re_mod.rag_engine.generate(query="how do I add a spell", session_id="s")
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
+    resp = await engine.generate(query="how do I add a spell", session_id="s")
     assert resp.retrieval == [{"tool": "mpmb_search", "query": "q", "edition": "2014", "chunks": []}]

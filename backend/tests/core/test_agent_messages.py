@@ -7,7 +7,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from app.services.llm.messages import to_pydantic_messages
+from app.core.agent_messages import to_pydantic_messages
 
 
 def test_empty_history_returns_empty_list():

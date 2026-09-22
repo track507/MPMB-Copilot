@@ -66,16 +66,17 @@ tier (`authoritative` / `official_example` / `community_example`) and edition fi
 pnpm run dev              # frontend + backend (expects postgres + qdrant already up)
 pnpm run dev:full         # same, but starts postgres + qdrant first
 pnpm run setup:all        # setup -> setup:services -> setup:index
-pnpm run check            # lint + format check + typecheck + tests  <- THE gate
+pnpm run check            # lint + import contracts + format check + typecheck + tests  <- THE gate
 pnpm run test             # backend pytest
 pnpm run index            # force re-index (backend must be running)
 pnpm run typecheck:scripts  # tsc over scripts/*.mjs (not in the aggregate typecheck yet)
+pnpm run lint:imports     # the architecture contracts alone (import-linter)
 ```
 
 ## Quality gates
 
-`pnpm run check` = lint (js/ts/py/md) + format:check + typecheck (ty + `tsc`) +
-pytest, and it is the required CI job. Typechecking joined the gate on 2026-09-20,
+`pnpm run check` = lint (js/ts/py/md) + import contracts + format:check +
+typecheck (ty + `tsc`) + pytest, and it is the required CI job. Typechecking joined the gate on 2026-09-20,
 which makes `check:full` (`check && typecheck`) a duplicate - it now runs typecheck
 twice.
 
@@ -90,6 +91,16 @@ twice.
   job in `ci.yml` and the paragraph at `docs/RELEASE_PROCESS.md:70` still describe
   the old arrangement, where typechecking was opt-in and `continue-on-error`; both
   are now redundant, since `check` typechecks unconditionally.
+- **`lint:imports` gates the architecture, not just the style.** import-linter
+  checks the five contracts declared in `backend/pyproject.toml` - the layer
+  ordering (edge > composition > core > model > ambient), adapters never
+  importing the edge, and core reaching neither HTTP nor persistence. A broken
+  contract is a red gate, so a new inward-pointing import has to be argued for,
+  not merged by accident. It runs through `scripts/lint-imports.mjs`, which
+  exists only to force utf-8 stdio: import-linter renders its spinner through
+  rich as an emoji, and on Windows rich falls back to its cp1252 console
+  renderer and raises `UnicodeEncodeError` before a single contract is
+  evaluated - the gate fails on a glyph and reports nothing about your imports.
 - **`typecheck:scripts` is in no gate, deliberately.** It runs `tsc` over
   `scripts/*.mjs` with `checkJs: true`; the older ops scripts have pre-existing
   errors, so wiring it into `typecheck` would now turn the required gate red. Run it

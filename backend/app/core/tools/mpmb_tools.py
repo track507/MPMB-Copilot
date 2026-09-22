@@ -22,6 +22,7 @@ from typing import Any, Literal, Optional
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from app.core.retriever import Retriever
 from app.core.tools.source_paths import (
     _build_default_roots,
     cache_scope_for,
@@ -58,6 +59,8 @@ class Deps:
     session_id: str
     edition: str
     user_id: str = "default"
+    # ! Retrieval arrives on the context, so this module never imports the retriever and never chooses a store
+    retriever: Optional[Retriever] = None
     # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
     # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run
@@ -292,11 +295,11 @@ def _mpmb_outline_impl(
 
 
 async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = None) -> str:
-    # ? Lazy import keeps the tool module importable without the retrieval stack
-    from app.core.retriever import retriever
+    if deps.retriever is None:
+        return "[error] retrieval unavailable: no retriever is configured for this request."
 
     try:
-        result = await retriever.retrieve(query=query, edition=edition)
+        result = await deps.retriever.retrieve(query=query, edition=edition)
     except Exception as e:
         deps.trace.append({"tool": "mpmb_search", "query": query, "edition": edition, "chunks": []})
         return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -42,21 +44,22 @@ def _result(authoritative=None, examples=None, edition="2014") -> RetrievalResul
     )
 
 
-def _deps() -> Deps:
-    return Deps(session_id="sess-1", edition="2014")
+def _deps(retrieve: Any = None) -> Deps:
+    """Deps carrying a retriever stub, since retrieval reaches the tool through the context now"""
+    retriever = SimpleNamespace(retrieve=retrieve) if retrieve is not None else None
+    return Deps(session_id="sess-1", edition="2014", retriever=cast(Any, retriever))
 
 
 @pytest.mark.asyncio
-async def test_search_formats_sections_citations_and_footer(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_formats_sections_citations_and_footer():
 
     fake = _result(
         authoritative=[_chunk("_common/SpellsList.js", 'SpellsList["fireball"] = { name: "Fireball" };')],
         examples=[_chunk("examples/feat.js", "FeatsList['lucky'] = {};", score=0.61, tier="official_example")],
     )
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=fake))
+    retrieve = AsyncMock(return_value=fake)
 
-    out = await _mpmb_search_impl(_deps(), "how does fireball work")
+    out = await _mpmb_search_impl(_deps(retrieve), "how does fireball work")
 
     assert "## AUTHORITATIVE" in out
     assert "## EXAMPLES" in out
@@ -68,12 +71,11 @@ async def test_search_formats_sections_citations_and_footer(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_empty_result_is_not_an_error(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_empty_result_is_not_an_error():
 
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=_result()))
+    retrieve = AsyncMock(return_value=_result())
 
-    out = await _mpmb_search_impl(_deps(), "nonsense query", edition="2024")
+    out = await _mpmb_search_impl(_deps(retrieve), "nonsense query", edition="2024")
 
     assert not out.startswith("[error]")
     assert "No indexed chunks matched" in out
@@ -82,12 +84,11 @@ async def test_search_empty_result_is_not_an_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_retriever_failure_returns_error_with_fallback_hint(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_retriever_failure_returns_error_with_fallback_hint():
 
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(side_effect=RuntimeError("qdrant connection refused")))
+    retrieve = AsyncMock(side_effect=RuntimeError("qdrant connection refused"))
 
-    out = await _mpmb_search_impl(_deps(), "anything")
+    out = await _mpmb_search_impl(_deps(retrieve), "anything")
 
     assert out.startswith("[error] retrieval unavailable")
     assert "qdrant connection refused" in out
@@ -95,13 +96,12 @@ async def test_search_retriever_failure_returns_error_with_fallback_hint(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_search_passes_query_and_edition_to_retriever(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_passes_query_and_edition_to_retriever():
 
     fake_retrieve = AsyncMock(return_value=_result())
-    monkeypatch.setattr(retriever, "retrieve", fake_retrieve)
+    retrieve = fake_retrieve
 
-    await _mpmb_search_impl(_deps(), "subclass syntax", edition="2024")
+    await _mpmb_search_impl(_deps(retrieve), "subclass syntax", edition="2024")
 
     fake_retrieve.assert_awaited_once()
     kwargs = fake_retrieve.await_args.kwargs
@@ -110,27 +110,25 @@ async def test_search_passes_query_and_edition_to_retriever(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_missing_intent_reports_unknown(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_missing_intent_reports_unknown():
 
     fake = _result(authoritative=[_chunk("a.js", "var x = 1;")])
     fake.intent = None
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=fake))
+    retrieve = AsyncMock(return_value=fake)
 
-    out = await _mpmb_search_impl(_deps(), "q")
+    out = await _mpmb_search_impl(_deps(retrieve), "q")
 
     assert "intent=unknown" in out
 
 
 @pytest.mark.asyncio
-async def test_search_flags_repeated_overlapping_results(monkeypatch):
+async def test_search_flags_repeated_overlapping_results():
     """A second search that mostly returns already-seen chunks gets a stop nudge."""
-    from app.core.retriever import retriever
 
     chunks = [_chunk("a.js", "x"), _chunk("b.js", "y")]
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=_result(authoritative=chunks)))
+    retrieve = AsyncMock(return_value=_result(authoritative=chunks))
 
-    deps = _deps()
+    deps = _deps(retrieve)
     first = await _mpmb_search_impl(deps, "spell list class")
     assert "[note]" not in first
 
@@ -140,16 +138,15 @@ async def test_search_flags_repeated_overlapping_results(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_no_nudge_for_fresh_results(monkeypatch):
+async def test_search_no_nudge_for_fresh_results():
     """Distinct results on the second search do not trigger the nudge."""
-    from app.core.retriever import retriever
 
     fake = AsyncMock(
         side_effect=[_result(authoritative=[_chunk("a.js", "x")]), _result(authoritative=[_chunk("c.js", "z")])]
     )
-    monkeypatch.setattr(retriever, "retrieve", fake)
+    retrieve = fake
 
-    deps = _deps()
+    deps = _deps(retrieve)
     await _mpmb_search_impl(deps, "first")
     second = await _mpmb_search_impl(deps, "second")
     assert "[note]" not in second
@@ -171,16 +168,15 @@ def test_mpmb_search_registered_on_toolset():
 
 
 @pytest.mark.asyncio
-async def test_search_records_citation_trace_on_deps(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_records_citation_trace_on_deps():
 
     fake = _result(
         authoritative=[_chunk("_common/SpellsList.js", 'SpellsList["fireball"] = {};', object_type="SpellsList")],
         examples=[_chunk("examples/feat.js", "FeatsList['lucky'] = {};", score=0.61, tier="official_example")],
     )
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=fake))
+    retrieve = AsyncMock(return_value=fake)
 
-    deps = _deps()
+    deps = _deps(retrieve)
     await _mpmb_search_impl(deps, "how does fireball work")
 
     assert len(deps.trace) == 1
@@ -201,12 +197,11 @@ async def test_search_records_citation_trace_on_deps(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_search_records_empty_trace_entry(monkeypatch):
-    from app.core.retriever import retriever
+async def test_search_records_empty_trace_entry():
 
-    monkeypatch.setattr(retriever, "retrieve", AsyncMock(return_value=_result()))
+    retrieve = AsyncMock(return_value=_result())
 
-    deps = _deps()
+    deps = _deps(retrieve)
     await _mpmb_search_impl(deps, "nonsense", edition="2024")
 
     assert len(deps.trace) == 1

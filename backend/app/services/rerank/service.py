@@ -25,7 +25,7 @@ class RerankService:
     _selection: Optional[tuple[str, str, str]] = None
 
     def _ensure_model(self) -> Optional["TextCrossEncoder"]:
-        from app.core.onnx_device import effective_device
+        from app.services.onnx_device import effective_device
         from app.settings import settings
 
         # effective_device (not the raw setting) so a GPU that faulted mid-run reloads the reranker on CPU
@@ -46,7 +46,7 @@ class RerankService:
             from fastembed.rerank.cross_encoder import TextCrossEncoder
 
             from app.config import config
-            from app.core.onnx_device import onnx_providers
+            from app.services.onnx_device import onnx_providers
 
             kwargs: dict[str, Any] = {
                 "model_name": settings.rerank_model,

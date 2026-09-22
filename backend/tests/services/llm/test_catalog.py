@@ -3,8 +3,8 @@ import time
 
 import pytest
 
-from app.core import model_catalog
-from app.core.model_catalog import (
+from app.services.llm import catalog as model_catalog
+from app.services.llm.catalog import (
     ANTHROPIC_CURATED,
     OPENAI_CURATED,
     effort_levels_for,
@@ -82,7 +82,7 @@ def test_effort_levels_for_when_cache_cold():
 
 
 def test_effort_levels_for_prefers_warm_cache(monkeypatch):
-    from app.core.model_catalog import ModelOption
+    from app.services.llm.catalog import ModelOption
 
     monkeypatch.setitem(
         model_catalog._cache,
@@ -110,7 +110,7 @@ async def test_anthropic_fetch_failure_falls_back(monkeypatch):
 
 
 async def test_provider_fetches_run_concurrently(monkeypatch):
-    from app.core import model_catalog
+    from app.services.llm import catalog as model_catalog
 
     monkeypatch.setattr(model_catalog, "_cache", {})
 

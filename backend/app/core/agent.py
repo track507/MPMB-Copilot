@@ -1,7 +1,7 @@
 """Agent construction and invocation for the RAG pipeline.
 
 Wraps PydanticAI's `Agent` with our provider switch (via
-`services.llm.providers.build_model`), optional toolset attachment,
+an injected model factory), optional toolset attachment,
 and unified response types.
 
 Static system instructions are passed as `instructions=` so the
@@ -16,9 +16,9 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.toolsets import AbstractToolset
 
+from app.core.agent_messages import to_pydantic_messages
 from app.logger import get_logger
-from app.services.llm.messages import to_pydantic_messages
-from app.services.llm.providers import build_model
+from app.services.llm.protocol import ModelFactory
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -54,6 +54,8 @@ def build_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     toolset: Optional[AbstractToolset[Any]] = None,
+    *,
+    model_factory: ModelFactory,
 ) -> Agent[None, Any]:
     """Construct an `Agent` for the given provider, optionally with a toolset.
 
@@ -65,7 +67,7 @@ def build_agent(
     temperature = temperature if temperature is not None else settings.temperature
     max_tokens = max_tokens or settings.max_tokens
 
-    pa_model, model_settings = build_model(
+    pa_model, model_settings = model_factory(
         provider=provider,
         model=model,
         temperature=temperature,
@@ -120,6 +122,8 @@ async def generate(
     toolset: Optional[AbstractToolset[Any]] = None,
     deps: Any = None,
     usage_limits: Any = None,
+    *,
+    model_factory: ModelFactory,
 ) -> LLMResponse:
     """Run a non-streaming agent call and return a `LLMResponse`."""
     resolved_provider = provider or settings.default_llm_provider
@@ -132,6 +136,7 @@ async def generate(
         temperature=temperature,
         max_tokens=max_tokens,
         toolset=toolset,
+        model_factory=model_factory,
     )
     pydantic_history = to_pydantic_messages(history or [])
 
@@ -168,6 +173,8 @@ async def stream(
     toolset: Optional[AbstractToolset[Any]] = None,
     deps: Any = None,
     usage_limits: Any = None,
+    *,
+    model_factory: ModelFactory,
 ) -> AsyncIterator[LLMStreamEvent]:
     """Stream text deltas; final event carries usage + stop reason."""
     resolved_provider = provider or settings.default_llm_provider
@@ -180,6 +187,7 @@ async def stream(
         temperature=temperature,
         max_tokens=max_tokens,
         toolset=toolset,
+        model_factory=model_factory,
     )
     pydantic_history = to_pydantic_messages(history or [])
 

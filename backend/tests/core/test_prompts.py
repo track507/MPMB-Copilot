@@ -3,6 +3,7 @@ Catalog-derived system prompt blocks + per-query hints
 """
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -261,20 +262,17 @@ def test_system_prompt_byte_identical_regardless_of_uploads(monkeypatch):
     assert "secret.js" not in baseline
 
 
-async def test_rag_engine_user_prompt_carries_manifest(monkeypatch):
+MANIFEST = "\n\n[uploaded files]\nlibrary: a.js (1)"
+
+
+async def test_rag_engine_appends_the_manifest_it_is_given(monkeypatch):
     from types import SimpleNamespace
 
     import app.core.rag_engine as rag_mod
-    import app.services.uploads.manifest as manifest_mod
-    from app.core.rag_engine import rag_engine
+    from app.core.rag_engine import RAGEngine
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-
-    async def fake_manifest(*, session_id, user_id):
-        return "\n\n[uploaded files]\nlibrary: a.js (1)"
-
-    monkeypatch.setattr(manifest_mod, "build_upload_manifest", fake_manifest)
 
     captured: dict = {}
 
@@ -284,9 +282,37 @@ async def test_rag_engine_user_prompt_carries_manifest(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    await rag_engine.generate(query="hello", user_id="u1", session_id=None)
+    # ! The caller assembles this and passes it in, so the agent loop never reaches the database for a prompt
+    # ? agent_generate is stubbed, so neither injected dependency is reached
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
+    await engine.generate(query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST)
 
     assert "[uploaded files]" in captured["user_prompt"]
     assert "a.js" in captured["user_prompt"]
     # ? The inventory rides the user turn, never the (cached) system prompt.
     assert "a.js" not in captured["instructions"]
+
+
+async def test_rag_engine_drops_the_manifest_when_tools_are_off(monkeypatch):
+    from types import SimpleNamespace
+
+    import app.core.rag_engine as rag_mod
+    from app.core.rag_engine import RAGEngine
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "enable_tool_use", False)
+
+    captured: dict = {}
+
+    async def fake_agent_generate(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(content="ok", provider="p", model="m", usage={"total_tokens": 1}, stop_reason=None)
+
+    monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
+
+    # ? agent_generate is stubbed, so neither injected dependency is reached
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
+    await engine.generate(query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST)
+
+    # ! Naming files the model has no tool to open only invites a guess
+    assert "[uploaded files]" not in captured["user_prompt"]

@@ -87,7 +87,7 @@ class Settings:
     upload_max_files_per_scope: int = 200
 
     # Embedding selection (the model that builds and queries the vector index)
-    # Dimension is derived from the catalog via embedding_dim(), not stored here
+    # ? Dimension is not stored here: the caller resolves it from the embedding catalog
     embedding_provider: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
@@ -331,12 +331,6 @@ class Settings:
         Excludes internal fields (prefixed with `_`).
         """
         return {f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values() if not f.name.startswith("_")}
-
-    def embedding_dim(self) -> int:
-        """Dimension of the selected embedding model, sourced from the catalog"""
-        from app.core.embedding_catalog import dimension_for
-
-        return dimension_for(self.embedding_provider, self.embedding_model)
 
     def cheap_model_for(self, provider: Optional[str] = None) -> str:
         """Resolve the cheap-model alias for the given (or default) provider."""

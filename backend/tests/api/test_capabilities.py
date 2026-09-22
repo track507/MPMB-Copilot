@@ -5,7 +5,8 @@ from fastapi.testclient import TestClient
 def _client(monkeypatch):
     from app.api import settings as settings_api
     from app.api.deps import Principal, current_principal
-    from app.core import model_catalog, registry
+    from app.composition import registry
+    from app.services.llm import catalog as model_catalog
 
     async def _fake_models():
         return {"anthropic": [], "openai": [], "ollama": []}

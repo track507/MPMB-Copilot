@@ -36,6 +36,7 @@
 		"lint:py": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app backend/tests tests scripts",
 		"lint:py:fix": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check backend/app backend/tests tests scripts --fix",
 		"lint:md": "markdownlint-cli2 \"README.md\" \"docs/**/*.md\" \"data/README.md\" \".github/**/*.md\"",
+		"lint:imports": "node ./scripts/lint-imports.mjs",
 		"frontend:dev": "pnpm --filter ./frontend run dev",
 		"frontend:build": "pnpm --filter ./frontend run build",
 		"frontend:typecheck": "pnpm --filter ./frontend run typecheck",
@@ -51,7 +52,7 @@
 		"typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
 		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest backend/ -v",
 		"test:db": "node ./scripts/test-db.mjs",
-		"check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test",
+		"check": "pnpm run lint && pnpm run lint:imports && pnpm run format:check && pnpm run typecheck && pnpm run test",
 		"check:full": "pnpm run check && pnpm run typecheck",
 		"mint-key": "node ./scripts/mint-key.mjs",
 		"prepare": "husky"

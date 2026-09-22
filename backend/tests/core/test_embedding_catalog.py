@@ -40,3 +40,11 @@ def test_e5_carries_prefixes():
     assert e.query_prefix == "query: "
     assert e.doc_prefix == "passage: "
     assert e.multilingual is True
+
+
+def test_dimension_derives_from_the_catalog():
+    assert ec.dimension_for("fastembed", "intfloat/multilingual-e5-large") == 1024
+
+
+def test_dimension_falls_back_for_an_unknown_model():
+    assert ec.dimension_for("fastembed", "nope") == 384

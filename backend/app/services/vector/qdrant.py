@@ -39,6 +39,7 @@ from qdrant_client.models import (
 )
 
 from app.config import config
+from app.core.embedding_catalog import dimension_for
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -83,7 +84,7 @@ class QdrantStore:
         self.client: Optional[QdrantClient] = None
         self.collection_name = config.qdrant_collection
         # Dimension follows the selected embedding model (catalog-derived); refreshed in _ensure_collection
-        self.dense_dim = settings.embedding_dim()
+        self.dense_dim = dimension_for(settings.embedding_provider, settings.embedding_model)
         self._sparse_model = None  # Lazy-loaded BM25 model
         self._connected = False
         self._warned_missing_source_tier = False
@@ -206,7 +207,7 @@ class QdrantStore:
         from app.settings import settings
 
         # ! Refresh so a reindex after an embedding-model change creates the collection with the new dimension
-        self.dense_dim = settings.embedding_dim()
+        self.dense_dim = dimension_for(settings.embedding_provider, settings.embedding_model)
         try:
             self._require_client.get_collection(self.collection_name)
             logger.info(f"Collection '{self.collection_name}' exists")
