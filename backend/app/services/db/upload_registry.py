@@ -129,6 +129,36 @@ class UploadRegistry:
             )
             return int(result.scalar_one())
 
+    async def count_hash_in_bucket(self, *, file_hash: str, owner_user_id: Optional[str]) -> int:
+        """
+        Rows still holding these bytes within one extraction cache bucket
+
+        owner_user_id None means the shared bucket; otherwise one user's session and global uploads together
+        Scoped to the bucket, so another user's identical upload cannot keep this user's extracted text alive
+        """
+        filters: list[Any] = [File.file_hash == file_hash]
+        if owner_user_id is None:
+            filters.append(File.scope == "shared")
+        else:
+            filters.extend([File.scope.in_(("session", "global")), File.owner_user_id == owner_user_id])
+        async with db.session() as s:
+            result = await s.execute(select(func.count()).select_from(File).where(*filters))
+            return int(result.scalar_one())
+
+    async def hashes_by_bucket(self) -> dict[Optional[str], set[str]]:
+        """
+        Every stored hash grouped by the cache bucket it keeps alive, for the orphan sweep
+
+        The key is the owning user id, or None for the shared bucket
+        """
+        async with db.session() as s:
+            result = await s.execute(select(File.scope, File.owner_user_id, File.file_hash))
+            buckets: dict[Optional[str], set[str]] = {}
+            for scope, owner_user_id, file_hash in result.all():
+                key = None if scope == "shared" else owner_user_id
+                buckets.setdefault(key, set()).add(file_hash)
+            return buckets
+
     async def delete_file(self, file_id: UUID) -> bool:
         async with db.session() as s:
             result = cast(CursorResult[Any], await s.execute(delete(File).where(File.id == file_id)))
