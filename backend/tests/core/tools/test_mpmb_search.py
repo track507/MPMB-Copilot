@@ -160,7 +160,14 @@ def test_mpmb_search_registered_on_toolset():
 
     toolset = build_mpmb_toolset()
     assert "mpmb_search" in toolset.tools
-    assert set(toolset.tools) == {"mpmb_search", "mpmb_read", "mpmb_grep", "mpmb_function", "mpmb_validate"}
+    assert set(toolset.tools) == {
+        "mpmb_search",
+        "mpmb_read",
+        "mpmb_grep",
+        "mpmb_function",
+        "mpmb_outline",
+        "mpmb_validate",
+    }
 
 
 @pytest.mark.asyncio

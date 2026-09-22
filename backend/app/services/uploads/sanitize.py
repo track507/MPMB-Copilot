@@ -1,9 +1,12 @@
 import re
 from pathlib import PurePosixPath
 
+from app.services.documents import EXTRACTABLE_EXTENSIONS
 from app.services.uploads.errors import UploadError
 
-UPLOAD_EXTENSIONS: frozenset[str] = frozenset({".js", ".txt", ".md", ".yml", ".yaml", ".json", ".pdf"})
+# ! A document format is uploadable only while an adapter can read it, so the set is derived rather than listed
+# ? Storing a format nothing reads leaves the user an unreadable file, which is worse than a legible refusal
+UPLOAD_EXTENSIONS: frozenset[str] = frozenset({".js", ".txt", ".md", ".yml", ".yaml", ".json"}) | EXTRACTABLE_EXTENSIONS
 
 _WINDOWS_RESERVED = frozenset(
     {"con", "prn", "aux", "nul"} | {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
