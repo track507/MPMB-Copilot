@@ -12,8 +12,7 @@ from app.services import documents
 from app.services.documents import CachedDocument, CacheScope, DocumentError
 from app.settings import settings
 
-# Stable literal roots the LLM can pass. Actual directories are resolved
-# at call time from config + per-request Deps.
+# Stable literal roots the LLM can pass. Actual directories are resolved at call time from config + per-request Deps
 ROOT_MPMB_2014 = "./data/mpmb_source/"
 ROOT_MPMB_2024 = "./data/mpmb_source_2024/"
 ROOT_IMPORTS = "./data/imports_source/"
@@ -53,7 +52,6 @@ class PathResolution:
 
     resolved_path: Optional[Path] = None
     error: Optional[str] = None
-    # ? Set only for extracted documents: resolved_path is then the sidecar, and this carries its outline and summary
     document: Optional[CachedDocument] = None
 
 
@@ -163,7 +161,7 @@ def iter_searchable_files(root_dir: Path, glob_pattern: str = "**/*") -> Iterato
             continue
         if any(p in DENIED_SUBDIRS for p in rel.parts[:-1]):
             continue
-        # ? A document's raw bytes are not what gets read, so its size is judged by the caller's extraction budget instead
+        # * A document's raw bytes are not what gets read, so its size is judged by the caller's extraction budget instead
         if not documents.is_extractable(file_path.suffix):
             try:
                 if file_path.stat().st_size > settings.tool_max_file_bytes:
