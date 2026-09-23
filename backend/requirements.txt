@@ -24,7 +24,7 @@ anyio==4.13.0
     #   watchfiles
 argon2-cffi==25.1.0
     # via mpmb-copilot-backend
-argon2-cffi-bindings==25.1.0
+argon2-cffi-bindings==26.1.0
     # via argon2-cffi
 asyncpg==0.31.0
     # via mpmb-copilot-backend
