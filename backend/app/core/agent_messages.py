@@ -41,7 +41,7 @@ def to_pydantic_messages(history: list[dict[str, Any]]) -> list[ModelMessage]:
         elif role == "assistant":
             messages.append(ModelResponse(parts=[TextPart(content=content)]))
         elif role == "system":
-            # ? Instructions are set on the agent, so a stored system row would be a second, staler copy
+            # * Instructions are set on the agent, so a stored system row would be a second, staler copy
             logger.warning(
                 "Dropping 'system' role from conversation history - "
                 "system prompts are configured on the Agent, not per-turn"
