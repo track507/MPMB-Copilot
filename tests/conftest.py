@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures"""
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,8 +9,8 @@ from fastapi.testclient import TestClient
 os.environ["ENVIRONMENT"] = "testing"
 os.environ["LOG_LEVEL"] = "WARNING"
 
-from app.main import app
 from app.config import config
+from app.main import app
 
 
 @pytest.fixture

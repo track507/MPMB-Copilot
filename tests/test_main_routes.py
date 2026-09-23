@@ -1,5 +1,5 @@
-from app.main import app
 import pytest
+from app.main import app
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
@@ -42,8 +42,8 @@ def health_check():
     assert "embedding_model" in services
     # Each service should have status and message
     for service_name, service_info in services.items():
-        assert "status" in service_info
-        assert "message" in service_info
+        assert "status" in service_info, f"{service_name} reports no status"
+        assert "message" in service_info, f"{service_name} reports no message"
 
 
 def test_root_endpoint():
