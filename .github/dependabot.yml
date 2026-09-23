@@ -8,6 +8,9 @@ updates:
           day: monday
           time: "08:00"
       open-pull-requests-limit: 5
+      groups:
+          actions:
+              patterns: ["*"]
 
     - package-ecosystem: npm
       directory: /
@@ -16,6 +19,15 @@ updates:
           day: monday
           time: "08:15"
       open-pull-requests-limit: 5
+      groups:
+          frontend-minor-patch:
+              update-types: ["minor", "patch"]
+          types:
+              patterns: ["@types/*"]
+      ignore:
+          # ! TypeScript 7 is the native Go port, and the lint toolchain still reads ts.ModuleKind off the JS build
+          - dependency-name: "typescript"
+            update-types: ["version-update:semver-major"]
 
     - package-ecosystem: uv
       directory: /backend
@@ -24,6 +36,9 @@ updates:
           day: monday
           time: "08:45"
       open-pull-requests-limit: 5
+      groups:
+          backend-minor-patch:
+              update-types: ["minor", "patch"]
       ignore:
           - dependency-name: "nvidia-*"
 

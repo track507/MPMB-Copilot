@@ -41,9 +41,9 @@ def health_check():
     assert "llm_provider" in services
     assert "embedding_model" in services
     # Each service should have status and message
-    for service_name, service_info in services.items():
-        assert "status" in service_info, f"{service_name} reports no status"
-        assert "message" in service_info, f"{service_name} reports no message"
+    for service_info in services.values():
+        assert "status" in service_info
+        assert "message" in service_info
 
 
 def test_root_endpoint():

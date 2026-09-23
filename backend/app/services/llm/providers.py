@@ -19,7 +19,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
 from app.config import config
-from app.core.model_catalog import effort_levels_for
+from app.services.llm.catalog import effort_levels_for
 from app.settings import settings
 
 

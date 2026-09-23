@@ -52,7 +52,7 @@ class EmbeddingService:
         raise ValueError(f"Unknown embedding backend: {backend}")
 
     def _ensure_provider(self) -> EmbeddingProvider:
-        from app.core.onnx_device import effective_device
+        from app.services.onnx_device import effective_device
         from app.settings import settings
 
         # * Reload when the embedding selection changes so a settings switch (or a GPU fallback) takes effect
@@ -71,7 +71,7 @@ class EmbeddingService:
 
         A DirectML/CUDA device hang (Windows TDR resets a GPU whose dispatch outran the watchdog) would otherwise fail a long re-index outright; retrying on CPU costs time, not the run
         """
-        from app.core.onnx_device import force_cpu_fallback, is_device_failure
+        from app.services.onnx_device import force_cpu_fallback, is_device_failure
 
         try:
             return self._ensure_provider().embed_texts(payload)

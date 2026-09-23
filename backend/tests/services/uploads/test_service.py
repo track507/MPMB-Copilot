@@ -241,13 +241,95 @@ async def test_delete_removes_disk_and_row(upload_root, registry):
     g = upload_root / "global" / "u1"
     g.mkdir(parents=True, exist_ok=True)
     (g / "a.js").write_bytes(b"x")
-    row = SimpleNamespace(id=uuid4(), scope="global", owner_user_id="u1", file_path="global/u1/a.js")
+    row = SimpleNamespace(
+        id=uuid4(), scope="global", owner_user_id="u1", file_path="global/u1/a.js", filename="a.js", file_hash="0" * 64
+    )
     registry.get_file.return_value = row
 
     await upload_service.delete(file_id=row.id, user_id="u1", role="user")
 
     assert not (g / "a.js").exists()
     registry.delete_file.assert_awaited_once_with(row.id)
+    # ? Plain text has no extracted sidecar, so no reference count is needed
+    registry.count_hash_in_bucket.assert_not_awaited()
+
+
+# * Extracted text lives exactly as long as some upload in its bucket still holds the bytes
+
+
+@pytest.fixture
+def extracted(tmp_path, monkeypatch):
+    target = tmp_path / "extracted"
+    monkeypatch.setattr(config, "extracted_dir", str(target), raising=False)
+    return target
+
+
+def _sidecars(extracted, bucket: str, digest: str) -> list:
+    folder = extracted / bucket
+    for suffix in ("txt", "json"):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{digest}.pdf.1.{suffix}").write_text("x")
+    return sorted(folder.iterdir())
+
+
+def _pdf_row(*, scope="global", owner="u1", digest="a" * 64):
+    return SimpleNamespace(
+        id=uuid4(),
+        scope=scope,
+        owner_user_id=owner,
+        file_path=f"{scope}/{owner}/g.pdf",
+        filename="g.pdf",
+        file_hash=digest,
+    )
+
+
+async def test_delete_releases_extracted_text_nothing_else_holds(upload_root, registry, extracted):
+    row = _pdf_row()
+    _sidecars(extracted, "u1", row.file_hash)
+    registry.get_file.return_value = row
+    registry.count_hash_in_bucket.return_value = 0
+
+    await upload_service.delete(file_id=row.id, user_id="u1", role="user")
+
+    assert list((extracted / "u1").iterdir()) == []
+    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, owner_user_id="u1")
+
+
+async def test_delete_keeps_extracted_text_another_upload_still_holds(upload_root, registry, extracted):
+    row = _pdf_row()
+    kept = _sidecars(extracted, "u1", row.file_hash)
+    registry.get_file.return_value = row
+    registry.count_hash_in_bucket.return_value = 1
+
+    await upload_service.delete(file_id=row.id, user_id="u1", role="user")
+
+    assert sorted((extracted / "u1").iterdir()) == kept
+
+
+async def test_deleting_a_shared_document_counts_the_shared_bucket(upload_root, registry, extracted):
+    row = _pdf_row(scope="shared", owner="admin")
+    _sidecars(extracted, "shared", row.file_hash)
+    registry.get_file.return_value = row
+    registry.count_hash_in_bucket.return_value = 0
+
+    await upload_service.delete(file_id=row.id, user_id="admin", role="admin")
+
+    # ! Shared content belongs to no user, so its count must not be the uploading admin's
+    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, owner_user_id=None)
+    assert list((extracted / "shared").iterdir()) == []
+
+
+async def test_replacing_a_document_releases_the_old_extraction(upload_root, registry, extracted, make_upload):
+    old = "b" * 64
+    _sidecars(extracted, "u1", old)
+    registry.get_by_name.return_value = SimpleNamespace(filename="g.pdf", file_hash=old)
+    registry.count_hash_in_bucket.return_value = 0
+
+    await upload_service.store(
+        scope="global", user_id="u1", role="user", upload=make_upload(b"%PDF-new", filename="g.pdf")
+    )
+
+    assert list((extracted / "u1").iterdir()) == []
 
 
 # * sweep_stale_temps: startup cleanup of abandoned .upload-* temps

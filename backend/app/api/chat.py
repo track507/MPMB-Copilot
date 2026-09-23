@@ -21,13 +21,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import Principal, current_principal
+from app.composition import get_rag_engine
 from app.config import config
-from app.core.rag_engine import rag_engine
 from app.logger import get_logger
 from app.model.orm import Message
 from app.model.schemas.chat import ChatRequest, ChatResponse, ChatStreamChunk
 from app.services.db import db, session_service, upload_registry
 from app.services.title_generator import generate_session_title
+from app.services.uploads.manifest import build_upload_manifest
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -183,6 +184,17 @@ def _build_metadata(
     return meta
 
 
+async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
+    """
+    The per-turn inventory of uploaded files, assembled at the edge and passed into the agent loop
+
+    Empty when tool use is off, because naming files the model has no tool to open only invites a guess
+    """
+    if not settings.enable_tool_use:
+        return ""
+    return await build_upload_manifest(session_id=session_uuid, user_id=user_id)
+
+
 # * POST /chat - complete response
 @router.post(
     "/chat",
@@ -213,7 +225,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             )
 
         try:
-            rag_response = await rag_engine.generate(
+            rag_response = await get_rag_engine().generate(
                 query=request.message,
                 conversation_history=history,
                 user_id=principal.user_id,
@@ -223,6 +235,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
                 model=request.model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
+                upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
             )
         except Exception as gen_error:
             await _save_assistant_message(session_uuid, "", error=str(gen_error))
@@ -296,7 +309,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
             final_event = None
 
             try:
-                async for event in rag_engine.stream(
+                async for event in get_rag_engine().stream(
                     query=request.message,
                     conversation_history=history,
                     user_id=principal.user_id,
@@ -306,6 +319,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                     model=request.model,
                     temperature=request.temperature,
                     max_tokens=request.max_tokens,
+                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
                 ):
                     if event.done:
                         final_event = event

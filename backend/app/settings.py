@@ -49,6 +49,17 @@ _DEFAULT_TIER_BUDGETS: dict[str, dict[str, int]] = {
     "lookup": {"authoritative": 4, "examples": 2},
 }
 
+# * Document extraction knobs, nested so one provider can later own several capability slots without a migration
+_DEFAULT_DOCUMENTS: dict[str, Any] = {
+    # ? Documents a single mpmb_grep call may extract; a repeat call reaches the next batch because the first is cached
+    "grep_extract_budget": 3,
+    # ? Above this raw size grep never extracts opportunistically; an explicit mpmb_read or mpmb_outline must
+    "grep_extract_max_file_bytes": 10_485_760,
+    # ? A 300-page guide extracts to roughly 1-3 MB, so this bounds the pathological case without rejecting real ones
+    "max_extracted_bytes": 8_388_608,
+    "libreoffice_enabled": False,
+}
+
 
 @dataclass
 class Settings:
@@ -76,7 +87,7 @@ class Settings:
     upload_max_files_per_scope: int = 200
 
     # Embedding selection (the model that builds and queries the vector index)
-    # Dimension is derived from the catalog via embedding_dim(), not stored here
+    # ? Dimension is not stored here: the caller resolves it from the embedding catalog
     embedding_provider: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
 
@@ -173,6 +184,9 @@ class Settings:
 
     tool_grep_pattern_max_len: int = 500
     """Reject grep patterns longer than this many characters."""
+
+    documents: dict[str, Any] = field(default_factory=lambda: dict(_DEFAULT_DOCUMENTS))
+    """Document extraction knobs; read them through document_setting(), which fills keys a partial update left out"""
 
     tool_grep_file_timeout_sec: float = 1.0
     """Per-file regex timeout for mpmb_grep (approximate; enforced via elapsed-time check)."""
@@ -318,12 +332,6 @@ class Settings:
         """
         return {f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values() if not f.name.startswith("_")}
 
-    def embedding_dim(self) -> int:
-        """Dimension of the selected embedding model, sourced from the catalog"""
-        from app.core.embedding_catalog import dimension_for
-
-        return dimension_for(self.embedding_provider, self.embedding_model)
-
     def cheap_model_for(self, provider: Optional[str] = None) -> str:
         """Resolve the cheap-model alias for the given (or default) provider."""
         provider = provider or self.default_llm_provider
@@ -334,6 +342,14 @@ class Settings:
         if provider == "ollama":
             return self.ollama_cheap_model or self.default_model
         return self.default_model
+
+    def document_setting(self, key: str) -> Any:
+        """
+        One document extraction knob, falling back to its default
+
+        A PATCH replaces the whole documents dict, so a partial update must not silently zero the keys it omitted
+        """
+        return self.documents.get(key, _DEFAULT_DOCUMENTS[key])
 
     def get_tier_budget(self, intent: str) -> dict[str, int]:
         """Return the tier budget for a given intent.

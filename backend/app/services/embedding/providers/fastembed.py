@@ -3,7 +3,7 @@ from typing import Any
 from fastembed import TextEmbedding
 
 from app.config import config
-from app.core.onnx_device import onnx_providers
+from app.services.onnx_device import onnx_providers
 
 
 class FastEmbedProvider:

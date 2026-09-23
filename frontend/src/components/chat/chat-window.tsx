@@ -22,6 +22,7 @@ const TOOL_PILL_TEXT: Record<string, string> = {
 	mpmb_read: "Reading source file...",
 	mpmb_grep: "Searching for a pattern...",
 	mpmb_function: "Looking up a function...",
+	mpmb_outline: "Reading the document outline...",
 	mpmb_validate: "Validating the script...",
 };
 const DEFAULT_PILL_TEXT = "Verifying code...";

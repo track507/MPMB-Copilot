@@ -39,7 +39,7 @@ def _wire_chat(monkeypatch, user_msg_id):
 
     monkeypatch.setattr("app.api.chat.session_service.get_conversation_history", fake_history)
     monkeypatch.setattr("app.api.chat.session_service.add_message", fake_add_message)
-    monkeypatch.setattr("app.api.chat.rag_engine.generate", fake_generate)
+    monkeypatch.setattr("app.api.chat.get_rag_engine", lambda: SimpleNamespace(generate=fake_generate))
 
 
 def test_chat_links_attachments_to_the_user_message(chat_client, monkeypatch):

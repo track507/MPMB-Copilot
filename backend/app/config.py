@@ -138,6 +138,7 @@ class Config(BaseSettings):
     # Other data directories
     adobe_docs_dir: str = "./data/adobe_docs"
     index_cache_dir: str = "./data/index_cache"
+    extracted_dir: str = "./data/extracted"
     upload_dir: str = "./data/uploads"
 
     # ! FastEmbed model cache: never the OS temp dir (Windows purges it, silently breaking retrieval)

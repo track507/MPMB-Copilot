@@ -174,7 +174,7 @@ function installPythonDependencies() {
 }
 
 function gpuProviderLabel() {
-	const probe = "from app.core.onnx_device import detect_gpu_provider; d = detect_gpu_provider(); print(d[1] if d else '')";
+	const probe = "from app.services.onnx_device import detect_gpu_provider; d = detect_gpu_provider(); print(d[1] if d else '')";
 	const result = capture("uv", ["--cache-dir", UV_CACHE, "run", "--no-sync", "--project", BACKEND_DIR, "python", "-c", probe]);
 
 	if (result.status !== 0) return null;

@@ -13,6 +13,7 @@ from uuid import UUID
 from app.core.agent import generate as agent_generate
 from app.logger import get_logger
 from app.services.db.session_service import session_service
+from app.services.llm.providers import build_model
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -66,6 +67,7 @@ async def generate_session_title(session_id: UUID, user_message: str, user_id: s
             model=settings.cheap_model_for(provider),
             temperature=0.3,
             max_tokens=32,
+            model_factory=build_model,
         )
         title = _sanitize(response.content)
         if not title:

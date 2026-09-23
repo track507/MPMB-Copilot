@@ -5,7 +5,7 @@ Provides endpoints for checking status of background tasks (indexing, etc.)
 
 from fastapi import APIRouter, HTTPException
 
-from app.model import TaskListResponse, TaskStatusResponse
+from app.model.schemas.task import TaskListResponse, TaskStatusResponse
 from app.services.task_manager import TaskStatus, task_manager
 
 router = APIRouter()

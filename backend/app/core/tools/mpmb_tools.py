@@ -1,8 +1,10 @@
-"""The four read-only MPMB source tools, plus the static validator
+"""The five read-only MPMB source tools, plus the static validator
 
 `mpmb_search` queries the indexed corpus via the retriever; the other
-three (`mpmb_read`, `mpmb_grep`, `mpmb_function`) read the cloned
-source trees through the `source_paths` access policy.
+four (`mpmb_read`, `mpmb_grep`, `mpmb_function`, `mpmb_outline`) read the
+cloned source trees and uploads through the `source_paths` access policy.
+Documents (.pdf, .csv, .tsv) are read as their extracted text, so a line
+number means the same thing to outline, grep and read.
 
 `Deps` carries per-request state (`session_id`, `edition`) that the
 LLM cannot forge. Every tool takes `ctx: RunContext[Deps]`.
@@ -20,14 +22,18 @@ from typing import Any, Literal, Optional
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from app.core.retriever import Retriever
 from app.core.tools.source_paths import (
     _build_default_roots,
+    cache_scope_for,
     iter_searchable_files,
     missing_root_error,
     resolve_safe_path,
 )
 from app.core.tools.validator_client import ValidatorResult, run_validator
 from app.logger import get_logger
+from app.services import documents
+from app.services.documents import CachedDocument, CacheScope, DocumentError
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -53,6 +59,8 @@ class Deps:
     session_id: str
     edition: str
     user_id: str = "default"
+    # ! Retrieval arrives on the context, so this module never imports the retriever and never chooses a store
+    retriever: Optional[Retriever] = None
     # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
     # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run
@@ -129,10 +137,24 @@ def _mpmb_grep_impl(
     matches: list[str] = []
     max_matches = settings.tool_grep_max_matches
     total_matches = 0
+    extraction = _GrepExtraction(
+        budget=int(settings.document_setting("grep_extract_budget")),
+        max_raw_bytes=int(settings.document_setting("grep_extract_max_file_bytes")),
+    )
+    scope: Optional[CacheScope] = None
 
     for file_path, rel in iter_searchable_files(root_dir, path_glob or "**/*"):
+        read_path = file_path
+        if documents.is_extractable(file_path.suffix):
+            if scope is None:
+                scope = cache_scope_for(root, deps)
+            document = extraction.admit(file_path, rel, scope)
+            if document is None:
+                continue
+            read_path = document.text_path
+
         try:
-            text = file_path.read_text(encoding="utf-8", errors="replace")
+            text = read_path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
 
@@ -143,27 +165,141 @@ def _mpmb_grep_impl(
             if regex.search(line):
                 total_matches += 1
                 if len(matches) < max_matches:
+                    # ! Always the original path, never the sidecar, so the model can pass it straight to mpmb_read
                     matches.append(f"{rel.as_posix()}:{lineno}: {line.rstrip()}")
 
+    notes = extraction.notes()
     if not matches:
+        if extraction.incomplete:
+            # ! Some documents were not searched, so "the pattern does not occur" would be a false negative
+            return "\n".join([f'No matches yet for pattern "{pattern}" under {root}.', *notes])
         # ? Zero matches is a valid answer, not a failure - an [error] prefix would tell the model not to trust the result and paint an error pill
-        return (
-            f'No matches for pattern "{pattern}" under {root}. '
-            "The pattern does not occur in this source tree; try a broader pattern or a different root."
+        return "\n".join(
+            [
+                f'No matches for pattern "{pattern}" under {root}. '
+                "The pattern does not occur in this source tree; try a broader pattern or a different root.",
+                *notes,
+            ]
         )
 
     body = "\n".join(matches)
     if total_matches > max_matches:
         body += f"\n[truncated: showing {max_matches} of {total_matches} matches]"
+    if notes:
+        body += "\n" + "\n".join(notes)
     return body
 
 
+@dataclass
+class _GrepExtraction:
+    """
+    Per-call bookkeeping for documents grep meets that are not extracted yet
+
+    Extracts the first N uncached documents in sorted order, so a repeat call finds those cached and reaches the next N
+    """
+
+    budget: int
+    max_raw_bytes: int
+    extracted: int = 0
+    deferred: int = 0
+    oversized: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+
+    @property
+    def incomplete(self) -> bool:
+        return bool(self.deferred or self.oversized or self.failed)
+
+    def admit(self, file_path: Path, rel: Path, scope: CacheScope) -> Optional[CachedDocument]:
+        """The document's cached extraction, extracting it within budget, or None when grep must skip it"""
+        cached = documents.lookup(file_path, scope)
+        if cached is not None:
+            return cached
+        try:
+            too_big = file_path.stat().st_size > self.max_raw_bytes
+        except OSError:
+            return None
+        if too_big:
+            self.oversized.append(rel.as_posix())
+            return None
+        if self.extracted >= self.budget:
+            self.deferred += 1
+            return None
+        try:
+            document = documents.ensure_extracted(file_path, scope)
+        except DocumentError:
+            self.failed.append(rel.as_posix())
+            return None
+        self.extracted += 1
+        return document
+
+    def notes(self) -> list[str]:
+        lines: list[str] = []
+        if self.deferred:
+            total = self.extracted + self.deferred
+            lines.append(
+                f"[extracted {self.extracted} of {total} documents this call ({self.deferred} remaining); "
+                "narrow with path_glob, or re-run to continue]"
+            )
+        if self.oversized:
+            lines.append(
+                f"[not searched, too large to extract during grep: {', '.join(self.oversized)} - "
+                "open each with mpmb_outline or mpmb_read first, then grep again]"
+            )
+        if self.failed:
+            lines.append(f"[not searched, could not extract: {', '.join(self.failed)} - mpmb_read shows why]")
+        return lines
+
+
+def _mpmb_outline_impl(
+    roots: dict[str, Path],
+    deps: Deps,
+    root: str,
+    path: str,
+) -> str:
+    # ? No size cap: an outline stays small even when the full text is too large to read in one call
+    resolution = resolve_safe_path(root, path, deps, roots=roots, enforce_size_cap=False)
+    if resolution.error:
+        return resolution.error
+    document = resolution.document
+    if document is None:
+        readable = ", ".join(sorted(documents.EXTRACTABLE_EXTENSIONS))
+        return f"[error] mpmb_outline reads documents ({readable}); {path} is plain text, so read it with mpmb_read"
+
+    name = Path(path).name
+    summary = document.summary
+    lines: list[str] = []
+
+    if "pages" in summary:
+        lines.append(f"{name}: {summary['pages']} pages, {len(document.outline)} outline entries")
+        if document.pages_without_text:
+            pages = ", ".join(str(p) for p in document.pages_without_text)
+            lines.append(f"[no text layer on pages {pages}; OCR is not available yet, so they read as empty]")
+        if not document.outline:
+            lines.append("This PDF has no bookmarks. Each page starts at a [page N] line, so mpmb_grep for one to jump")
+    else:
+        first_row = " | ".join(str(cell) for cell in summary.get("first_row", []))
+        lines.append(f"{name}: {summary.get('rows', 0)} rows, {summary.get('columns', 0)} columns")
+        if first_row:
+            lines.append(f"first row: {first_row}")
+        lines.append("This format has no navigable divisions: mpmb_grep for a value, then mpmb_read a line range")
+
+    # ? Line numbers are what mpmb_read takes, so every entry is directly actionable
+    entries = [f"L{entry.line}: {'  ' * entry.level}{entry.label}" for entry in document.outline]
+    max_lines = settings.tool_read_max_lines
+    if len(entries) > max_lines:
+        lines.extend(entries[:max_lines])
+        lines.append(f"[truncated: showing {max_lines} of {len(entries)} outline entries]")
+    else:
+        lines.extend(entries)
+    return "\n".join(lines)
+
+
 async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = None) -> str:
-    # ? Lazy import keeps the tool module importable without the retrieval stack
-    from app.core.retriever import retriever
+    if deps.retriever is None:
+        return "[error] retrieval unavailable: no retriever is configured for this request."
 
     try:
-        result = await retriever.retrieve(query=query, edition=edition)
+        result = await deps.retriever.retrieve(query=query, edition=edition)
     except Exception as e:
         deps.trace.append({"tool": "mpmb_search", "query": query, "edition": edition, "chunks": []})
         return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."
@@ -311,7 +447,7 @@ def _find_block_end(lines: list[str], start: int) -> int:
 
 # * PydanticAI toolset factory
 def build_mpmb_toolset() -> FunctionToolset[Deps]:
-    """Return a `FunctionToolset` bound to `Deps` with the three tools."""
+    """Return a `FunctionToolset` bound to `Deps` with every MPMB tool"""
     toolset: FunctionToolset[Deps] = FunctionToolset()
 
     @toolset.tool
@@ -346,10 +482,28 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
         Use when you need exact code from a known path, typically after mpmb_grep or mpmb_function located the file `path` is relative to `root`
         Returns the text, ending with `[truncated: ...]` when capped; `[error] ...` means the call failed - try a different path or tool
         The upload roots `./data/uploads/session/`, `./data/uploads/global/`, and `./data/uploads/shared/` are valid `root` values too
+        A .pdf, .csv or .tsv reads as extracted text with `[page N]` lines; for a long one, pass the line range mpmb_outline gave you
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_read root={root} path={path} range={start_line}-{end_line}")
         return _mpmb_read_impl(roots, ctx.deps, root, path, start_line, end_line)
+
+    @toolset.tool
+    def mpmb_outline(
+        ctx: RunContext[Deps],
+        root: SourceRoot,
+        path: str,
+    ) -> str:
+        """
+        Show a document's outline so a long PDF can be navigated without reading all of it
+
+        Use first on an uploaded .pdf, .csv or .tsv: each entry is `L<line>: <section>`, and that line number is what mpmb_read takes
+        Then mpmb_grep to locate a term and mpmb_read a line range for the passage
+        Also lists pages with no text layer, which read as empty because OCR is not available yet
+        """
+        roots = _build_default_roots(ctx.deps)
+        logger.info(f"tool.mpmb_outline root={root} path={path}")
+        return _mpmb_outline_impl(roots, ctx.deps, root, path)
 
     @toolset.tool
     def mpmb_grep(
@@ -364,6 +518,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
         Use to find symbols, attributes, or conventions across files
         `path_glob` narrows the file set (e.g. `**/*.js`)
         A "No matches" response is a valid result meaning the pattern is absent - do not retry the identical call
+        "No matches yet" is different: some documents were not searched, and the note says how to reach them
         The upload roots `./data/uploads/session/`, `./data/uploads/global/`, and `./data/uploads/shared/` are valid `root` values too
         """
         roots = _build_default_roots(ctx.deps)

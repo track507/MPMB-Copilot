@@ -37,7 +37,7 @@ GPU_EMBED_BATCH_SIZE = 32
 
 
 def _embed_batch_size() -> int:
-    from app.core.onnx_device import effective_device
+    from app.services.onnx_device import effective_device
 
     return GPU_EMBED_BATCH_SIZE if effective_device() == "gpu" else EMBED_BATCH_SIZE
 

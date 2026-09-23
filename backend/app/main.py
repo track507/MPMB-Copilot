@@ -18,12 +18,13 @@ from app.api import (
 )
 from app.api import uploads as uploads_api
 from app.api.deps import current_principal, is_loopback, principal_or_service
+from app.api.problem import register_problem_handlers
 from app.config import config
-from app.core.problem import register_problem_handlers
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
-from app.services import get_vector_store, task_manager
 from app.services.db import auth_service, db
+from app.services.task_manager import task_manager
 from app.services.uploads import upload_service
+from app.services.vector import get_vector_store
 
 # Initialize structured logging before anything else
 configure_logging()
@@ -97,7 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         catalog_path=catalog_health.catalog_path,
     )
     # Warm the model catalog cache so the first settings visit is a cache hit, not two provider round trips
-    from app.core.model_catalog import get_model_catalog
+    from app.services.llm.catalog import get_model_catalog
 
     def _warmup_done(task: asyncio.Task[Any]) -> None:
         if not task.cancelled() and task.exception() is not None:

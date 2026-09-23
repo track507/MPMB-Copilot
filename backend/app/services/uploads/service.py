@@ -18,7 +18,9 @@ from fastapi import UploadFile
 from app.config import config
 from app.logger import get_logger
 from app.model.orm import File
+from app.services import documents
 from app.services.db import upload_registry
+from app.services.documents import CacheScope
 from app.services.uploads.errors import UploadError
 from app.services.uploads.sanitize import sanitize_filename
 from app.settings import settings
@@ -145,6 +147,11 @@ class UploadService:
             # ! No orphans: kill the orphans
             final_path.unlink(missing_ok=True)
             raise
+        if existing is not None and existing.file_hash != file_hash:
+            # ? The replaced bytes are gone from disk, so their extracted text must not outlive them
+            await self._release_extraction(
+                filename=existing.filename, scope=scope, owner_user_id=user_id, file_hash=existing.file_hash
+            )
         # * Extension point: post-store steps (metadata JSON, indexing) future state
         return row
 
@@ -188,6 +195,27 @@ class UploadService:
         self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=True)
         (Path(config.upload_dir) / row.file_path).unlink(missing_ok=True)
         await upload_registry.delete_file(file_id)
+        await self._release_extraction(
+            filename=row.filename, scope=row.scope, owner_user_id=row.owner_user_id, file_hash=row.file_hash
+        )
+
+    async def _release_extraction(self, *, filename: str, scope: str, owner_user_id: str, file_hash: str) -> None:
+        """
+        Delete a document's extracted text once no upload in its cache bucket still holds the same bytes
+
+        Runs after the row is gone, so the count sees the post-delete world; a failure here leaves work for the sweep
+        """
+        extension = Path(filename).suffix
+        if not documents.is_extractable(extension):
+            return
+        owner = None if scope == "shared" else owner_user_id
+        if await upload_registry.count_hash_in_bucket(file_hash=file_hash, owner_user_id=owner):
+            return
+        cache_scope = CacheScope.shared() if owner is None else CacheScope.for_user(owner)
+        try:
+            documents.release(file_hash, extension, cache_scope)
+        except (OSError, ValueError) as e:
+            logger.warning(f"could not release extracted text for {filename}: {e}")
 
     def sweep_stale_temps(self) -> int:
         """Delete .upload-* temps older than 24h; called once at startup."""

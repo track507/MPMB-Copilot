@@ -26,24 +26,24 @@ env:
 jobs:
     dependency-review:
         name: Dependency Review
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         timeout-minutes: 10
         if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
         continue-on-error: true
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Review dependency changes
-              uses: actions/dependency-review-action@v5
+              uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
               with:
                   fail-on-severity: high
                   comment-summary-in-pr: always
 
     codeql:
         name: CodeQL
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         timeout-minutes: 30
         continue-on-error: true
         if: vars.ENABLE_CODEQL == 'true'
@@ -55,45 +55,45 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Initialize CodeQL
-              uses: github/codeql-action/init@v4
+              uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
               with:
                   languages: ${{ matrix.language }}
                   queries: security-extended,security-and-quality
 
             - name: Perform CodeQL analysis
-              uses: github/codeql-action/analyze@v4
+              uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
               with:
                   category: /language:${{ matrix.language }}
 
     vulnerability-audit:
         name: Dependency and Filesystem Audit
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         timeout-minutes: 30
         continue-on-error: true
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v6
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version-file: ".nvmrc"
                   cache: pnpm
 
             - name: Setup Python
-              uses: actions/setup-python@v6
+              uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
               with:
                   python-version: "3.13"
 
             - name: Setup uv
-              uses: astral-sh/setup-uv@v8.2.0
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
               with:
                   enable-cache: true
                   cache-dependency-glob: backend/uv.lock
@@ -104,17 +104,36 @@ jobs:
             - name: Create security report directory
               run: mkdir -p security-reports
 
+            # ? Both audits exit non-zero when they find something, which is not a reason to fail the job
+            # ! continue-on-error, never `|| true`: a masked crash looks identical to a clean audit
             - name: pnpm audit
-              run: pnpm audit --audit-level moderate --json > security-reports/npm-audit.json || true
+              id: pnpm_audit
+              continue-on-error: true
+              run: pnpm audit --audit-level moderate --json > security-reports/npm-audit.json
 
+            # ! --no-emit-project drops the `-e .` line; pip cannot install the repo root, which has no pyproject.toml
             - name: Export backend requirements
-              run: uv export --project backend --all-groups --all-extras --frozen --format requirements.txt --no-hashes --output-file security-reports/backend-requirements.txt
+              run: uv export --project backend --all-groups --all-extras --frozen --format requirements.txt --no-hashes --no-emit-project --output-file security-reports/backend-requirements.txt
 
             - name: pip-audit
-              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json || true
+              id: pip_audit
+              continue-on-error: true
+              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json
+
+            # ! A report that exists means the tool ran; no report means it could not, and that must fail loudly
+            - name: Assert the audits actually ran
+              run: |
+                  fail=0
+                  [[ -s security-reports/npm-audit.json ]] || { echo "::error::pnpm audit produced no report"; fail=1; }
+                  [[ -s security-reports/pip-audit.json ]] || { echo "::error::pip-audit produced no report"; fail=1; }
+                  exit "$fail"
+
+            - name: Summarize audit findings
+              if: always()
+              run: node scripts/audit-summary.mjs >> "$GITHUB_STEP_SUMMARY"
 
             - name: Trivy filesystem scan
-              uses: aquasecurity/trivy-action@v0.35.0
+              uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
               continue-on-error: true
               with:
                   scan-type: fs
@@ -126,14 +145,14 @@ jobs:
                   exit-code: "0"
 
             - name: Upload Trivy SARIF to code scanning
-              uses: github/codeql-action/upload-sarif@v4
+              uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
               if: vars.ENABLE_CODE_SCANNING_UPLOAD == 'true'
               with:
                   sarif_file: security-reports/trivy-fs.sarif
                   category: trivy-fs
 
             - name: Upload security reports
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: security-reports
                   path: security-reports/
@@ -142,7 +161,7 @@ jobs:
 
     scorecard:
         name: OpenSSF Scorecard
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         timeout-minutes: 20
         continue-on-error: true
         if: github.event_name != 'pull_request' && github.event.repository.private == false
@@ -153,7 +172,7 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   persist-credentials: false
 
@@ -161,21 +180,21 @@ jobs:
               run: mkdir -p security-reports
 
             - name: Run Scorecard
-              uses: ossf/scorecard-action@v2.4.3
+              uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
               with:
                   results_file: security-reports/scorecard.sarif
                   results_format: sarif
                   publish_results: false
 
             - name: Upload Scorecard SARIF
-              uses: github/codeql-action/upload-sarif@v4
+              uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
               if: vars.ENABLE_CODE_SCANNING_UPLOAD == 'true'
               with:
                   sarif_file: security-reports/scorecard.sarif
                   category: openssf-scorecard
 
             - name: Upload Scorecard report
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: scorecard-report
                   path: security-reports/scorecard.sarif

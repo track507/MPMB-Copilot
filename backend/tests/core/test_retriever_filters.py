@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.retriever import Retriever
+from tests.core.builders import build_retriever
 
 
 def _chunk(chunk_id: str, tier: str) -> dict:
@@ -10,14 +10,13 @@ def _chunk(chunk_id: str, tier: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_dual_search_drops_object_type_from_authoritative_leg(monkeypatch):
+async def test_dual_search_drops_object_type_from_authoritative_leg():
     """Authoritative chunks carry no object_type tag; filtering on it there
     guarantees zero results."""
     store = MagicMock()
     store.hybrid_search = AsyncMock(return_value=[_chunk("a1", "authoritative")])
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
-    await Retriever()._dual_search(
+    await build_retriever(store=store)._dual_search(
         query="RaceList attributes",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
@@ -32,7 +31,7 @@ async def test_dual_search_drops_object_type_from_authoritative_leg(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_dual_search_examples_fallback_drops_object_type_when_empty(monkeypatch):
+async def test_dual_search_examples_fallback_drops_object_type_when_empty():
     """Thin object_type+edition combinations degrade to broader examples, not zero."""
     store = MagicMock()
     store.hybrid_search = AsyncMock(
@@ -42,9 +41,8 @@ async def test_dual_search_examples_fallback_drops_object_type_when_empty(monkey
             [_chunk("e1", "official_example")],  # relaxed retry
         ]
     )
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
-    _, examples = await Retriever()._dual_search(
+    _, examples = await build_retriever(store=store)._dual_search(
         query="RaceList attributes",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
@@ -59,7 +57,7 @@ async def test_dual_search_examples_fallback_drops_object_type_when_empty(monkey
 
 
 @pytest.mark.asyncio
-async def test_dual_search_no_fallback_when_examples_found(monkeypatch):
+async def test_dual_search_no_fallback_when_examples_found():
     store = MagicMock()
     store.hybrid_search = AsyncMock(
         side_effect=[
@@ -67,9 +65,8 @@ async def test_dual_search_no_fallback_when_examples_found(monkeypatch):
             [_chunk("e1", "official_example")],
         ]
     )
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
-    auth, examples = await Retriever()._dual_search(
+    auth, examples = await build_retriever(store=store)._dual_search(
         query="q",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014", "object_type": "SpellsList"},
@@ -81,7 +78,7 @@ async def test_dual_search_no_fallback_when_examples_found(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_single_search_fallback_drops_object_type_when_empty(monkeypatch):
+async def test_single_search_fallback_drops_object_type_when_empty():
     store = MagicMock()
     store.hybrid_search = AsyncMock(
         side_effect=[
@@ -89,9 +86,8 @@ async def test_single_search_fallback_drops_object_type_when_empty(monkeypatch):
             [_chunk("a1", "authoritative"), _chunk("e1", "community_example")],
         ]
     )
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
-    auth, examples = await Retriever()._single_search(
+    auth, examples = await build_retriever(store=store)._single_search(
         query="q",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
