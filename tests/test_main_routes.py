@@ -67,6 +67,8 @@ async def test_health_response_model():
     print("Running health response model test")
     print("=" * 40)
     """Test health response contains all expected fields"""
+    from importlib.metadata import version as package_version
+
     from app.api.health import health_check
 
     response = await health_check()
@@ -74,6 +76,6 @@ async def test_health_response_model():
 
     assert response.status in ["healthy", "degraded", "unhealthy"]
     assert response.environment in ["development", "production", "testing"]
-    assert response.version == "0.1.0"
+    assert response.version == package_version("mpmb-copilot-backend")
     assert response.timestamp is not None
     assert isinstance(response.services, dict)
