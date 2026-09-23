@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from app.core.problem import PROBLEM_MEDIA_TYPE, ProblemError, register_problem_handlers
+from app.api.problem import PROBLEM_MEDIA_TYPE, ProblemError, register_problem_handlers
 from app.services.uploads.errors import UploadError
 
 

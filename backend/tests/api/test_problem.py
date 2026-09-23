@@ -1,6 +1,6 @@
 import json
 
-from app.core.problem import PROBLEM_MEDIA_TYPE, ProblemError, problem_response, type_for
+from app.api.problem import PROBLEM_MEDIA_TYPE, ProblemError, problem_response, type_for
 
 
 def test_problem_response_shape_and_media_type():

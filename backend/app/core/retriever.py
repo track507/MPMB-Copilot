@@ -33,12 +33,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from app.core.intent import IntentResult, intent_classifier
+from app.core.intent import IntentClassifier, IntentResult
 from app.core.query_analysis import QueryAnalysis, analyze_query
 from app.logger import get_logger
-from app.services.embedding import embedding_service
-from app.services.rerank import rerank_service
-from app.services.vector import get_vector_store
+from app.services.embedding.protocol import QueryEmbedder
+from app.services.rerank.protocol import Reranker
+from app.services.vector.protocol import VectorStore
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -96,6 +96,19 @@ class Retriever:
     returns structured, deduplicated results grouped by source tier.
     """
 
+    def __init__(
+        self,
+        *,
+        store: VectorStore,
+        embedder: QueryEmbedder,
+        reranker: Reranker,
+        classifier: IntentClassifier,
+    ) -> None:
+        self._store = store
+        self._embedder = embedder
+        self._reranker = reranker
+        self._classifier = classifier
+
     async def retrieve(
         self,
         query: str,
@@ -122,7 +135,7 @@ class Retriever:
         analysis = analyze_query(query)
 
         # 3. Classify intent (reuses the query embedding - zero extra cost)
-        intent = intent_classifier.classify(
+        intent = self._classifier.classify(
             query=query,
             query_embedding=query_embedding,
             intent_override=intent_override,
@@ -203,7 +216,7 @@ class Retriever:
 
         Guarantees both tiers are represented. When reranking is enabled, each tier fetches a wider candidate pool and is reranked down to its budget
         """
-        store = get_vector_store()
+        store = self._store
 
         auth_limit = budget.get("authoritative", 3)
         ex_limit = budget.get("examples", 5)
@@ -273,7 +286,7 @@ class Retriever:
 
         When reranking is enabled, fetch a wider pool and rerank each tier split down to its budget
         """
-        store = get_vector_store()
+        store = self._store
         auth_limit = budget.get("authoritative", 3)
         ex_limit = budget.get("examples", 5)
         total_limit = auth_limit + ex_limit
@@ -316,14 +329,14 @@ class Retriever:
     # * Helpers
     def _embed_query(self, query: str) -> list[float]:
         """Embed the query text using the configured embedding service (applies any query prefix)."""
-        return embedding_service.embed_query(query)
+        return self._embedder.embed_query(query)
 
     def _rerank_tier(self, query: str, candidates: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
         """Rerank one tier's candidate pool down to its budget, timed for the debug log."""
         if not candidates:
             return candidates
         t0 = time.perf_counter()
-        reranked = rerank_service.rerank(query, candidates, top_k=top_k)
+        reranked = self._reranker.rerank(query, candidates, top_k=top_k)
         logger.debug(f"reranked {len(candidates)} -> {len(reranked)} in {(time.perf_counter() - t0) * 1000:.0f}ms")
         return reranked
 
@@ -392,4 +405,3 @@ class Retriever:
 
 
 # * Global instance
-retriever = Retriever()

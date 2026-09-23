@@ -6,7 +6,7 @@ Windows resets a GPU whose dispatch outruns the TDR watchdog; onnxruntime surfac
 
 import pytest
 
-from app.core import onnx_device
+from app.services import onnx_device
 from app.services.embedding.service import EmbeddingService
 from app.settings import settings
 

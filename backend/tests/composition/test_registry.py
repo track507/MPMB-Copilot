@@ -1,7 +1,7 @@
 import pytest
 
-from app.core import registry
-from app.core.registry import Capability, CapabilitySpec
+from app.composition import registry
+from app.composition.registry import Capability, CapabilitySpec
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ async def test_serialize_all_includes_builtins(fresh_registry, monkeypatch):
     async def _fake_models():
         return {"anthropic": [{"id": "claude", "label": "Claude", "effort": []}], "openai": [], "ollama": []}
 
-    from app.core import model_catalog
+    from app.services.llm import catalog as model_catalog
 
     monkeypatch.setattr(model_catalog, "get_model_catalog", _fake_models)
 
@@ -45,7 +45,7 @@ async def test_serialize_all_includes_builtins(fresh_registry, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_serialize_all_current_reflects_settings(fresh_registry, monkeypatch):
-    from app.core import model_catalog
+    from app.services.llm import catalog as model_catalog
     from app.settings import settings
 
     async def _fake_models():
@@ -61,7 +61,8 @@ async def test_serialize_all_current_reflects_settings(fresh_registry, monkeypat
 
 
 async def test_compute_capability_reports_gpu_ready(monkeypatch):
-    from app.core import onnx_device, registry
+    from app.composition import registry
+    from app.services import onnx_device
 
     monkeypatch.setattr(onnx_device, "detect_gpu_provider", lambda: ("DmlExecutionProvider", "DirectML"))
     envelope = await registry.serialize_all()
@@ -73,7 +74,8 @@ async def test_compute_capability_reports_gpu_ready(monkeypatch):
 
 
 async def test_compute_capability_reports_gpu_installable(monkeypatch):
-    from app.core import onnx_device, registry
+    from app.composition import registry
+    from app.services import onnx_device
 
     monkeypatch.setattr(onnx_device, "detect_gpu_provider", lambda: None)
     envelope = await registry.serialize_all()

@@ -56,16 +56,6 @@ def test_settings_update_schema_accepts_cheap_model_fields():
     assert updates == {"anthropic_cheap_model": "claude-haiku-pinned"}
 
 
-def test_embedding_dim_derives_from_catalog():
-    s = Settings(embedding_provider="fastembed", embedding_model="intfloat/multilingual-e5-large")
-    assert s.embedding_dim() == 1024
-
-
-def test_embedding_dim_defaults_for_unknown_model():
-    s = Settings(embedding_provider="fastembed", embedding_model="nope")
-    assert s.embedding_dim() == 384
-
-
 def test_from_config_loads_relative_settings_file_from_repo_root(monkeypatch, tmp_path):
     import app.settings as settings_module
 
@@ -119,3 +109,18 @@ def test_settings_update_schema_validates_inference_device():
     assert SettingsUpdate(inference_device="gpu").model_dump(exclude_none=True) == {"inference_device": "gpu"}
     with pytest.raises(ValidationError):
         SettingsUpdate(inference_device="tpu")
+
+
+def test_a_partial_documents_update_keeps_the_other_defaults():
+    # ! A PATCH replaces the whole documents dict, so an omitted knob must fall back rather than vanish
+    s = Settings()
+    s._apply({"documents": {"grep_extract_budget": 7}})
+    assert s.document_setting("grep_extract_budget") == 7
+    assert s.document_setting("max_extracted_bytes") == 8_388_608
+
+
+def test_settings_update_schema_accepts_documents():
+    from app.api.settings import SettingsUpdate
+
+    body = SettingsUpdate(documents={"grep_extract_budget": 5, "libreoffice_enabled": False})
+    assert body.model_dump(exclude_none=True) == {"documents": {"grep_extract_budget": 5, "libreoffice_enabled": False}}

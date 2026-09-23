@@ -4,9 +4,17 @@ from app.services.uploads.errors import UploadError
 from app.services.uploads.sanitize import sanitize_filename
 
 
-@pytest.mark.parametrize("name", ["spells.js", "notes.md", "a.PDF", "config.yaml", "data.json"])
+@pytest.mark.parametrize("name", ["spells.js", "notes.md", "a.PDF", "config.yaml", "data.json", "gear.csv", "loot.tsv"])
 def test_accepts_valid_names(name):
     assert sanitize_filename(name) == name
+
+
+@pytest.mark.parametrize("name", ["guide.docx", "sheet.xlsx", "old.doc", "table.xls", "notes.rtf"])
+def test_refuses_documents_no_adapter_can_read_yet(name):
+    # ! Storing a format nothing reads leaves an unreadable file, so these wait for their adapters
+    with pytest.raises(UploadError) as exc:
+        sanitize_filename(name)
+    assert exc.value.code == "extension_not_allowed"
 
 
 @pytest.mark.parametrize(

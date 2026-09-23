@@ -4,7 +4,7 @@ Device detection: provider-based, ordered, honest about absent runtimes
 
 import onnxruntime
 
-from app.core.onnx_device import detect_gpu_provider, onnx_providers
+from app.services.onnx_device import detect_gpu_provider, onnx_providers
 from app.settings import settings
 
 DML = "DmlExecutionProvider"

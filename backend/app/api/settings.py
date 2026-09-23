@@ -40,6 +40,7 @@ class SettingsUpdate(BaseModel):
     intent_confidence_threshold: float | None = None
     intent_confidence_margin: float | None = None
     tier_budgets: dict[str, dict[str, int]] | None = None
+    documents: dict[str, int | bool] | None = None
     rerank_enabled: bool | None = None
     rerank_provider: str | None = None
     rerank_model: str | None = None
@@ -79,7 +80,7 @@ async def get_capabilities(_: Principal = Depends(require_admin)) -> dict[str, A
     Returns `{capability: {label, kind, entries, current}}` for generation, embedding, rerank, and vector store
     Admin-gated (store/provider config is admin-only); the gate is a no-op single-admin today
     """
-    from app.core.registry import serialize_all
+    from app.composition.registry import serialize_all
 
     return await serialize_all()
 

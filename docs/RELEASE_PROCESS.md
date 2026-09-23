@@ -67,7 +67,7 @@ Code scanning upload is disabled by default to keep private/non-GHAS repositorie
 
 Without those variables, the workflow still runs pnpm, Python, Trivy, and Scorecard-style checks where possible, but it does not call GitHub's Dependency Review or SARIF/code-scanning APIs.
 
-Python typechecking (`ty`, which replaced mypy on 2026-09-19) currently reports existing backend typing debt. CI therefore runs `pnpm run check` as the required quality gate, while `pnpm run check:full` remains available locally. Set `ENABLE_TYPECHECK=true` later after the backend typing debt is paid down - at roughly a second per run, `typecheck:py` is cheap enough to join the gate as soon as it is green.
+Python typechecking (`ty`, which replaced mypy on 2026-09-19) reached zero diagnostics on 2026-09-20 and now runs inside `pnpm run check`, the required quality gate - so both backend (`ty`) and frontend (`tsc`) typechecking gate every push and every CI run. The separate `typecheck` job behind `ENABLE_TYPECHECK` predates that and is redundant; it stays `continue-on-error` and can be removed. `pnpm run check:full` is also now a duplicate of `check`.
 
 The standalone analyzer smoke test only runs when `scripts/analyze/analyze-repos.py` and `scripts/analyze/src/mpmb_repo_analyzer/__main__.py` are present in the checked-out commit. This lets CI stay green before the analyzer tool is committed.
 

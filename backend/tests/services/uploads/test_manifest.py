@@ -13,8 +13,8 @@ import app.services.uploads.manifest as manifest_mod
 from app.services.uploads.manifest import build_upload_manifest
 
 
-def _rows(*names):
-    return [SimpleNamespace(filename=n) for n in names]
+def _rows(*names, file_hash="0" * 64):
+    return [SimpleNamespace(filename=n, file_hash=file_hash) for n in names]
 
 
 @pytest.fixture
@@ -57,12 +57,27 @@ async def test_no_session_id_omits_session_section(scopes):
     assert "library:" in result
 
 
-async def test_pdf_files_annotated(scopes):
+async def test_extracted_document_shows_its_page_count(scopes, monkeypatch):
+    def fake_summary(file_hash, extension, cache_scope):
+        return {"pages": 274}
+
+    monkeypatch.setattr(manifest_mod.documents, "cached_summary", fake_summary)
     scopes["global"] = _rows("guide.pdf")
 
     result = await build_upload_manifest(session_id=None, user_id="u1")
 
-    assert "guide.pdf (pdf - not readable yet)" in result
+    assert "guide.pdf (274 pages)" in result
+    assert "not readable" not in result
+
+
+async def test_unextracted_document_is_listed_bare(scopes, monkeypatch):
+    # ! The manifest runs every turn, so a document not yet extracted gets no annotation instead of an extraction
+    monkeypatch.setattr(manifest_mod.documents, "cached_summary", lambda *_: None)
+    scopes["global"] = _rows("guide.pdf")
+
+    result = await build_upload_manifest(session_id=None, user_id="u1")
+
+    assert "library: guide.pdf (1)" in result
 
 
 async def test_over_cap_files_elided(scopes):

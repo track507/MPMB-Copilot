@@ -21,7 +21,6 @@ Usage:
 import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Optional
-from uuid import UUID
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -44,11 +43,13 @@ from app.core.agent import (
 from app.core.agent import (
     generate as agent_generate,
 )
+from app.core.agent_messages import to_pydantic_messages
 from app.core.prompts import prompt_builder
 from app.core.query_analysis import analyze_query
+from app.core.retriever import Retriever
 from app.core.tools import Deps, build_mpmb_toolset, wrap_with_budget
 from app.logger import get_logger
-from app.services.llm.messages import to_pydantic_messages
+from app.services.llm.protocol import ModelFactory
 from app.services.source_catalog import source_catalog_service
 from app.services.source_catalog.prompt_render import per_query_hints as _render_hints
 from app.settings import settings
@@ -152,6 +153,11 @@ def _build_catalog_hints(qa, settings_ref) -> Optional[str]:
 
 
 class RAGEngine:
+    def __init__(self, *, retriever: Retriever, model_factory: ModelFactory) -> None:
+        # ! Injected: the agent loop names ports, and the composition root decides which adapters back them
+        self._retriever = retriever
+        self._model_factory = model_factory
+
     async def generate(
         self,
         query: str,
@@ -163,6 +169,7 @@ class RAGEngine:
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        upload_manifest: str = "",
     ) -> RAGResponse:
         t_start = time.perf_counter()
 
@@ -178,18 +185,18 @@ class RAGEngine:
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
-        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
-        upload_manifest = ""
-        if toolset:
-            from app.services.uploads.manifest import build_upload_manifest
-
-            try:
-                manifest_session = UUID(session_id) if session_id else None
-            except ValueError:
-                manifest_session = None
-            upload_manifest = await build_upload_manifest(session_id=manifest_session, user_id=user_id)
-
-        if upload_manifest:
+        deps = (
+            Deps(
+                session_id=session_id or "unknown",
+                edition=resolved_edition,
+                user_id=user_id,
+                retriever=self._retriever,
+            )
+            if toolset
+            else None
+        )
+        # ? Built by the caller and passed in, so the agent loop never reaches persistence to assemble a prompt
+        if toolset and upload_manifest:
             user_prompt += upload_manifest
 
         t_generate = time.perf_counter()
@@ -205,6 +212,7 @@ class RAGEngine:
                 toolset=toolset,
                 deps=deps,
                 usage_limits=usage_limits,
+                model_factory=self._model_factory,
             )
         except UsageLimitExceeded as e:
             # ! Hard net tripped; return a best-effort notice instead of raising
@@ -247,6 +255,7 @@ class RAGEngine:
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        upload_manifest: str = "",
     ) -> AsyncIterator[RAGStreamEvent]:
         t_start = time.perf_counter()
         resolved_provider = provider or settings.default_llm_provider
@@ -262,21 +271,22 @@ class RAGEngine:
         )
 
         toolset, usage_limits = _resolve_tool_use(settings.enable_tool_use)
-        deps = Deps(session_id=session_id or "unknown", edition=resolved_edition, user_id=user_id) if toolset else None
-        upload_manifest = ""
-        if toolset:
-            from app.services.uploads.manifest import build_upload_manifest
-
-            try:
-                manifest_session = UUID(session_id) if session_id else None
-            except ValueError:
-                manifest_session = None
-            upload_manifest = await build_upload_manifest(session_id=manifest_session, user_id=user_id)
-
-        if upload_manifest:
+        deps = (
+            Deps(
+                session_id=session_id or "unknown",
+                edition=resolved_edition,
+                user_id=user_id,
+                retriever=self._retriever,
+            )
+            if toolset
+            else None
+        )
+        # ? Built by the caller and passed in, so the agent loop never reaches persistence to assemble a prompt
+        if toolset and upload_manifest:
             user_prompt += upload_manifest
 
-        agent: Agent = build_agent(
+        agent: Agent[None, Any] = build_agent(
+            model_factory=self._model_factory,
             instructions=prompt_builder.get_static_instructions(),
             provider=resolved_provider,
             model=model or settings.default_model,
@@ -384,6 +394,3 @@ class RAGEngine:
             tools=tools_meta,
             retrieval=deps.trace if deps else None,
         )
-
-
-rag_engine = RAGEngine()

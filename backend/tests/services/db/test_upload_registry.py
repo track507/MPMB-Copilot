@@ -235,3 +235,30 @@ async def test_link_message_ignores_other_session_files(session_id, message_id):
     refreshed = await upload_registry.get_file(row.id)
     assert refreshed is not None
     assert refreshed.message_id is None
+
+
+# * count_hash_in_bucket / hashes_by_bucket: the extraction cache's reference counts
+
+
+async def test_hash_count_is_scoped_to_one_users_bucket(session_id: UUID):
+    await _upsert(scope="global", filename="g.pdf", owner="u1", file_hash="h1")
+    await _upsert(scope="session", filename="s.pdf", owner="u1", session_id=session_id, file_hash="h1")
+    await _upsert(scope="global", filename="g.pdf", owner="u2", file_hash="h1")
+
+    # ! Session and global share a user's bucket, and another user's identical upload must not count
+    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id="u1") == 2
+    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id="u3") == 0
+
+
+async def test_hash_count_for_the_shared_bucket_ignores_personal_copies(db_session_scope):
+    await _upsert(scope="shared", filename="rules.pdf", owner="admin", file_hash="h1")
+    await _upsert(scope="global", filename="rules.pdf", owner="admin", file_hash="h1")
+
+    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id=None) == 1
+
+
+async def test_hashes_group_by_the_bucket_they_keep_alive(db_session_scope):
+    await _upsert(scope="global", filename="a.pdf", owner="u1", file_hash="h1")
+    await _upsert(scope="shared", filename="b.pdf", owner="admin", file_hash="h2")
+
+    assert await upload_registry.hashes_by_bucket() == {"u1": {"h1"}, None: {"h2"}}

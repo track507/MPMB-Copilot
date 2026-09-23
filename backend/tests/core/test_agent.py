@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic_ai import Agent
@@ -17,7 +17,10 @@ from app.core.agent import (
 
 def test_build_agent_returns_agent(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(config, "anthropic_api_key", "test-key")
+    from app.services.llm.providers import build_model
+
     agent = build_agent(
+        model_factory=build_model,
         instructions="Static instructions",
         provider="anthropic",
         model="claude-sonnet-4-20250514",
@@ -47,6 +50,7 @@ async def test_generate_returns_shape(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("app.core.agent.build_agent", fake_build_agent)
 
     response = await generate(
+        model_factory=cast(Any, None),
         instructions="Static",
         user_prompt="RAG\n\n---\n\nUser question: hi",
         history=[{"role": "assistant", "content": "earlier"}],
@@ -69,6 +73,7 @@ async def test_stream_returns_text_then_final_event(monkeypatch: pytest.MonkeyPa
     events = [
         e
         async for e in stream(
+            model_factory=cast(Any, None),
             instructions="Static",
             user_prompt="RAG\n\n---\n\nUser question: hi",
             history=[],

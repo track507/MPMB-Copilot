@@ -7,8 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.intent import IntentClassifier, QueryIntent
+from app.core.intent import QueryIntent
 from app.services.source_catalog import SourceCatalogService
+from tests.core.builders import build_classifier
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def missing_service(monkeypatch, tmp_path: Path) -> SourceCatalogService:
 def _classify(svc: SourceCatalogService, query: str) -> "tuple[QueryIntent, str]":
     """Layer 1 only - classifier with intent_method=rule and an unused embedding."""
     with patch("app.core.intent.source_catalog_service", svc):
-        result = IntentClassifier().classify(query, query_embedding=[0.0] * 8)
+        result = build_classifier().classify(query, query_embedding=[0.0] * 8)
     return result.primary, result.method
 
 

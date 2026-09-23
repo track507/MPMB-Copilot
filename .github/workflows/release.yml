@@ -23,31 +23,31 @@ env:
 jobs:
     build-and-publish:
         name: Build and Publish Release
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-24.04
         timeout-minutes: 45
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
                   fetch-depth: 0
 
             - name: Setup pnpm
-              uses: pnpm/action-setup@v6
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
             - name: Setup Node.js
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
               with:
                   node-version-file: ".nvmrc"
                   cache: pnpm
 
             - name: Setup Python
-              uses: actions/setup-python@v6
+              uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
               with:
                   python-version: "3.13"
 
             - name: Setup uv
-              uses: astral-sh/setup-uv@v8.2.0
+              uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
               with:
                   enable-cache: true
                   cache-dependency-glob: backend/uv.lock
@@ -191,7 +191,7 @@ jobs:
                   (cd dist && zip -qr "${{ steps.meta.outputs.asset_prefix }}.zip" "${{ steps.meta.outputs.bundle_name }}")
 
             - name: Generate SBOM
-              uses: anchore/sbom-action@v0.24.0
+              uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
               continue-on-error: true
               with:
                   path: dist/${{ steps.meta.outputs.bundle_name }}
@@ -232,7 +232,7 @@ jobs:
                   NOTES
 
             - name: Upload release artifacts to workflow run
-              uses: actions/upload-artifact@v7
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:
                   name: release-assets-${{ steps.meta.outputs.release_tag }}
                   path: |

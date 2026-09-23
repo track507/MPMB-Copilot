@@ -14,9 +14,10 @@ from app.core.tools.source_paths import (
 
 
 class FakeDeps:
-    def __init__(self, session_id: str = "sess-test"):
+    def __init__(self, session_id: str = "sess-test", user_id: str = "user-test"):
         self.session_id = session_id
         self.edition = "2014"
+        self.user_id = user_id
 
 
 def _make_roots(tmp_path: Path) -> dict[str, Path]:
@@ -58,8 +59,8 @@ def test_dotdot_rejected(tmp_path: Path):
 
 def test_disallowed_extension(tmp_path: Path):
     roots = _make_roots(tmp_path)
-    (roots["./data/mpmb_source/"] / "secrets.pdf").write_text("x")
-    result = resolve_safe_path("./data/mpmb_source/", "secrets.pdf", FakeDeps(), roots)
+    (roots["./data/mpmb_source/"] / "installer.exe").write_text("x")
+    result = resolve_safe_path("./data/mpmb_source/", "installer.exe", FakeDeps(), roots)
     assert result.error and "extension not allowed" in result.error
 
 
@@ -120,9 +121,24 @@ def test_happy_path_mpmb_js(tmp_path: Path):
 
 
 def test_allowed_extensions_list():
+    from app.services.documents import EXTRACTABLE_EXTENSIONS
+
     assert ".js" in ALLOWED_EXTENSIONS
     assert ".md" in ALLOWED_EXTENSIONS
-    assert ".pdf" not in ALLOWED_EXTENSIONS
+    # ! Documents are readable only because an adapter extracts them, so the two sets must move together
+    assert EXTRACTABLE_EXTENSIONS <= ALLOWED_EXTENSIONS
+    assert ".exe" not in ALLOWED_EXTENSIONS
+
+
+def test_upload_and_read_allowlists_carry_the_same_documents():
+    from app.services.documents import EXTRACTABLE_EXTENSIONS
+    from app.services.uploads.sanitize import UPLOAD_EXTENSIONS
+
+    # ! A format storable but unreadable leaves the user a dead file, so upload widens only with an adapter
+    uploadable_documents = {
+        ext for ext in UPLOAD_EXTENSIONS if ext not in {".js", ".txt", ".md", ".yml", ".yaml", ".json"}
+    }
+    assert uploadable_documents == set(EXTRACTABLE_EXTENSIONS)
 
 
 def test_denied_subdirs_list():
@@ -173,13 +189,15 @@ def test_iter_searchable_files_applies_policy(tmp_path: Path, monkeypatch: pytes
     (root / ".hidden").mkdir()
     (root / "ok.js").write_text("var a = 1;")
     (root / "sub" / "nested.js").write_text("var b = 2;")
-    (root / "skip.pdf").write_text("binary-ish")
+    (root / "skip.exe").write_text("binary-ish")
     (root / "big.js").write_text("x" * 500)
+    # ? Over the raw cap, yet still yielded: a document's size is judged by grep's extraction budget, not by bytes
+    (root / "guide.pdf").write_text("x" * 500)
     (root / "node_modules" / "dep.js").write_text("var c = 3;")
     (root / ".hidden" / "secret.js").write_text("var d = 4;")
 
     rels = sorted(rel.as_posix() for _, rel in iter_searchable_files(root))
-    assert rels == ["ok.js", "sub/nested.js"]
+    assert rels == ["guide.pdf", "ok.js", "sub/nested.js"]
 
 
 def test_iter_searchable_files_excludes_symlink_escape(tmp_path: Path):

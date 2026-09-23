@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.retriever import Retriever
+from tests.core.builders import build_retriever
 
 
 def _chunk(chunk_id: str, tier: str) -> dict:
@@ -11,7 +11,6 @@ def _chunk(chunk_id: str, tier: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_dual_reranks_each_tier_to_budget_when_enabled(monkeypatch):
-    from app.core import retriever as rmod
     from app.settings import settings
 
     # Wide pools: 5 candidates per tier
@@ -19,7 +18,6 @@ async def test_dual_reranks_each_tier_to_budget_when_enabled(monkeypatch):
     ex_pool = [_chunk(f"e{i}", "official_example") for i in range(5)]
     store = MagicMock()
     store.hybrid_search = AsyncMock(side_effect=[auth_pool, ex_pool])
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
     monkeypatch.setattr(settings, "rerank_enabled", True)
     monkeypatch.setattr(settings, "rerank_candidate_k", 5)
@@ -27,9 +25,8 @@ async def test_dual_reranks_each_tier_to_budget_when_enabled(monkeypatch):
     # Deterministic reranker: reverse order, cut to top_k
     fake = MagicMock()
     fake.rerank = lambda query, candidates, top_k: list(reversed(candidates))[:top_k]
-    monkeypatch.setattr(rmod, "rerank_service", fake)
 
-    auth, examples = await Retriever()._dual_search(
+    auth, examples = await build_retriever(store=store, reranker=fake)._dual_search(
         query="q",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},
@@ -47,18 +44,15 @@ async def test_dual_reranks_each_tier_to_budget_when_enabled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dual_disabled_path_is_unchanged(monkeypatch):
-    from app.core import retriever as rmod
     from app.settings import settings
 
     store = MagicMock()
     store.hybrid_search = AsyncMock(side_effect=[[_chunk("a1", "authoritative")], [_chunk("e1", "official_example")]])
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
     monkeypatch.setattr(settings, "rerank_enabled", False)
 
     fake = MagicMock()
-    monkeypatch.setattr(rmod, "rerank_service", fake)
 
-    await Retriever()._dual_search(
+    await build_retriever(store=store, reranker=fake)._dual_search(
         query="q",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},
@@ -72,7 +66,6 @@ async def test_dual_disabled_path_is_unchanged(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_single_reranks_each_tier_split_when_enabled(monkeypatch):
-    from app.core import retriever as rmod
     from app.settings import settings
 
     pool = [_chunk(f"a{i}", "authoritative") for i in range(4)] + [
@@ -80,16 +73,14 @@ async def test_single_reranks_each_tier_split_when_enabled(monkeypatch):
     ]
     store = MagicMock()
     store.hybrid_search = AsyncMock(side_effect=[pool])
-    monkeypatch.setattr("app.core.retriever.get_vector_store", lambda: store)
 
     monkeypatch.setattr(settings, "rerank_enabled", True)
     monkeypatch.setattr(settings, "rerank_candidate_k", 8)
 
     fake = MagicMock()
     fake.rerank = lambda query, candidates, top_k: list(reversed(candidates))[:top_k]
-    monkeypatch.setattr(rmod, "rerank_service", fake)
 
-    auth, examples = await Retriever()._single_search(
+    auth, examples = await build_retriever(store=store, reranker=fake)._single_search(
         query="q",
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},

@@ -1,16 +1,16 @@
 """
 Per-provider model catalogs for the settings UI
 
-Anthropic and OpenAI model lists are fetched live from each provider's models endpoint, with a curated static fallback
-when the fetch fails (no key, API down, network hiccup)
+Anthropic and OpenAI lists are fetched live from each provider's models endpoint
+A curated static fallback covers a missing key, a provider outage or a network hiccup
 
-Each model carries its supported effort levels. Anthropic levels come from the live `capabilities.effort` tree when the
-fetch succeeds, otherwise from a static table. OpenAI exposes no effort metadata on its endpoint, so its levels come from
-pydantic-ai's per-model profile (`openai_supports_reasoning`) plus OpenAI's SDK `ReasoningEffort` scale. Ollama is empty.
-The request path reads the cached levels synchronously via `effort_levels_for`
+Each model carries its supported effort levels
+Anthropic levels come from the live `capabilities.effort` tree, or from a static table when the fetch fails
+OpenAI exposes no effort metadata, so its levels come from pydantic-ai's `openai_supports_reasoning` profile
+The scale itself is OpenAI's SDK `ReasoningEffort`, and the request path reads cached levels via `effort_levels_for`
 
-Results are cached briefly so the settings screen doesn't hit the provider on every load
-Ollama is intentionally free-form (empty list) - local model names are arbitrary, so the frontend shows a plain input
+Results are cached briefly so the settings screen does not hit a provider on every load
+Ollama is intentionally free-form and empty: local model names are arbitrary, so the frontend shows a plain input
 """
 
 import asyncio
@@ -33,9 +33,9 @@ class ModelOption:
     effort_levels: tuple[str, ...] = ()
 
 
-# Static effort tables
-# * Source of truth for the curated fallback and for any model the live capabilities lookup can't classify
-# * Anthropic ordering is low -> max; OpenAI uses its own reasoning-effort scale
+# * Static effort tables
+# ? Source of truth for the curated fallback and for any model the live capabilities lookup cannot classify
+# ? Anthropic ordering runs low to max, and OpenAI uses its own reasoning-effort scale
 _ANTHROPIC_EFFORT: dict[str, tuple[str, ...]] = {
     "claude-opus-4-8": ("low", "medium", "high", "xhigh", "max"),
     "claude-opus-4-7": ("low", "medium", "high", "xhigh", "max"),
@@ -55,11 +55,11 @@ def _openai_effort_levels(model_id: str) -> tuple[str, ...]:
     """
     Derive OpenAI reasoning-effort levels from pydantic-ai's per-model profile
 
-    OpenAI's API exposes no effort metadata, but pydantic-ai's `openai_model_profile` knows
-    per-model whether the model reasons, and the value scale is OpenAI's own SDK `ReasoningEffort` literal
-    'none' is excluded - that is reasoning-off, not a depth tier
+    OpenAI's API exposes no effort metadata, but pydantic-ai's `openai_model_profile` knows whether a model reasons
+    The value scale is OpenAI's own SDK `ReasoningEffort` literal, minus 'none', which is reasoning-off
+    'none' is a switch rather than a depth tier, so it never belongs in the list
 
-    Returns an empty tuple for non-reasoning models, the static scale if the lookup fails
+    Returns an empty tuple for a non-reasoning model, and the static scale when the lookup fails
     """
     try:
         import typing
@@ -67,7 +67,15 @@ def _openai_effort_levels(model_id: str) -> tuple[str, ...]:
         from openai.types.shared import ReasoningEffort
         from pydantic_ai.profiles.openai import openai_model_profile
 
-        if not getattr(openai_model_profile(model_id), "openai_supports_reasoning", False):
+        # ! pydantic-ai returns a plain dict here now; it used to return an object
+        # ! getattr on a dict reads False without raising, which silently empties the effort dropdown
+        profile = openai_model_profile(model_id)
+        supports = (
+            profile.get("openai_supports_reasoning", False)
+            if isinstance(profile, dict)
+            else getattr(profile, "openai_supports_reasoning", False)
+        )
+        if not supports:
             return ()
         # ? ReasoningEffort is Optional[Literal[...]]; unwrap to the literal's string members
         literal = next((arg for arg in typing.get_args(ReasoningEffort) if typing.get_args(arg)), ReasoningEffort)
@@ -79,8 +87,9 @@ def _openai_effort_levels(model_id: str) -> tuple[str, ...]:
 
 
 # * Curated fallbacks
-# ANTHROPIC_CURATED is used only when the live fetch fails
-# OPENAI_CURATED doubles as the allowlist we filter the live OpenAI list against (its endpoint returns every model the key can see, including non-chat ones)
+# ? ANTHROPIC_CURATED is used only when the live fetch fails
+# ? OPENAI_CURATED doubles as the allowlist the live OpenAI list is filtered against
+# ! That endpoint returns every model the key can see, including models that cannot chat
 ANTHROPIC_CURATED: tuple[ModelOption, ...] = (
     ModelOption("claude-opus-4-8", "Claude Opus 4.8", _ANTHROPIC_EFFORT["claude-opus-4-8"]),
     ModelOption("claude-opus-4-7", "Claude Opus 4.7", _ANTHROPIC_EFFORT["claude-opus-4-7"]),

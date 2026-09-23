@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.logger import get_logger
+from app.services.embedding.protocol import QueryEmbedder
 from app.services.source_catalog import source_catalog_service
 from app.settings import settings as dynamic_settings
 
@@ -168,20 +169,18 @@ class _CentroidStore:
         except FileNotFoundError:
             return self._centroids is None
 
-    def get_centroids(self) -> dict[QueryIntent, list[float]]:
+    def get_centroids(self, embedder: QueryEmbedder) -> dict[QueryIntent, list[float]]:
         """Return intent centroids, computing them if necessary."""
         # ! Check the cache itself, not only staleness
         # ! A first call can have a matching mtime, so _needs_recompute is False while _centroids is None
         if self._centroids is not None and not self._needs_recompute():
             return self._centroids
 
-        self._centroids = self._compute_centroids()
+        self._centroids = self._compute_centroids(embedder)
         return self._centroids
 
-    def _compute_centroids(self) -> dict[QueryIntent, list[float]]:
+    def _compute_centroids(self, embedder: QueryEmbedder) -> dict[QueryIntent, list[float]]:
         """Load examples, embed them, average per intent."""
-        from app.services.embedding import embedding_service
-
         path = self._resolve_path()
         raw = json.loads(path.read_text(encoding="utf-8"))
         self._examples_mtime = path.stat().st_mtime
@@ -199,7 +198,7 @@ class _CentroidStore:
                 continue
 
             # Embed all examples for this intent (query prefix, to match the query embedding they're compared against)
-            embeddings = [embedding_service.embed_query(example) for example in examples]
+            embeddings = [embedder.embed_query(example) for example in examples]
 
             # Compute mean (centroid)
             dim = len(embeddings[0])
@@ -225,6 +224,7 @@ _centroid_store = _CentroidStore()
 
 def _classify_by_embedding(
     query_embedding: list[float],
+    embedder: QueryEmbedder,
 ) -> tuple[list[tuple[QueryIntent, float]], str]:
     """Classify intent by cosine similarity to centroids.
 
@@ -232,7 +232,7 @@ def _classify_by_embedding(
     and the method name.
     """
     try:
-        centroids = _centroid_store.get_centroids()
+        centroids = _centroid_store.get_centroids(embedder)
     except FileNotFoundError:
         logger.warning("No intent examples file - falling back to HOW_TO")
         return [(QueryIntent.HOW_TO, 0.0)], "fallback"
@@ -248,7 +248,11 @@ def _classify_by_embedding(
 
 # * Public API
 class IntentClassifier:
-    """Stateless intent classifier combining symbol detection and embedding similarity."""
+    """Intent classifier combining symbol detection and embedding similarity"""
+
+    def __init__(self, *, embedder: QueryEmbedder) -> None:
+        # ! Injected, never imported: app.core must not depend on a concrete embedding adapter
+        self._embedder = embedder
 
     def classify(
         self,
@@ -300,7 +304,7 @@ class IntentClassifier:
 
         # Layer 2: Embedding classification
         if method in ("embedding", "hybrid"):
-            scores, classify_method = _classify_by_embedding(query_embedding)
+            scores, classify_method = _classify_by_embedding(query_embedding, self._embedder)
 
             if len(scores) < 2:
                 primary = scores[0] if scores else (QueryIntent.HOW_TO, 0.0)
@@ -358,4 +362,3 @@ class IntentClassifier:
 
 
 # Global instance
-intent_classifier = IntentClassifier()

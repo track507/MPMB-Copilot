@@ -1,11 +1,13 @@
 """
-Provider/capability registry - the single place that knows every selectable capability
+Provider and capability registry, the single place that knows every selectable capability
 
-Each capability (generation, embedding, rerank, vector store, and future OCR/vision) registers a CapabilitySpec describing how to list its selectable entries and report the current selection
-The settings store UI and the /capabilities endpoint consume one uniform envelope, so adding a capability is a register() call - never a new bespoke catalog or endpoint
+A CapabilitySpec says how to list a capability's entries and how to report the current selection
+Generation, embedding, rerank, vector store, auth and compute register one, and OCR or vision would join them
+The settings store UI and GET /api/capabilities consume one uniform envelope
+Adding a capability is therefore a register() call, never another bespoke catalog or endpoint
 
-This layer unifies catalog / selection / serialization
-It deliberately does NOT replace the working instance builders (embedding_service, rerank_service, get_vector_store, build_model); folding those in is a later tightening, out of the consolidation-phase scope
+This layer unifies catalog, selection and serialization, but deliberately not construction
+The instance builders (embedding_service, rerank_service, get_vector_store, build_model) stay where they are
 """
 
 import inspect
@@ -28,9 +30,12 @@ class Capability(str, Enum):
 class CapabilitySpec:
     key: Capability
     label: str
-    kind: str  # "curated" (installable entries w/ status) | "live_models" (provider-grouped, fetched live)
-    entries: Callable[[], Any]  # returns the entries, or a coroutine that resolves to them
-    current: Callable[[], dict[str, Any]]  # the active selection, read from settings/config
+    # ? "curated" lists installable entries with a status, "live_models" groups models fetched from the provider
+    kind: str
+    # ? Returns the entries, or a coroutine that resolves to them
+    entries: Callable[[], Any]
+    # ? Reads the active selection from settings or config
+    current: Callable[[], dict[str, Any]]
 
 
 _REGISTRY: dict[Capability, CapabilitySpec] = {}
@@ -49,7 +54,8 @@ def all_specs() -> list[CapabilitySpec]:
 
 
 def _vector_store_entries() -> list[dict[str, Any]]:
-    # ? Curated: qdrant is bundled/pinned; others are forward-compat stubs. Switching a store rebuilds the index
+    # ? Curated: qdrant is bundled and pinned, the others are forward-compatible stubs
+    # ! Switching a store means re-indexing, since vectors do not move between them
     return [
         {"provider": "qdrant", "id": "qdrant", "label": "Qdrant (default)", "pinned": True, "status": "ready"},
         {"provider": "weaviate", "id": "weaviate", "label": "Weaviate", "pinned": False, "status": "installable"},
@@ -60,7 +66,8 @@ def _vector_store_entries() -> list[dict[str, Any]]:
 def _auth_entries() -> list[dict[str, Any]]:
     import importlib.util
 
-    # ? Password is the pinned, non-removable method; OIDC becomes one-click once authlib is installable via the store
+    # ? Password is the pinned method and cannot be removed
+    # ? OIDC turns into one click once authlib can be installed from the store
     oidc_status = "ready" if importlib.util.find_spec("authlib") is not None else "installable"
     return [
         {"provider": "local", "id": "password", "label": "Username & password", "pinned": True, "status": "ready"},
@@ -75,9 +82,10 @@ def _auth_entries() -> list[dict[str, Any]]:
 
 
 def _compute_entries() -> list[dict[str, Any]]:
-    from app.core import onnx_device
+    from app.services import onnx_device
 
-    # ? Detection reports the RUNTIME (is a GPU-capable onnxruntime installed); "installable" is the item-13 installer hook
+    # ? Detection reports the runtime, meaning whether a GPU-capable onnxruntime is installed
+    # ? "installable" is the hook for an installer that would add one on request
     detected = onnx_device.detect_gpu_provider()
     gpu_label = f"GPU ({detected[1]})" if detected else "GPU"
     return [
@@ -93,11 +101,13 @@ def _compute_entries() -> list[dict[str, Any]]:
 
 
 def _register_builtins() -> None:
-    # ? Idempotent; deferred imports avoid settings/config import cycles at module load
+    # ? Idempotent, so every request can call it
+    # ! The imports are deferred because settings and config would otherwise cycle at module load
     if _REGISTRY:
         return
     from app.config import config
-    from app.core import embedding_catalog, model_catalog, rerank_catalog
+    from app.core import embedding_catalog, rerank_catalog
+    from app.services.llm import catalog as model_catalog
     from app.settings import settings
 
     register(
@@ -170,7 +180,11 @@ async def _resolve(value: Any) -> Any:
 
 
 async def serialize_all() -> dict[str, Any]:
-    """One envelope per capability: {label, kind, entries, current}. Awaits live fetches (generation)"""
+    """
+    One envelope per capability: {label, kind, entries, current}
+
+    Awaits the entries callable, since the generation catalog fetches from the provider
+    """
     _register_builtins()
     out: dict[str, Any] = {}
     for spec in all_specs():
