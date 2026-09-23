@@ -35,8 +35,6 @@ dependencies = [
 	"pillow>=10.2.0",
 	"uuid-utils>=0.12.0",
 	"argon2-cffi>=25.1.0",
-	# ! pypdfium2 handles text: pypdf splits words mid-token, which silently breaks grep on the extracted stream
-	# * pypdf stays for the object model (AcroForm, Names tree, embedded JS), which is a different job
 	"pypdfium2>=5.13.0",
 ]
 
