@@ -12,11 +12,9 @@ on:
 
 jobs:
     claude-review:
-        # Optional: Filter by PR author
-        # if: |
-        #   github.event.pull_request.user.login == 'external-contributor' ||
-        #   github.event.pull_request.user.login == 'new-developer' ||
-        #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+        # ! claude-code-action refuses a bot actor outright, so without this every dependabot PR shows a red X
+        # ! Dependabot runs cannot read Actions secrets either, so the token would be empty even if the bot were allowed
+        if: github.event.pull_request.user.type != 'Bot'
 
         runs-on: ubuntu-latest
         permissions:
