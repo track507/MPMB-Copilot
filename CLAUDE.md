@@ -8,8 +8,11 @@ A local-first assistant for writing and debugging MPMB D&D character-sheet scrip
 (Adobe AcroForm + ES5/AcroJS). Mission, in the project's words: "make writing and
 debugging MPMB character-sheet scripts faster and more correct. **Answer quality is
 the product;** everything else is plumbing in service of it" (`ROADMAP.md:7`).
-Single-user and local by default; remote access is opt-in and auth-gated. Not a
-hosted SaaS, not multi-tenant today.
+Local-first and auth-gated by default. **Multi-tenant SaaS became the design target
+on 2026-09-23** - tenant isolation is designed in rather than retrofitted, and MPMB
+is treated as the first domain pack rather than as the platform. Hosting is not
+offered yet. The storage key scheme and the tenancy model are specced in
+`docs/superpowers/specs/2026-09-23-tenant-storage-design.md` (untracked).
 
 ## It is NOT a RAG app - read this before touching retrieval
 
@@ -212,7 +215,7 @@ react-router and `?session=` params; it is TanStack Router with real paths),
 ## Non-goals
 
 In-browser MPMB sheet runtime; third-party plugin marketplace (the store is curated-only);
-multi-tenant SaaS hosting; official mobile support; execution-based script linting (an AcroJS
+official mobile support; execution-based script linting (an AcroJS
 runtime needs Acrobat's API - the static validator is the tractable alternative).
 
 ## Working agreement
