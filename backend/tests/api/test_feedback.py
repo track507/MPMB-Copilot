@@ -5,6 +5,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 OWNER = "11111111-1111-1111-1111-111111111111"
 
 
@@ -24,7 +26,9 @@ def client(monkeypatch):
 
     monkeypatch.setattr("app.api.sessions.db", SimpleNamespace(is_connected=True))
     monkeypatch.setattr("app.api.sessions.session_service.get_session", owned_session)
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id=OWNER, role="user")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id=OWNER, role="user", tenant_id=DEFAULT_TENANT_ID
+    )
 
     yield TestClient(app)
     app.dependency_overrides.pop(current_principal, None)
@@ -32,7 +36,7 @@ def client(monkeypatch):
 
 def _assistant_message(session_id, message_id):
     async def fake_get_message(_id):
-        return SimpleNamespace(id=message_id, session_id=session_id, role="assistant")
+        return SimpleNamespace(id=message_id, session_id=session_id, role="assistant", tenant_id=DEFAULT_TENANT_ID)
 
     return fake_get_message
 
@@ -86,7 +90,7 @@ def test_feedback_on_user_message_is_400(client, monkeypatch):
     sid, mid = uuid4(), uuid4()
 
     async def fake_get_message(_id):
-        return SimpleNamespace(id=mid, session_id=sid, role="user")
+        return SimpleNamespace(id=mid, session_id=sid, role="user", tenant_id=DEFAULT_TENANT_ID)
 
     monkeypatch.setattr("app.api.sessions.feedback_service.get_message", fake_get_message)
     resp = client.put(f"/api/sessions/{sid}/messages/{mid}/feedback", json={"rating": "up"})

@@ -98,6 +98,7 @@ async def create_session(body: SessionCreate, principal: Principal = Depends(cur
         edition=body.edition,
         settings=body.settings,
         user_id=principal.user_id,
+        tenant_id=principal.tenant_id,
     )
 
     return SessionOut(

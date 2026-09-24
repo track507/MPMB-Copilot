@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 @pytest.fixture
 def fixtures_dir() -> Path:
@@ -43,8 +45,12 @@ def _bypass_auth_wall():
     from app.api.deps import Principal, current_principal, principal_or_service
     from app.main import app
 
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id="default", role="admin")
-    app.dependency_overrides[principal_or_service] = lambda: Principal(user_id="default", role="admin")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id="default", role="admin", tenant_id=DEFAULT_TENANT_ID
+    )
+    app.dependency_overrides[principal_or_service] = lambda: Principal(
+        user_id="default", role="admin", tenant_id=DEFAULT_TENANT_ID
+    )
     yield
     app.dependency_overrides.pop(current_principal, None)
     app.dependency_overrides.pop(principal_or_service, None)

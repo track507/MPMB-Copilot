@@ -38,11 +38,12 @@ class UploadRegistry:
         scope: str,
         filename: str,
         original_filename: str,
-        file_path: str,
+        storage_key: str,
         content_type: str,
         file_size: int,
         file_hash: str,
         owner_user_id: str,
+        tenant_id: str,
         session_id: Optional[UUID] = None,
     ) -> File:
         # * Conflict target is the partial unique index for the scope
@@ -64,11 +65,12 @@ class UploadRegistry:
                 scope=scope,
                 filename=filename,
                 original_filename=original_filename,
-                file_path=file_path,
+                storage_key=storage_key,
                 content_type=content_type,
                 file_size=file_size,
                 file_hash=file_hash,
                 owner_user_id=owner_user_id,
+                tenant_id=tenant_id,
                 session_id=session_id,
                 meta_data={},
             )

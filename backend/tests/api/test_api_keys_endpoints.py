@@ -10,6 +10,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 @pytest.fixture
 def admin_client():
@@ -17,7 +19,9 @@ def admin_client():
     from app.api.deps import Principal, current_principal
     from app.main import app
 
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id=str(uuid4()), role="admin")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id=str(uuid4()), role="admin", tenant_id=DEFAULT_TENANT_ID
+    )
     yield TestClient(app, raise_server_exceptions=False)
 
 
@@ -26,7 +30,9 @@ def user_client():
     from app.api.deps import Principal, current_principal
     from app.main import app
 
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id=str(uuid4()), role="user")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id=str(uuid4()), role="user", tenant_id=DEFAULT_TENANT_ID
+    )
     yield TestClient(app, raise_server_exceptions=False)
 
 

@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytest
 
 from app.config import config
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.uploads.errors import UploadError
 from app.services.uploads.service import upload_service
 from app.settings import settings
@@ -51,19 +52,35 @@ def test_check_access_shared_read_non_admin_allowed():
 
 async def test_store_rejects_unknown_scope(upload_root, registry, make_upload):
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="bogus", user_id="u1", role="user", upload=make_upload())
+        await upload_service.store(
+            scope="bogus", user_id="u1", role="user", tenant_id=DEFAULT_TENANT_ID, upload=make_upload()
+        )
     assert exc.value.code == "invalid_scope"
 
 
 async def test_store_session_requires_session_id(upload_root, registry, make_upload):
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="session", user_id="u1", role="user", upload=make_upload(), session_id=None)
+        await upload_service.store(
+            scope="session",
+            user_id="u1",
+            role="user",
+            tenant_id=DEFAULT_TENANT_ID,
+            upload=make_upload(),
+            session_id=None,
+        )
     assert exc.value.code == "invalid_scope"
 
 
 async def test_store_non_session_rejects_session_id(upload_root, registry, make_upload):
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="global", user_id="u1", role="user", upload=make_upload(), session_id=uuid4())
+        await upload_service.store(
+            scope="global",
+            user_id="u1",
+            role="user",
+            tenant_id=DEFAULT_TENANT_ID,
+            upload=make_upload(),
+            session_id=uuid4(),
+        )
     assert exc.value.code == "invalid_scope"
 
 
@@ -72,7 +89,9 @@ async def test_store_non_session_rejects_session_id(upload_root, registry, make_
 
 async def test_store_writes_file_and_registers(upload_root, registry, make_upload):
     data = b"console.log(1)"
-    row = await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload(data, "a.js"))
+    row = await upload_service.store(
+        scope="shared", user_id="u1", role="admin", tenant_id=DEFAULT_TENANT_ID, upload=make_upload(data, "a.js")
+    )
 
     saved = upload_root / "shared" / "a.js"
     assert saved.read_bytes() == data
@@ -83,7 +102,7 @@ async def test_store_writes_file_and_registers(upload_root, registry, make_uploa
     assert kwargs["scope"] == "shared"
     assert kwargs["filename"] == "a.js"
     assert kwargs["original_filename"] == "a.js"
-    assert kwargs["file_path"] == "shared/a.js"
+    assert kwargs["storage_key"] == "shared/a.js"
     assert kwargs["file_size"] == len(data)
     assert kwargs["file_hash"] == hashlib.sha256(data).hexdigest()
     assert kwargs["content_type"] == "text/javascript"
@@ -94,14 +113,18 @@ async def test_store_writes_file_and_registers(upload_root, registry, make_uploa
 async def test_store_quota_exceeded(upload_root, registry, make_upload):
     registry.count_files.return_value = 10_000
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload())
+        await upload_service.store(
+            scope="shared", user_id="u1", role="admin", tenant_id=DEFAULT_TENANT_ID, upload=make_upload()
+        )
     assert exc.value.code == "quota_exceeded"
     registry.upsert_file.assert_not_awaited()
 
 
 async def test_store_empty_file_cleans_temp(upload_root, registry, make_upload):
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload(b"", "a.js"))
+        await upload_service.store(
+            scope="shared", user_id="u1", role="admin", tenant_id=DEFAULT_TENANT_ID, upload=make_upload(b"", "a.js")
+        )
     assert exc.value.code == "empty_file"
     assert not list((upload_root / "shared").glob(".upload-*"))
     assert not (upload_root / "shared" / "a.js").exists()
@@ -110,7 +133,13 @@ async def test_store_empty_file_cleans_temp(upload_root, registry, make_upload):
 async def test_store_too_large_cleans_temp(upload_root, registry, make_upload, monkeypatch):
     monkeypatch.setattr(settings, "upload_max_file_bytes", 4)
     with pytest.raises(UploadError) as exc:
-        await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload(b"toolong", "a.js"))
+        await upload_service.store(
+            scope="shared",
+            user_id="u1",
+            role="admin",
+            tenant_id=DEFAULT_TENANT_ID,
+            upload=make_upload(b"toolong", "a.js"),
+        )
     assert exc.value.code == "file_too_large"
     assert exc.value.status_code == 413
     assert not list((upload_root / "shared").glob(".upload-*"))
@@ -125,7 +154,9 @@ async def test_store_dedup_skips_disk_rewrite(upload_root, registry, make_upload
     original_mtime = target.stat().st_mtime_ns
     registry.get_by_name.return_value = SimpleNamespace(id=uuid4(), file_hash=hashlib.sha256(data).hexdigest())
 
-    await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload(data, "a.js"))
+    await upload_service.store(
+        scope="shared", user_id="u1", role="admin", tenant_id=DEFAULT_TENANT_ID, upload=make_upload(data, "a.js")
+    )
 
     assert target.read_bytes() == data
     assert target.stat().st_mtime_ns == original_mtime  # no os.replace: disk untouched
@@ -136,7 +167,9 @@ async def test_store_dedup_skips_disk_rewrite(upload_root, registry, make_upload
 async def test_store_orphan_cleanup_on_registry_failure(upload_root, registry, make_upload):
     registry.upsert_file.side_effect = RuntimeError("db down")
     with pytest.raises(RuntimeError):
-        await upload_service.store(scope="shared", user_id="u1", role="admin", upload=make_upload(b"data", "a.js"))
+        await upload_service.store(
+            scope="shared", user_id="u1", role="admin", tenant_id=DEFAULT_TENANT_ID, upload=make_upload(b"data", "a.js")
+        )
     assert not (upload_root / "shared" / "a.js").exists()  # renamed file removed
     assert not list((upload_root / "shared").glob(".upload-*"))
 
@@ -154,9 +187,9 @@ async def test_list_reconcile_flags_missing(upload_root, registry):
     shared = upload_root / "shared"
     shared.mkdir(parents=True, exist_ok=True)
     (shared / "present.js").write_bytes(b"x")
-    present = SimpleNamespace(id=uuid4(), file_path="shared/present.js", meta_data={})
-    missing = SimpleNamespace(id=uuid4(), file_path="shared/missing.js", meta_data={})
-    already = SimpleNamespace(id=uuid4(), file_path="shared/gone.js", meta_data={"missing": True})
+    present = SimpleNamespace(id=uuid4(), storage_key="shared/present.js", meta_data={})
+    missing = SimpleNamespace(id=uuid4(), storage_key="shared/missing.js", meta_data={})
+    already = SimpleNamespace(id=uuid4(), storage_key="shared/gone.js", meta_data={"missing": True})
     registry.list_files.return_value = [present, missing, already]
 
     rows = await upload_service.list_with_reconcile(scope="shared", user_id="u1", role="user")
@@ -180,7 +213,7 @@ async def test_open_content_not_found(upload_root, registry):
 
 async def test_open_content_forbidden_for_other_owner(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="global", owner_user_id="u2", file_path="global/u2/a.js"
+        id=uuid4(), scope="global", owner_user_id="u2", storage_key="global/u2/a.js"
     )
     with pytest.raises(UploadError) as exc:
         await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user")
@@ -189,7 +222,7 @@ async def test_open_content_forbidden_for_other_owner(upload_root, registry):
 
 async def test_open_content_rejects_path_traversal(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="shared", owner_user_id="u1", file_path="../escape.js"
+        id=uuid4(), scope="shared", owner_user_id="u1", storage_key="../escape.js"
     )
     with pytest.raises(UploadError) as exc:
         await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user")
@@ -197,7 +230,7 @@ async def test_open_content_rejects_path_traversal(upload_root, registry):
 
 
 async def test_open_content_missing_on_disk_marks_missing(upload_root, registry):
-    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", file_path="shared/gone.js")
+    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", storage_key="shared/gone.js")
     registry.get_file.return_value = row
     with pytest.raises(UploadError) as exc:
         await upload_service.open_content(file_id=row.id, user_id="u1", role="user")
@@ -209,7 +242,7 @@ async def test_open_content_returns_path_and_row(upload_root, registry):
     shared = upload_root / "shared"
     shared.mkdir(parents=True, exist_ok=True)
     (shared / "a.js").write_bytes(b"x")
-    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", file_path="shared/a.js")
+    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", storage_key="shared/a.js")
     registry.get_file.return_value = row
 
     resolved, returned = await upload_service.open_content(file_id=row.id, user_id="u1", role="user")
@@ -230,7 +263,7 @@ async def test_delete_not_found(upload_root, registry):
 
 async def test_delete_shared_non_admin_forbidden(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="shared", owner_user_id="u1", file_path="shared/a.js"
+        id=uuid4(), scope="shared", owner_user_id="u1", storage_key="shared/a.js"
     )
     with pytest.raises(UploadError) as exc:
         await upload_service.delete(file_id=uuid4(), user_id="u1", role="user")
@@ -242,7 +275,12 @@ async def test_delete_removes_disk_and_row(upload_root, registry):
     g.mkdir(parents=True, exist_ok=True)
     (g / "a.js").write_bytes(b"x")
     row = SimpleNamespace(
-        id=uuid4(), scope="global", owner_user_id="u1", file_path="global/u1/a.js", filename="a.js", file_hash="0" * 64
+        id=uuid4(),
+        scope="global",
+        owner_user_id="u1",
+        storage_key="global/u1/a.js",
+        filename="a.js",
+        file_hash="0" * 64,
     )
     registry.get_file.return_value = row
 
@@ -277,7 +315,7 @@ def _pdf_row(*, scope="global", owner="u1", digest="a" * 64):
         id=uuid4(),
         scope=scope,
         owner_user_id=owner,
-        file_path=f"{scope}/{owner}/g.pdf",
+        storage_key=f"{scope}/{owner}/g.pdf",
         filename="g.pdf",
         file_hash=digest,
     )
@@ -326,7 +364,11 @@ async def test_replacing_a_document_releases_the_old_extraction(upload_root, reg
     registry.count_hash_in_bucket.return_value = 0
 
     await upload_service.store(
-        scope="global", user_id="u1", role="user", upload=make_upload(b"%PDF-new", filename="g.pdf")
+        scope="global",
+        user_id="u1",
+        role="user",
+        tenant_id=DEFAULT_TENANT_ID,
+        upload=make_upload(b"%PDF-new", filename="g.pdf"),
     )
 
     assert list((extracted / "u1").iterdir()) == []

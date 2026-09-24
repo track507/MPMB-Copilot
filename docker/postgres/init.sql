@@ -127,55 +127,6 @@ CREATE INDEX IF NOT EXISTS idx_files_message_id ON files(message_id) WHERE messa
 CREATE INDEX IF NOT EXISTS idx_files_uploaded_at ON files(uploaded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(file_hash) WHERE file_hash IS NOT NULL;
 
--- Document Chunks Table (for RAG context tracking)
-CREATE TABLE IF NOT EXISTS document_chunks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    -- Source information
-    source_file VARCHAR(512) NOT NULL,
-    chunk_index INTEGER NOT NULL,
-
-    -- Content
-    content TEXT NOT NULL,
-
-    -- Qdrant reference
-    qdrant_id VARCHAR(255) UNIQUE,
-
-    -- Metadata
-    meta_data JSONB DEFAULT '{}'::jsonb,
-
-    -- Timestamps
-    indexed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT doc_chunks_source_index_unique UNIQUE (source_file, chunk_index)
-);
-
--- Create indexes for document chunks
-CREATE INDEX IF NOT EXISTS idx_doc_chunks_source ON document_chunks(source_file);
-CREATE INDEX IF NOT EXISTS idx_doc_chunks_qdrant_id ON document_chunks(qdrant_id) WHERE qdrant_id IS NOT NULL;
-
--- This table links messages to the document chunks that were used to generate them
-CREATE TABLE IF NOT EXISTS message_retrievals (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    document_chunk_id UUID NOT NULL REFERENCES document_chunks(id) ON DELETE CASCADE,
-
-    -- Retrieval metadata
-    rank INTEGER NOT NULL,           -- Order in which chunk was retrieved (1 = most relevant)
-    score FLOAT NOT NULL,            -- Similarity score from vector search
-    snippet TEXT,                    -- Optional: exact text snippet shown to user
-
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT message_retrievals_unique UNIQUE (message_id, document_chunk_id)
-);
-
--- Indexes for message_retrievals
-CREATE INDEX IF NOT EXISTS idx_msg_retrievals_message ON message_retrievals(message_id);
-CREATE INDEX IF NOT EXISTS idx_msg_retrievals_chunk ON message_retrievals(document_chunk_id);
-CREATE INDEX IF NOT EXISTS idx_msg_retrievals_score ON message_retrievals(score DESC);
-CREATE INDEX IF NOT EXISTS idx_msg_retrievals_rank ON message_retrievals(rank);
-
 -- Usage/Analytics Table (optional, for tracking)
 CREATE TABLE IF NOT EXISTS usage_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

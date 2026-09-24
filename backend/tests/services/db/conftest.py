@@ -4,11 +4,12 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.model.orm import Base
 from app.services.db.connection import db
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
-_TABLES = "files, messages, sessions"  # child-first isn't required with CASCADE
+_TABLES = "files, messages, sessions, users, tenants"
 
 
 @pytest_asyncio.fixture
@@ -27,20 +28,34 @@ async def db_session_scope():
         async with db._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)  # cheap no-op once tables exist
             await conn.execute(text(f"TRUNCATE {_TABLES} RESTART IDENTITY CASCADE"))
+            await conn.execute(
+                text("INSERT INTO tenants (id, slug, name) VALUES (:id, 'default', 'Default')"),
+                {"id": DEFAULT_TENANT_ID},
+            )
         yield
     finally:
         await db.disconnect()
 
 
 @pytest_asyncio.fixture
-async def session_id(db_session_scope):
+async def tenant_id(db_session_scope):
+    """
+    A committed tenant, because every user-owned row now carries a NOT NULL tenant_id
+
+    Tests that want two tenants build their own rather than parameterising this one
+    """
+    return DEFAULT_TENANT_ID
+
+
+@pytest_asyncio.fixture
+async def session_id(tenant_id):
     """
     A committed parent session; session-scope files FK to it. Global/shared tests skip this
     """
     from app.model.orm import Session
 
     async with db.session() as s:
-        row = Session(title="test", user_id="test-owner")
+        row = Session(title="test", user_id="test-owner", tenant_id=tenant_id)
         s.add(row)
         await s.flush()  # assigns row.id (uuid7 default) before commit
         return row.id

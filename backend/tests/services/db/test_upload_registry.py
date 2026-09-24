@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.db import session_service, upload_registry
 
 
@@ -28,11 +29,12 @@ async def _upsert(
         scope=scope,
         filename=filename,
         original_filename=filename,
-        file_path=f"{scope}/{filename}",
+        storage_key=f"{scope}/{filename}",
         content_type="text/javascript",
         file_size=file_size,
         file_hash=file_hash,
         owner_user_id=owner,
+        tenant_id=DEFAULT_TENANT_ID,
         session_id=session_id,
     )
 
@@ -45,22 +47,24 @@ async def test_upsert_same_session_name_updates_in_place(session_id: UUID):
         scope="session",
         filename="a.js",
         original_filename="a.js",
-        file_path=f"session/{session_id}/a.js",
+        storage_key=f"session/{session_id}/a.js",
         content_type="text/javascript",
         file_size=10,
         file_hash="h1",
         owner_user_id="u1",
+        tenant_id=DEFAULT_TENANT_ID,
         session_id=session_id,
     )
     b = await upload_registry.upsert_file(
         scope="session",
         filename="a.js",
         original_filename="a.js",
-        file_path=f"session/{session_id}/a.js",
+        storage_key=f"session/{session_id}/a.js",
         content_type="text/javascript",
         file_size=20,
         file_hash="h2",
         owner_user_id="u1",
+        tenant_id=DEFAULT_TENANT_ID,
         session_id=session_id,
     )
     assert a.id == b.id  # same row, upsert not insert
@@ -226,7 +230,7 @@ async def test_link_message_ignores_other_session_files(session_id, message_id):
     row = await _upsert(scope="session", session_id=session_id, filename="a.js")
 
     # ! A different session's message must not stamp this session's file.
-    other = await session_service.create_session(title="other", user_id="u1")
+    other = await session_service.create_session(title="other", user_id="u1", tenant_id=DEFAULT_TENANT_ID)
     other_message = await session_service.add_message(other.id, "user", {"text": "hi"})
 
     linked = await upload_registry.link_message(message_id=other_message.id, file_ids=[row.id], session_id=other.id)

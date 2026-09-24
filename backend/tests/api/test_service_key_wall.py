@@ -9,6 +9,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 @pytest.fixture
 def unwalled_client(monkeypatch):
@@ -68,7 +70,7 @@ def test_key_never_authenticates_outside_ops_wall(unwalled_client, monkeypatch):
 def test_plain_user_role_cannot_trigger_index(unwalled_client, monkeypatch):
     from app.api import deps
 
-    user = SimpleNamespace(id="u1", role="user", disabled=False)
+    user = SimpleNamespace(id="u1", role="user", disabled=False, tenant_id=DEFAULT_TENANT_ID)
     monkeypatch.setattr(deps.auth_service, "resolve_session", AsyncMock(return_value=user))
     unwalled_client.cookies.set("mpmb_session", "raw-token")
     assert unwalled_client.post("/api/index", json={}).status_code == 403

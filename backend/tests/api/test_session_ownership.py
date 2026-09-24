@@ -13,6 +13,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 ALICE = "11111111-1111-1111-1111-111111111111"
 BOB = "22222222-2222-2222-2222-222222222222"
 
@@ -40,7 +42,9 @@ def as_user(monkeypatch):
     monkeypatch.setattr(sessions_mod, "db", SimpleNamespace(is_connected=True))
 
     def _client(user_id: str, role: str = "user") -> TestClient:
-        app.dependency_overrides[current_principal] = lambda: Principal(user_id=user_id, role=role)
+        app.dependency_overrides[current_principal] = lambda: Principal(
+            user_id=user_id, role=role, tenant_id=DEFAULT_TENANT_ID
+        )
         return TestClient(app, raise_server_exceptions=False)
 
     yield _client
@@ -177,5 +181,5 @@ async def test_ensure_session_stamps_the_owner(monkeypatch):
     monkeypatch.setattr(chat_mod.session_service, "create_session", fake_create)
     monkeypatch.setattr(chat_mod, "db", SimpleNamespace(is_connected=True))
 
-    await chat_mod._ensure_session(None, "2024", ALICE)
+    await chat_mod._ensure_session(None, "2024", ALICE, DEFAULT_TENANT_ID)
     assert captured["user_id"] == ALICE

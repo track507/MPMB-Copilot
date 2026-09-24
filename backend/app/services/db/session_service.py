@@ -19,7 +19,7 @@ from sqlalchemy import ColumnElement, CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.logger import get_logger
-from app.model.orm import Message, MessageRetrieval, Session
+from app.model.orm import Message, Session
 from app.services.db.connection import db
 
 logger = get_logger(__name__)
@@ -46,6 +46,7 @@ class SessionService:
         settings: Optional[dict[str, Any]] = None,
         *,
         user_id: str,
+        tenant_id: str,
     ) -> Session:
         """
         Create a new conversation session owned by user_id
@@ -55,7 +56,9 @@ class SessionService:
             session_settings["edition"] = edition
 
         async with db.session() as s:
-            session = Session(title=title, settings=session_settings, user_id=user_id, meta_data={})
+            session = Session(
+                title=title, settings=session_settings, user_id=user_id, tenant_id=tenant_id, meta_data={}
+            )
             s.add(session)
             await s.flush()
             await s.refresh(session)
@@ -256,43 +259,6 @@ class SessionService:
             if text and msg.role in ("user", "assistant"):
                 history.append({"role": msg.role, "content": text})
         return history
-
-    # ! Unpopulated: the chat path records retrieval on meta_data["retrieval"], not this table
-    # * Retrieval Tracking
-    async def track_retrievals(
-        self,
-        message_id: UUID,
-        chunks: list[dict[str, Any]],
-    ) -> list[MessageRetrieval]:
-        """Record which document chunks were used for a message.
-
-        Each dict in `chunks` should have:
-            - document_chunk_id: UUID
-            - rank: int
-            - score: float
-            - snippet: optional str
-        """
-        if not chunks:
-            return []
-
-        async with db.session() as s:
-            retrievals = []
-            for chunk_data in chunks:
-                retrieval = MessageRetrieval(
-                    message_id=message_id,
-                    document_chunk_id=chunk_data["document_chunk_id"],
-                    rank=chunk_data["rank"],
-                    score=chunk_data["score"],
-                    snippet=chunk_data.get("snippet"),
-                )
-                s.add(retrieval)
-                retrievals.append(retrieval)
-
-            await s.flush()
-            for r in retrievals:
-                await s.refresh(r)
-
-            return retrievals
 
     # * Stats
     async def get_session_count(self, *, user_id: str) -> int:

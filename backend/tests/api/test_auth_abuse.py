@@ -9,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 @pytest.fixture
 def unwalled_main_client():
@@ -95,7 +97,9 @@ def test_login_cookie_not_secure_over_http(monkeypatch):
     from app.api import auth as auth_api
     from app.core import security
 
-    user = SimpleNamespace(id="u1", username="t", role="admin", disabled=False, password_hash="$h$")
+    user = SimpleNamespace(
+        id="u1", username="t", role="admin", disabled=False, password_hash="$h$", tenant_id=DEFAULT_TENANT_ID
+    )
     monkeypatch.setattr(auth_api.auth_service, "too_many_failures", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_api.auth_service, "get_user_by_username", AsyncMock(return_value=user))
     monkeypatch.setattr(security, "verify_password", lambda h, p: True)
@@ -112,7 +116,9 @@ def test_login_cookie_secure_when_forced(monkeypatch):
     from app.api import auth as auth_api
     from app.core import security
 
-    user = SimpleNamespace(id="u1", username="t", role="admin", disabled=False, password_hash="$h$")
+    user = SimpleNamespace(
+        id="u1", username="t", role="admin", disabled=False, password_hash="$h$", tenant_id=DEFAULT_TENANT_ID
+    )
     monkeypatch.setattr(auth_api.auth_service, "too_many_failures", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_api.auth_service, "get_user_by_username", AsyncMock(return_value=user))
     monkeypatch.setattr(security, "verify_password", lambda h, p: True)

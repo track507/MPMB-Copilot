@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.api import deps
 from app.api.deps import Principal, current_principal, require_admin
+from app.core.storage_keys import DEFAULT_TENANT_ID
 
 
 def _request(cookie: str | None = None):
@@ -46,22 +47,22 @@ async def test_invalid_token_is_401(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_valid_token_yields_principal(monkeypatch):
-    user = SimpleNamespace(id="u-1", role="user")
+    user = SimpleNamespace(id="u-1", role="user", tenant_id=DEFAULT_TENANT_ID)
     monkeypatch.setattr(deps.auth_service, "resolve_session", AsyncMock(return_value=user))
     p = await current_principal(_request(cookie="good"))
-    assert p == Principal(user_id="u-1", role="user")
+    assert p == Principal(user_id="u-1", role="user", tenant_id=DEFAULT_TENANT_ID)
 
 
 @pytest.mark.asyncio
 async def test_require_admin_rejects_non_admin():
     with pytest.raises(HTTPException) as exc:
-        await require_admin(Principal(user_id="u-1", role="user"))
+        await require_admin(Principal(user_id="u-1", role="user", tenant_id=DEFAULT_TENANT_ID))
     assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
 async def test_require_admin_accepts_admin():
-    p = await require_admin(Principal(user_id="u-1", role="admin"))
+    p = await require_admin(Principal(user_id="u-1", role="admin", tenant_id=DEFAULT_TENANT_ID))
     assert p.role == "admin"
 
 

@@ -51,7 +51,7 @@ async def _load_history(session_id_str: str | None, user_id: str) -> tuple[UUID 
         return None, []
 
 
-async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_id: str) -> UUID | None:
+async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_id: str, tenant_id: str) -> UUID | None:
     """Ensure a session exists. Creates one owned by user_id if needed."""
     if not db.is_connected:
         return None
@@ -64,6 +64,7 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_i
             title="New Conversation",
             edition=edition,
             user_id=user_id,
+            tenant_id=tenant_id,
         )
         return session.id
     except Exception as e:
@@ -211,7 +212,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
         )
 
         session_uuid, history = await _load_history(request.session_id, principal.user_id)
-        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id)
+        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
@@ -290,7 +291,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         )
 
         session_uuid, history = await _load_history(request.session_id, principal.user_id)
-        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id)
+        session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 

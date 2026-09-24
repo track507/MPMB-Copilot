@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 def _client(monkeypatch, *, users: int = 0, setup_token: str | None = None):
     from app.api import auth as auth_api
@@ -42,7 +44,7 @@ def test_state_login_required(monkeypatch):
 def test_setup_creates_admin_and_sets_cookie(monkeypatch):
     from app.api import auth as auth_api
 
-    admin = SimpleNamespace(id="admin-id", username="terrence", role="admin")
+    admin = SimpleNamespace(id="admin-id", username="terrence", role="admin", tenant_id=DEFAULT_TENANT_ID)
     monkeypatch.setattr(auth_api.auth_service, "create_admin", AsyncMock(return_value=admin))
     monkeypatch.setattr(auth_api.auth_service, "claim_orphan_sessions", AsyncMock(return_value=3))
     monkeypatch.setattr(auth_api.auth_service, "create_session", AsyncMock(return_value="rawtoken"))
@@ -65,7 +67,7 @@ def test_setup_403_when_users_exist(monkeypatch):
 def test_setup_requires_token_when_exposed(monkeypatch):
     from app.api import auth as auth_api
 
-    admin = SimpleNamespace(id="admin-id", username="x", role="admin")
+    admin = SimpleNamespace(id="admin-id", username="x", role="admin", tenant_id=DEFAULT_TENANT_ID)
     monkeypatch.setattr(auth_api.auth_service, "create_admin", AsyncMock(return_value=admin))
     monkeypatch.setattr(auth_api.auth_service, "claim_orphan_sessions", AsyncMock(return_value=0))
     monkeypatch.setattr(auth_api.auth_service, "create_session", AsyncMock(return_value="rawtoken"))
@@ -105,7 +107,9 @@ def test_login_success_sets_cookie(monkeypatch):
     from app.api import auth as auth_api
     from app.core import security
 
-    user = SimpleNamespace(id="u1", username="terrence", role="admin", disabled=False, password_hash="$h$")
+    user = SimpleNamespace(
+        id="u1", username="terrence", role="admin", disabled=False, password_hash="$h$", tenant_id=DEFAULT_TENANT_ID
+    )
     monkeypatch.setattr(auth_api.auth_service, "too_many_failures", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_api.auth_service, "get_user_by_username", AsyncMock(return_value=user))
     monkeypatch.setattr(security, "verify_password", lambda h, p: True)
@@ -135,7 +139,9 @@ def test_login_unknown_user_is_uniform_401(monkeypatch):
 def test_login_disabled_user_is_uniform_401(monkeypatch):
     from app.api import auth as auth_api
 
-    user = SimpleNamespace(id="u1", username="t", role="user", disabled=True, password_hash="$h$")
+    user = SimpleNamespace(
+        id="u1", username="t", role="user", disabled=True, password_hash="$h$", tenant_id=DEFAULT_TENANT_ID
+    )
     monkeypatch.setattr(auth_api.auth_service, "too_many_failures", AsyncMock(return_value=False))
     monkeypatch.setattr(auth_api.auth_service, "get_user_by_username", AsyncMock(return_value=user))
     monkeypatch.setattr(auth_api.auth_service, "record_login_failure", AsyncMock())

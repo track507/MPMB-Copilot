@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request, status
 
 from app.config import config
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.db import api_key_service, auth_service, db
 
 COOKIE_NAME = "mpmb_session"
@@ -19,10 +20,11 @@ COOKIE_NAME = "mpmb_session"
 class Principal:
     user_id: str
     role: str
+    tenant_id: str
     scopes: tuple[str, ...] = ()
 
 
-_DEFAULT_ADMIN = Principal(user_id="default", role="admin")
+_DEFAULT_ADMIN = Principal(user_id="default", role="admin", tenant_id=DEFAULT_TENANT_ID)
 
 
 def is_loopback(host: str) -> bool:
@@ -41,7 +43,7 @@ async def resolve_optional_principal(request: Request) -> Principal | None:
     user = await auth_service.resolve_session(raw)
     if user is None:
         return None
-    return Principal(user_id=str(user.id), role=user.role)
+    return Principal(user_id=str(user.id), role=user.role, tenant_id=str(user.tenant_id))
 
 
 async def current_principal(request: Request) -> Principal:
@@ -72,7 +74,7 @@ async def principal_or_service(request: Request) -> Principal:
         if key is None:
             # ? Uniform 401: unknown, revoked, and expired are indistinguishable to the caller
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-        return Principal(user_id=str(key.id), role="service", scopes=tuple(key.scopes))
+        return Principal(user_id=str(key.id), role="service", tenant_id=DEFAULT_TENANT_ID, scopes=tuple(key.scopes))
     return await current_principal(request)
 
 

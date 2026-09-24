@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
+
 
 def _client(monkeypatch):
     from app.api import settings as settings_api
@@ -16,7 +18,9 @@ def _client(monkeypatch):
 
     app = FastAPI()
     # ? Mini-app carries no session cookie; require_admin is real now, so override the principal like conftest does for main.app
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id="default", role="admin")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id="default", role="admin", tenant_id=DEFAULT_TENANT_ID
+    )
     app.include_router(settings_api.router)
     return TestClient(app)
 
@@ -49,7 +53,9 @@ def test_settings_read_requires_admin():
     from app.api.deps import Principal, current_principal
     from app.main import app
 
-    app.dependency_overrides[current_principal] = lambda: Principal(user_id="u1", role="user")
+    app.dependency_overrides[current_principal] = lambda: Principal(
+        user_id="u1", role="user", tenant_id=DEFAULT_TENANT_ID
+    )
     try:
         assert TestClient(app, raise_server_exceptions=False).get("/api/settings").status_code == 403
     finally:

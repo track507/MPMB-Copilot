@@ -70,7 +70,12 @@ async def upload_file(
             raise UploadError(404, "not_found", f"Session {session_id} not found")
 
     row = await upload_service.store(
-        scope=scope.value, user_id=principal.user_id, role=principal.role, upload=file, session_id=session_id
+        scope=scope.value,
+        user_id=principal.user_id,
+        role=principal.role,
+        tenant_id=principal.tenant_id,
+        upload=file,
+        session_id=session_id,
     )
     return _to_out(row=row)
 

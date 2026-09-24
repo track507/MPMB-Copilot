@@ -12,6 +12,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.db import session_service
 from app.services.db.connection import db
 
@@ -86,7 +87,7 @@ def _owner_filter_in(statement) -> bool:
 
 
 async def test_create_stamps_the_owner(sql):
-    await session_service.create_session(title="Alice chat", user_id=ALICE)
+    await session_service.create_session(title="Alice chat", user_id=ALICE, tenant_id=DEFAULT_TENANT_ID)
     assert [row.user_id for row in sql.added] == [ALICE]
 
 

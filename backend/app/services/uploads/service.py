@@ -39,7 +39,8 @@ class _RowValues(TypedDict):
     scope: str
     filename: str
     original_filename: str
-    file_path: str
+    storage_key: str
+    tenant_id: str
     content_type: str
     file_size: int
     file_hash: str
@@ -84,7 +85,14 @@ class UploadService:
         return {"scope": scope}
 
     async def store(
-        self, *, scope: str, user_id: str, role: str, upload: UploadFile, session_id: Optional[UUID] = None
+        self,
+        *,
+        scope: str,
+        user_id: str,
+        role: str,
+        tenant_id: str,
+        upload: UploadFile,
+        session_id: Optional[UUID] = None,
     ) -> File:
         if scope not in _SCOPES:
             raise UploadError(400, "invalid_scope", f"Unknown scope: {scope}")
@@ -126,7 +134,8 @@ class UploadService:
             scope=scope,
             filename=filename,
             original_filename=(upload.filename or filename)[:255],
-            file_path=rel_path,
+            storage_key=rel_path,
+            tenant_id=tenant_id,
             content_type=content_type[:100],
             file_size=size,
             file_hash=file_hash,
@@ -166,7 +175,7 @@ class UploadService:
         )
         base = Path(config.upload_dir)
         for row in rows:
-            if not (base / row.file_path).exists() and not (row.meta_data or {}).get("missing"):
+            if not (base / row.storage_key).exists() and not (row.meta_data or {}).get("missing"):
                 await upload_registry.mark_missing(row.id)
                 row.meta_data = {**(row.meta_data or {}), "missing": True}
         return rows
@@ -177,7 +186,7 @@ class UploadService:
             raise UploadError(404, "not_found", "File not found")
         self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=False)
         base = Path(config.upload_dir).resolve()
-        resolved = (Path(config.upload_dir) / row.file_path).resolve()
+        resolved = (Path(config.upload_dir) / row.storage_key).resolve()
         try:
             resolved.relative_to(base)
         except ValueError:
@@ -193,7 +202,7 @@ class UploadService:
         if row is None:
             raise UploadError(404, "not_found", "File not found")
         self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=True)
-        (Path(config.upload_dir) / row.file_path).unlink(missing_ok=True)
+        (Path(config.upload_dir) / row.storage_key).unlink(missing_ok=True)
         await upload_registry.delete_file(file_id)
         await self._release_extraction(
             filename=row.filename, scope=row.scope, owner_user_id=row.owner_user_id, file_hash=row.file_hash
