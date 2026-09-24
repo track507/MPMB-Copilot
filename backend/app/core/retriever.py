@@ -114,6 +114,8 @@ class Retriever:
         query: str,
         edition: Optional[str] = None,
         intent_override: Optional[str] = None,
+        *,
+        tenant_id: str,
     ) -> RetrievalResult:
         """Retrieve relevant MPMB code chunks for a query.
 
@@ -159,6 +161,7 @@ class Retriever:
                 query_embedding,
                 filters,
                 budget,
+                tenant_id=tenant_id,
             )
         elif mode == "dual":
             authoritative, examples = await self._dual_search(
@@ -166,6 +169,7 @@ class Retriever:
                 query_embedding,
                 filters,
                 budget,
+                tenant_id=tenant_id,
             )
         else:  # auto
             # Use dual when we have a clear intent, single otherwise
@@ -175,6 +179,7 @@ class Retriever:
                     query_embedding,
                     filters,
                     budget,
+                    tenant_id=tenant_id,
                 )
             else:
                 authoritative, examples = await self._single_search(
@@ -182,6 +187,7 @@ class Retriever:
                     query_embedding,
                     filters,
                     budget,
+                    tenant_id=tenant_id,
                 )
 
         timing_ms = (time.perf_counter() - t0) * 1000
@@ -211,6 +217,8 @@ class Retriever:
         query_embedding: list[float],
         base_filters: dict[str, Any],
         budget: dict[str, int],
+        *,
+        tenant_id: str,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Two separate searches: one for authoritative, one for examples.
 
@@ -235,6 +243,7 @@ class Retriever:
         authoritative = await store.hybrid_search(
             query_text=query,
             query_embedding=query_embedding,
+            tenant_id=tenant_id,
             filters=auth_filters,
             limit=auth_fetch,
             dense_limit=prefetch,
@@ -249,6 +258,7 @@ class Retriever:
         examples = await store.hybrid_search(
             query_text=query,
             query_embedding=query_embedding,
+            tenant_id=tenant_id,
             filters=ex_filters,
             limit=ex_fetch,
             dense_limit=prefetch,
@@ -260,6 +270,7 @@ class Retriever:
             examples = await store.hybrid_search(
                 query_text=query,
                 query_embedding=query_embedding,
+                tenant_id=tenant_id,
                 filters=relaxed,
                 limit=ex_fetch,
                 dense_limit=prefetch,
@@ -281,6 +292,8 @@ class Retriever:
         query_embedding: list[float],
         base_filters: dict[str, Any],
         budget: dict[str, int],
+        *,
+        tenant_id: str,
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """One search, then split results by tier.
 
@@ -299,6 +312,7 @@ class Retriever:
         all_results = await store.hybrid_search(
             query_text=query,
             query_embedding=query_embedding,
+            tenant_id=tenant_id,
             filters=base_filters,
             limit=fetch,
             dense_limit=prefetch,
@@ -310,6 +324,7 @@ class Retriever:
             all_results = await store.hybrid_search(
                 query_text=query,
                 query_embedding=query_embedding,
+                tenant_id=tenant_id,
                 filters=relaxed,
                 limit=fetch,
                 dense_limit=prefetch,

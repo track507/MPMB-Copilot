@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from tests.core.builders import build_retriever
 
 
@@ -31,6 +32,7 @@ async def test_dual_reranks_each_tier_to_budget_when_enabled(monkeypatch):
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},
         budget={"authoritative": 3, "examples": 2},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     # Cut to budget, order reversed by the fake reranker
@@ -57,6 +59,7 @@ async def test_dual_disabled_path_is_unchanged(monkeypatch):
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},
         budget={"authoritative": 3, "examples": 5},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     # Disabled: budget passed straight to hybrid_search, reranker never called
@@ -85,6 +88,7 @@ async def test_single_reranks_each_tier_split_when_enabled(monkeypatch):
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014"},
         budget={"authoritative": 2, "examples": 2},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     # Each tier split reranked (reversed) and cut to its budget

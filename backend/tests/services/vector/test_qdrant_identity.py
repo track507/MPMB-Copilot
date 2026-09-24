@@ -1,5 +1,6 @@
 import pytest
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.vector.qdrant import _IDENTITY_PAYLOAD_KEY, _IDENTITY_POINT_ID, QdrantStore
 
 
@@ -41,7 +42,7 @@ class _FakeClient:
     def get_collection(self, name):
         return _Info(self._count, self._dense_dim)
 
-    def retrieve(self, collection_name, ids, with_payload):
+    def retrieve(self, collection_name, ids, with_payload, tenant_id=DEFAULT_TENANT_ID):
         if self._stored is None:
             return []
         return [_Point({_IDENTITY_PAYLOAD_KEY: self._stored})]

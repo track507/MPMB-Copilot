@@ -1,11 +1,12 @@
 import pytest
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import Deps, _mpmb_validate_impl
 from app.core.tools.validator_client import ValidatorResult
 
 
 def _deps() -> Deps:
-    return Deps(session_id="s", edition="2014")
+    return Deps(session_id="s", edition="2014", tenant_id=DEFAULT_TENANT_ID)
 
 
 def _runner(result: ValidatorResult):
@@ -43,7 +44,7 @@ async def test_groups_errors_and_warnings():
 @pytest.mark.asyncio
 async def test_edition_defaults_from_deps():
     run, calls = _runner(ValidatorResult(ok=True))
-    deps = Deps(session_id="s", edition="2024")
+    deps = Deps(session_id="s", edition="2024", tenant_id=DEFAULT_TENANT_ID)
     await _mpmb_validate_impl(deps, "var x = 1;", None, run=run)
     assert calls[0][1] == "2024"
 

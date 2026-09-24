@@ -40,6 +40,7 @@ from qdrant_client.models import (
 
 from app.config import config
 from app.core.embedding_catalog import dimension_for
+from app.core.storage_keys import SHARED_TENANT
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -51,6 +52,7 @@ _IDENTITY_PAYLOAD_KEY = "_embedding_identity"
 
 # Payload fields we create keyword indexes on for fast filtering
 INDEXED_PAYLOAD_FIELDS = {
+    "tenant_id": PayloadSchemaType.KEYWORD,
     "edition": PayloadSchemaType.KEYWORD,
     "source_tier": PayloadSchemaType.KEYWORD,
     "chunk_type": PayloadSchemaType.KEYWORD,
@@ -430,6 +432,8 @@ class QdrantStore:
         chunks: list[dict[str, Any]],
         dense_embeddings: list[list[float]],
         batch_size: int = 64,
+        *,
+        tenant_id: str,
     ) -> int:
         """Upload chunks with dense + sparse vectors to Qdrant.
 
@@ -444,6 +448,9 @@ class QdrantStore:
         Returns:
                 Total number of points upserted.
         """
+        if tenant_id != SHARED_TENANT:
+            raise RuntimeError("tenant content cannot be indexed until the indexer is tenant-scoped")
+
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
 
@@ -465,6 +472,7 @@ class QdrantStore:
             points = []
             for chunk, dense_vec, sparse_vec in zip(batch_chunks, batch_dense, batch_sparse):
                 payload = {
+                    "tenant_id": tenant_id,
                     "content": chunk["content"],
                     "source_file": chunk["source_file"],
                     "source_repo": chunk["source_repo"],
@@ -501,7 +509,7 @@ class QdrantStore:
 
     # * Search
 
-    def _build_qdrant_filter(self, filters: Optional[dict[str, Any]]) -> Optional[Filter]:
+    def _build_qdrant_filter(self, filters: Optional[dict[str, Any]], *, tenant_id: str) -> Optional[Filter]:
         """Convert a simple filter dict into a Qdrant Filter object.
 
         Supports top-level fields and nested metadata fields:
@@ -509,8 +517,9 @@ class QdrantStore:
                 {"object_type": "SpellsList"}  ->  metadata.object_type
 
         Always excludes the reserved embedding-identity point, so it returns a filter even when `filters` is empty
+        The tenant predicate is composed here from the argument, never read out of `filters`
         """
-        conditions = []
+        conditions = [FieldCondition(key="tenant_id", match=MatchAny(any=[tenant_id, SHARED_TENANT]))]
 
         # Map shorthand filter keys to actual payload paths
         field_map = {
@@ -526,6 +535,8 @@ class QdrantStore:
         }
 
         for key, value in (filters or {}).items():
+            if key == "tenant_id":
+                continue
             field_path = field_map.get(key, key)
 
             if isinstance(value, list):
@@ -565,6 +576,8 @@ class QdrantStore:
         self,
         query_text: str,
         query_embedding: list[float],
+        *,
+        tenant_id: str,
         filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
         dense_limit: int = 20,
@@ -595,7 +608,7 @@ class QdrantStore:
         sparse_vectors = self._generate_sparse_vectors([query_text])
         query_sparse = sparse_vectors[0]
 
-        qdrant_filter = self._build_qdrant_filter(filters)
+        qdrant_filter = self._build_qdrant_filter(filters, tenant_id=tenant_id)
 
         results = self.client.query_points(
             collection_name=self.collection_name,
@@ -623,6 +636,8 @@ class QdrantStore:
     async def dense_search(
         self,
         query_embedding: list[float],
+        *,
+        tenant_id: str,
         filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
@@ -631,7 +646,7 @@ class QdrantStore:
             raise RuntimeError("Not connected. Call connect() first.")
         self._raise_if_identity_mismatch()
 
-        qdrant_filter = self._build_qdrant_filter(filters)
+        qdrant_filter = self._build_qdrant_filter(filters, tenant_id=tenant_id)
 
         results = self.client.query_points(
             collection_name=self.collection_name,

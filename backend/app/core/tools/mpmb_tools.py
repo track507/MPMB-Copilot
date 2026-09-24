@@ -58,12 +58,10 @@ class Deps:
 
     session_id: str
     edition: str
+    tenant_id: str
     user_id: str = "default"
-    # ! Retrieval arrives on the context, so this module never imports the retriever and never chooses a store
     retriever: Optional[Retriever] = None
-    # ! Chunk keys (file:start-end) returned by mpmb_search this turn, used to detect when repeated searches keep surfacing the same context
     seen_chunks: set[str] = field(default_factory=set)
-    # ! Per-turn retrieval trace: one citation entry per mpmb_search call (no chunk bodies); rag_engine reads this after the run
     trace: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -299,7 +297,7 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
         return "[error] retrieval unavailable: no retriever is configured for this request."
 
     try:
-        result = await deps.retriever.retrieve(query=query, edition=edition)
+        result = await deps.retriever.retrieve(query=query, edition=edition, tenant_id=deps.tenant_id)
     except Exception as e:
         deps.trace.append({"tool": "mpmb_search", "query": query, "edition": edition, "chunks": []})
         return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."

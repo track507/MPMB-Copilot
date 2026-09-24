@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from app.core.prompts import PromptBuilder
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.source_catalog import SourceCatalogService
 
 
@@ -282,10 +283,10 @@ async def test_rag_engine_appends_the_manifest_it_is_given(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    # ! The caller assembles this and passes it in, so the agent loop never reaches the database for a prompt
-    # ? agent_generate is stubbed, so neither injected dependency is reached
     engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
-    await engine.generate(query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST)
+    await engine.generate(
+        query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
+    )
 
     assert "[uploaded files]" in captured["user_prompt"]
     assert "a.js" in captured["user_prompt"]
@@ -310,9 +311,9 @@ async def test_rag_engine_drops_the_manifest_when_tools_are_off(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    # ? agent_generate is stubbed, so neither injected dependency is reached
     engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
-    await engine.generate(query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST)
+    await engine.generate(
+        query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
+    )
 
-    # ! Naming files the model has no tool to open only invites a guess
     assert "[uploaded files]" not in captured["user_prompt"]

@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from tests.core.builders import build_retriever
 
 
@@ -21,6 +22,7 @@ async def test_dual_search_drops_object_type_from_authoritative_leg():
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
         budget={"authoritative": 3, "examples": 5},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     auth_call_filters = store.hybrid_search.await_args_list[0].kwargs["filters"]
@@ -47,6 +49,7 @@ async def test_dual_search_examples_fallback_drops_object_type_when_empty():
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
         budget={"authoritative": 3, "examples": 5},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     assert len(examples) == 1
@@ -71,6 +74,7 @@ async def test_dual_search_no_fallback_when_examples_found():
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2014", "object_type": "SpellsList"},
         budget={"authoritative": 3, "examples": 5},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     assert len(auth) == 1 and len(examples) == 1
@@ -92,6 +96,7 @@ async def test_single_search_fallback_drops_object_type_when_empty():
         query_embedding=[0.0] * 8,
         base_filters={"edition": "2024", "object_type": "RaceList"},
         budget={"authoritative": 3, "examples": 5},
+        tenant_id=DEFAULT_TENANT_ID,
     )
 
     assert len(auth) == 1 and len(examples) == 1

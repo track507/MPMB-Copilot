@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.config import config
+from app.core.storage_keys import SHARED_TENANT
 from app.logger import get_logger
 from app.services.embedding.service import embedding_service
 from app.services.indexing.status_store import index_status_store
@@ -157,7 +158,9 @@ class IndexingService:
                 if not connected:
                     raise RuntimeError("Vector store is not available")
 
-            points_uploaded = loop.run_until_complete(store.upsert_chunks(chunks, all_embeddings))
+            points_uploaded = loop.run_until_complete(
+                store.upsert_chunks(chunks, all_embeddings, tenant_id=SHARED_TENANT)
+            )
             # Stamp the index with the embedding model + chunker version that built these vectors
             from app.core.chunker import CHUNKER_VERSION
 

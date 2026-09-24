@@ -163,6 +163,8 @@ class RAGEngine:
         query: str,
         conversation_history: Optional[list[dict[str, Any]]] = None,
         user_id: str = "default",
+        *,
+        tenant_id: str,
         session_id: Optional[str] = None,
         edition: Optional[str] = None,
         provider: Optional[str] = None,
@@ -190,6 +192,7 @@ class RAGEngine:
                 session_id=session_id or "unknown",
                 edition=resolved_edition,
                 user_id=user_id,
+                tenant_id=tenant_id,
                 retriever=self._retriever,
             )
             if toolset
@@ -249,6 +252,8 @@ class RAGEngine:
         query: str,
         conversation_history: Optional[list[dict[str, Any]]] = None,
         user_id: str = "default",
+        *,
+        tenant_id: str,
         session_id: Optional[str] = None,
         edition: Optional[str] = None,
         provider: Optional[str] = None,
@@ -276,6 +281,7 @@ class RAGEngine:
                 session_id=session_id or "unknown",
                 edition=resolved_edition,
                 user_id=user_id,
+                tenant_id=tenant_id,
                 retriever=self._retriever,
             )
             if toolset

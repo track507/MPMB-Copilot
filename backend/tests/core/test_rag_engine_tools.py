@@ -7,6 +7,7 @@ from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from app.core.rag_engine import RAGEngine
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools import build_mpmb_toolset
 
 
@@ -58,6 +59,7 @@ async def test_stream_emits_tool_events_when_model_calls_tool(
         conversation_history=[],
         session_id="sess-1",
         edition="2014",
+        tenant_id=DEFAULT_TENANT_ID,
     ):
         events.append(ev)
 
@@ -159,6 +161,7 @@ async def test_stream_soft_budget_lets_model_finish_answering(tmp_path, monkeypa
         conversation_history=[],
         session_id="sess-1",
         edition="2014",
+        tenant_id=DEFAULT_TENANT_ID,
     ):
         events.append(ev)
 
@@ -198,6 +201,7 @@ async def test_stream_hard_limit_degrades_gracefully(tmp_path, monkeypatch):
         conversation_history=[],
         session_id="sess-1",
         edition="2014",
+        tenant_id=DEFAULT_TENANT_ID,
     ):
         events.append(ev)
 
@@ -220,10 +224,7 @@ async def test_stream_does_not_pre_retrieve(tmp_path, monkeypatch):
 
     events = []
     async for ev in engine.stream(
-        query="Hi",
-        conversation_history=[],
-        session_id="sess-1",
-        edition="2014",
+        query="Hi", conversation_history=[], session_id="sess-1", edition="2014", tenant_id=DEFAULT_TENANT_ID
     ):
         events.append(ev)
 
@@ -263,6 +264,7 @@ async def test_stream_mpmb_search_drives_retriever(tmp_path, monkeypatch):
         conversation_history=[],
         session_id="sess-1",
         edition="2014",
+        tenant_id=DEFAULT_TENANT_ID,
     ):
         events.append(ev)
 
@@ -292,5 +294,5 @@ async def test_generate_surfaces_retrieval_trace(monkeypatch):
     monkeypatch.setattr(re_mod.settings, "enable_tool_use", True)
 
     engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
-    resp = await engine.generate(query="how do I add a spell", session_id="s")
+    resp = await engine.generate(query="how do I add a spell", session_id="s", tenant_id=DEFAULT_TENANT_ID)
     assert resp.retrieval == [{"tool": "mpmb_search", "query": "q", "edition": "2014", "chunks": []}]

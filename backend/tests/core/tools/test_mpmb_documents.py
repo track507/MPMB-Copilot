@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from app.config import config
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import (
     Deps,
     _mpmb_function_impl,
@@ -38,7 +39,7 @@ def roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
 
 @pytest.fixture
 def deps() -> Deps:
-    return Deps(session_id="s1", edition="2014", user_id="u1")
+    return Deps(session_id="s1", edition="2014", user_id="u1", tenant_id=DEFAULT_TENANT_ID)
 
 
 def test_read_returns_the_extracted_text_with_page_markers(roots, deps):

@@ -27,6 +27,8 @@ class VectorStore(Protocol):
         self,
         chunks: list[dict[str, Any]],
         dense_embeddings: list[list[float]],
+        *,
+        tenant_id: str,
     ) -> int:
         """
         Upload chunks with their dense embeddings and return how many points landed
@@ -42,6 +44,8 @@ class VectorStore(Protocol):
         self,
         query_text: str,
         query_embedding: list[float],
+        *,
+        tenant_id: str,
         filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
         dense_limit: int = 20,
@@ -60,6 +64,8 @@ class VectorStore(Protocol):
     async def dense_search(
         self,
         query_embedding: list[float],
+        *,
+        tenant_id: str,
         filters: Optional[dict[str, Any]] = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
