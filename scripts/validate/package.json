@@ -14,12 +14,12 @@
 		"typecheck": "tsc -p jsconfig.json"
 	},
 	"dependencies": {
-		"@eslint/js": "^10.0.1",
-		"eslint": "^10.11.0"
+		"@eslint/js": "catalog:",
+		"eslint": "catalog:"
 	},
 	"devDependencies": {
-		"@types/node": "^26.6.2",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@types/node": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	}
 }

@@ -52,45 +52,26 @@
 		"typecheck:scripts": "tsc --noEmit -p scripts/tsconfig.json",
 		"test": "uv --cache-dir .uv-cache run --no-sync --project backend --group dev pytest backend/ -v",
 		"test:db": "node ./scripts/test-db.mjs",
+		"storage:verify": "uv --cache-dir .uv-cache run --no-sync --project backend python scripts/storage_verify.py",
 		"check": "pnpm run lint && pnpm run lint:imports && pnpm run format:check && pnpm run typecheck && pnpm run test",
 		"check:full": "pnpm run check && pnpm run typecheck",
 		"mint-key": "node ./scripts/mint-key.mjs",
-		"prepare": "husky"
-	},
-	"lint-staged": {
-		"*.{js,mjs,cjs,json,jsonc,yml,yaml,md}": [
-			"prettier --write"
-		],
-		"*.js": [
-			"eslint --fix"
-		],
-		"frontend/src/**/*.{ts,tsx}": [
-			"eslint --fix --config frontend/eslint.config.mjs",
-			"prettier --write"
-		],
-		"scripts/**/*.ts": [
-			"prettier --write"
-		],
-		"*.py": [
-			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check --fix",
-			"uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format"
-		]
+		"prepare": "lefthook install"
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^21.2.3",
-		"@commitlint/config-conventional": "^21.2.3",
-		"@commitlint/types": "^21.2.3",
-		"@eslint/js": "^10.0.1",
-		"@types/node": "^26.6.2",
-		"concurrently": "^10.0.5",
-		"eslint": "^10.11.0",
-		"globals": "^17.12.0",
-		"husky": "^9.1.7",
-		"lint-staged": "^17.5.1",
-		"markdownlint-cli2": "^0.23.2",
-		"prettier": "^3.9.8",
-		"temporal-polyfill": "^1.0.5",
-		"temporal-spec": "^1.0.1",
-		"typescript": "^6.0.3"
+		"@commitlint/cli": "21.2.3",
+		"@commitlint/config-conventional": "21.2.3",
+		"@commitlint/types": "21.2.3",
+		"@eslint/js": "catalog:",
+		"@types/node": "catalog:",
+		"concurrently": "10.0.5",
+		"eslint": "catalog:",
+		"globals": "catalog:",
+		"lefthook": "2.1.14",
+		"markdownlint-cli2": "0.23.3",
+		"prettier": "3.9.9",
+		"temporal-polyfill": "catalog:",
+		"temporal-spec": "1.0.1",
+		"typescript": "catalog:"
 	}
 }

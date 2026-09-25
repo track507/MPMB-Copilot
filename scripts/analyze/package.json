@@ -9,16 +9,16 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"acorn": "^8.18.0",
-		"acorn-walk": "^8.3.5",
-		"eslint-scope": "^9.1.2",
-		"fast-glob": "^3.3.3"
+		"acorn": "8.18.0",
+		"acorn-walk": "8.3.5",
+		"eslint-scope": "9.1.2",
+		"fast-glob": "3.3.3"
 	},
 	"devDependencies": {
-		"@types/estree": "^1.0.9",
-		"@types/node": "^26.6.2",
-		"tsx": "^4.23.13",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@types/estree": "1.0.9",
+		"@types/node": "catalog:",
+		"tsx": "4.23.15",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	}
 }

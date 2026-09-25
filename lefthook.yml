@@ -1,0 +1,56 @@
+commit-msg:
+    jobs:
+        - name: commitlint
+          run: pnpm exec commitlint --edit {1}
+
+pre-commit:
+    parallel: true
+    skip:
+        - merge
+        - rebase
+    jobs:
+        - name: prettier
+          glob:
+              - "*.{mjs,cjs,json,jsonc,yml,yaml,md}"
+              - "scripts/**/*.ts"
+          run: pnpm exec prettier --write {staged_files}
+          stage_fixed: true
+
+        - name: eslint-root
+          glob: "*.js"
+          run: >
+              pnpm exec eslint --fix {staged_files} &&
+              pnpm exec prettier --write {staged_files}
+          stage_fixed: true
+
+        - name: frontend
+          glob: "frontend/src/**/*.{ts,tsx}"
+          run: >
+              pnpm exec eslint --fix --config frontend/eslint.config.mjs {staged_files} &&
+              pnpm exec prettier --write {staged_files}
+          stage_fixed: true
+
+        - name: ruff
+          glob: "*.py"
+          run: >
+              uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff check --fix {staged_files} &&
+              uv --cache-dir .uv-cache run --no-sync --project backend --group dev ruff format {staged_files}
+          stage_fixed: true
+
+pre-push:
+    parallel: true
+    jobs:
+        - name: lint
+          run: pnpm run lint
+
+        - name: imports
+          run: pnpm run lint:imports
+
+        - name: format
+          run: pnpm run format:check
+
+        - name: typecheck
+          run: pnpm run typecheck
+
+        - name: test
+          run: pnpm run test
