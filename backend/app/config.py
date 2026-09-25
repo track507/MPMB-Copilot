@@ -119,11 +119,14 @@ class Config(BaseSettings):
 
     # Base data directory
     data_dir: str = "./data"
+    packs_dir: str = "./data/packs"
+    runtime_dir: str = "./data/runtime"
+    tenants_dir: str = "./data/tenants"
 
     # Source repositories
-    mpmb_source_dir: str = "./data/mpmb_source"
-    mpmb_source_2024_dir: str = "./data/mpmb_source_2024"
-    imports_source_dir: str = "./data/imports_source"
+    mpmb_source_dir: str = "./data/packs/mpmb/source_2014"
+    mpmb_source_2024_dir: str = "./data/packs/mpmb/source_2024"
+    imports_source_dir: str = "./data/packs/mpmb/imports"
     source_catalog_path: Optional[str] = Field(
         default=None,
         validation_alias="MPMB_CATALOG_PATH",
@@ -133,16 +136,17 @@ class Config(BaseSettings):
     user_source_dirs: str = ""
 
     # Chunker output
-    chunked_output_dir: str = "./data/chunked_output"
+    chunked_output_dir: str = "./data/runtime/chunked_output"
 
     # Other data directories
-    adobe_docs_dir: str = "./data/adobe_docs"
-    index_cache_dir: str = "./data/index_cache"
-    extracted_dir: str = "./data/extracted"
-    upload_dir: str = "./data/uploads"
+    index_cache_dir: str = "./data/runtime/index_cache"
+    extracted_dir: str = "./data/runtime/extracted"
+    upload_dir: str = "./data/tenants"
 
     # ! FastEmbed model cache: never the OS temp dir (Windows purges it, silently breaking retrieval)
-    fastembed_cache_dir: str = "./data/models/fastembed"
+    # ! This also applies to ephermeral containers where the /tmp dir can be purged
+    #  * I know this since this is how my uv and pnpm links got borked...
+    fastembed_cache_dir: str = "./data/runtime/models/fastembed"
 
     # Source Repository URLs (used by source acquisition scripts)
     mpmb_repo_url: str = "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git"

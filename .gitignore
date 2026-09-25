@@ -1,18 +1,11 @@
 # Data Directory - Exclude all generated/downloaded content
-data/mpmb_source/
-data/mpmb_source_2024/
-data/mpmb_character_sheets/
-data/mpmb_pdfs/
-data/imports_source/
-data/chunked_output/
-data/adobe_docs/
-data/index_cache/
-data/uploads/
-data/models/
+# * Three lifecycles: packs reinstall, runtime is disposable, tenants must be backed up
+data/packs/
+data/runtime/
+data/tenants/
 
 # But keep the directory structure
 !data/
-!data/.gitkeep
 !data/README.md
 
 # Generated eval candidates (feedback exporter output)
