@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 from fastapi import UploadFile
 
 from app.config import config
+from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
 from app.logger import get_logger
 from app.model.orm import File
 from app.services import documents
@@ -58,13 +59,13 @@ class UploadService:
     Disk + Registry for uploads
     """
 
-    def _scope_dir(self, *, scope: str, owner_user_id: str, session_id: Optional[UUID]) -> Path:
-        base = Path(config.upload_dir)
+    def _scope_dir(self, *, scope: str, tenant_id: str, owner_user_id: str, session_id: Optional[UUID]) -> Path:
+        base = Path(config.data_dir)
         if scope == "session":
-            return base / "session" / str(session_id)
-        elif scope == "global":
-            return base / "global" / owner_user_id
-        return base / "shared"
+            return base / session_prefix(tenant_id, owner_user_id, str(session_id))
+        if scope == "global":
+            return base / user_global_prefix(tenant_id, owner_user_id)
+        return base / library_prefix(tenant_id)
 
     def _check_access(self, *, scope: str, row_owner: str, user_id: str, role: str, write: bool) -> None:
         if role == "admin":
@@ -105,7 +106,7 @@ class UploadService:
         if await upload_registry.count_files(**target) >= settings.upload_max_files_per_scope:
             raise UploadError(400, "quota_exceeded", f"Scope holds {settings.upload_max_files_per_scope} files already")
 
-        scope_dir = self._scope_dir(scope=scope, owner_user_id=user_id, session_id=session_id)
+        scope_dir = self._scope_dir(scope=scope, tenant_id=tenant_id, owner_user_id=user_id, session_id=session_id)
         scope_dir.mkdir(parents=True, exist_ok=True)
         temp_path = scope_dir / f".upload-{uuid4().hex}"
 
