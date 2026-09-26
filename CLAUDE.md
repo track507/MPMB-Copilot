@@ -72,6 +72,7 @@ pnpm run setup:all        # setup -> setup:services -> setup:index
 pnpm run check            # lint + import contracts + format check + typecheck + tests  <- THE gate
 pnpm run test             # backend pytest
 pnpm run index            # force re-index (backend must be running)
+pnpm run storage:verify   # report drift between the files table and data/tenants (never repairs)
 pnpm run typecheck:scripts  # tsc over scripts/*.mjs (not in the aggregate typecheck yet)
 pnpm run lint:imports     # the architecture contracts alone (import-linter)
 ```
@@ -140,12 +141,25 @@ twice.
 - **Indexing is never implicit.** Chunking is offline (`scripts/chunk_mpmb.py`, which requires
   the analyzer report); indexing goes through `POST /api/index` -> `TaskManager`. Swap embedding
   models without re-indexing and hybrid search *refuses* rather than serving mismatched vectors.
+- **`data/` is three lifecycles, not one folder.** `packs/` reinstalls, `runtime/` is disposable,
+  `tenants/` is the only prefix a backup must carry. The split exists so "what is irreplaceable"
+  is answerable by looking. Adding a directory straight under `data/` puts it in none of them.
+- **A storage key never contains a name.** Every segment is a primary key, so renaming a tenant,
+  a user or a chat moves no bytes. `tenants/<t>/by-name.json` is what keeps the tree readable, and
+  it lives inside the tenant because it holds names - a root-level index would expose every
+  tenant's usernames to anyone who can list the bucket.
+- **`_meta.json` is a breadcrumb, not a record.** Projected from the row after the commit and
+  never inside it, because an object store cannot join a database transaction. A failed write is
+  logged and swallowed; `storage:verify` is what finds the drift. Never read one to make a decision.
 - **`docs/superpowers/` is intentionally untracked** - specs and plans are working docs.
 
 ## Rules you would otherwise violate
 
 **Backend**
 
+- Every storage path is built by `core/storage_keys.py`. `UploadService._scope_dir` and
+  `source_paths._build_default_roots` both call it, because two copies of a layout drift apart
+  silently and an upload that lands where no tool looks is invisible.
 - All source file access goes through `core/tools/source_paths.py` - the single choke point for
   the root allowlist, `..` rejection, extension allowlist, size caps, denied subdirs, symlink
   containment. Never read MPMB source another way.
@@ -209,8 +223,7 @@ explanation) -> section B.
 **Do not trust these as current:** `docs/PROJECT_PLAN.md` and `docs/TODO.md` (pre-pivot
 planning, describe forced-RAG designs that were never built), `frontend/README.md` (says
 react-router and `?session=` params; it is TanStack Router with real paths),
-`backend/README.md:65` (says `0.0.0.0`; the bind is `127.0.0.1`), `data/README.md`
-(documents an Adobe SDK download step no script performs).
+`backend/README.md:65` (says `0.0.0.0`; the bind is `127.0.0.1`).
 
 ## Non-goals
 

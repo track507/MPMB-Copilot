@@ -111,13 +111,13 @@ Measured on a clean install right after `setup:all` plus `setup:docker`, with th
 | Repo | `backend/.venv` | 365 MB |
 | | `node_modules` (root + frontend) | 288 MB |
 | | `.uv-cache` (prunable) | 330 MB |
-| | `data/` (sources, chunks, ONNX model cache) | 296 MB |
+| | `data/` (packs, runtime caches, tenant uploads) | 296 MB |
 | **Total** | | **~3.35 GB** |
 
 Notes:
 
 - **Skipping the backend container saves 804 MB.** `setup:all` doesn't build it — only `setup:docker` does — so the default path lands nearer **2.5 GB**.
-- `data/models/` (152 MB) holds the ONNX embedding + reranker; it grows if you switch models. The optional `sbert` extra pulls torch and adds **~10 GB**.
+- `data/runtime/models/` (152 MB) holds the ONNX embedding + reranker; it grows if you switch models. The optional `sbert` extra pulls torch and adds **~10 GB**.
 - Docker's build cache is separate and not counted here — `docker builder du` reports it, `docker builder prune` reclaims it.
 - To re-measure: `docker system df -v` (use the per-image rows, not the summary line, which folds build cache into its image total) and `docker builder du`. Docker Desktop labels its sizes "MB" but computes MiB, so its numbers run ~5% below the CLI's for the same bytes.
 
@@ -177,7 +177,7 @@ MPMB-Copilot/
 ├── backend/                  # FastAPI app — see backend/README.md
 │   └── evals/                # retrieval eval harness (cases, matrix runner, feedback exporter)
 ├── frontend/                 # React app    — see frontend/README.md
-├── data/                     # gitignored: cloned MPMB sources, chunks, index cache
+├── data/                     # gitignored: packs/ (sources), runtime/ (caches), tenants/ (uploads)
 ├── docker/                   # Dockerfiles for backend + custom postgres image
 ├── docker-compose.yml        # postgres + qdrant + backend
 ├── docs/                     # policy docs
@@ -254,7 +254,7 @@ pnpm run validate:corpus    # static-validator gate: the engine corpora must lin
 - ✅ **Reindex UX** — a Force rebuild toggle with confirmation, live progress bar (attaches even to CLI-started runs), and honest no-op messages; the top-bar index dot reflects real state
 - ✅ **Role-aware UI** — settings are admin-only end to end; non-admin users get a 404 on admin routes (no endpoint discoverability), and the backend enforces the same wall regardless
 - ✅ **GPU acceleration (opt-in)** — route local embedding + reranking onto your GPU with one toggle; see [GPU acceleration](#gpu-acceleration)
-- ✅ **Durable model cache** — local ONNX models live under `data/models/`, not the OS temp dir, so a Windows temp cleanup can't silently break retrieval
+- ✅ **Durable model cache** — local ONNX models live under `data/runtime/models/`, not the OS temp dir, so a Windows temp cleanup can't silently break retrieval
 
 ## Static validator
 
@@ -328,6 +328,6 @@ Postgres only honors `POSTGRES_PASSWORD` on first volume init. If your `.env` pa
 
 Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
-This repo distributes **code only**. The MPMB source files in `data/mpmb_source/` are cloned at setup time from [MorePurpleMoreBetter's 2014 repository](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet), and the files in `data/mpmb_source_2024/` are cloned from [MorePurpleMoreBetter's 2024 repository](https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet). Both are subject to MPMB's own licensing.
+This repo distributes **code only**. The MPMB source files in `data/packs/mpmb/source_2014/` are cloned at setup time from [MorePurpleMoreBetter's 2014 repository](https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet), and the files in `data/packs/mpmb/source_2024/` are cloned from [MorePurpleMoreBetter's 2024 repository](https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet). Both are subject to MPMB's own licensing.
 
 See [`docs/CUSTOM_DOCS_POLICY.md`](./docs/CUSTOM_DOCS_POLICY.md) and [`docs/TERMS_OF_USE.md`](./docs/TERMS_OF_USE.md) for content policies.
