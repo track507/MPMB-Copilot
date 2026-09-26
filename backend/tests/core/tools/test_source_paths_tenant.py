@@ -7,6 +7,7 @@ Both sides used to build the layout independently, and two copies of a layout dr
 
 from pathlib import Path
 
+from app.config import Config, config
 from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
 from app.core.tools.source_paths import (
     ALLOWED_ROOTS,
@@ -146,14 +147,32 @@ def test_a_missing_upload_root_reads_as_nothing_uploaded():
         assert "root directory missing" not in message
 
 
-def test_the_corpus_roots_still_resolve_to_the_pack_layout():
-    """The move put corpus under packs/, and the resolver must follow config rather than the old names"""
+def test_the_corpus_roots_resolve_through_config_not_through_their_own_literal():
+    """
+    The literal is the model's vocabulary; where it points is config's business
+
+    Asserted against config rather than a fixed path, because a developer's .env legitimately repoints these
+    """
     roots = _build_default_roots(FakeDeps())
 
-    for literal in ("./data/mpmb_source/", "./data/mpmb_source_2024/", "./data/imports_source/"):
-        resolved = roots[literal].as_posix()
-        assert "/packs/" in resolved, resolved
-        assert not resolved.endswith("/data/mpmb_source"), resolved
+    assert roots["./data/mpmb_source/"] == Path(config.mpmb_source_dir)
+    assert roots["./data/mpmb_source_2024/"] == Path(config.mpmb_source_2024_dir)
+    assert roots["./data/imports_source/"] == Path(config.imports_source_dir)
+
+
+def test_the_shipped_defaults_put_the_corpus_under_packs():
+    """
+    The three-lifecycle layout, asserted on the field defaults
+
+    ! Read off Config rather than off config, so a stale .env cannot make this pass or fail
+    """
+    for field in ("mpmb_source_dir", "mpmb_source_2024_dir", "imports_source_dir"):
+        default = Config.model_fields[field].default
+        assert "/packs/" in default, f"{field} = {default}"
+
+    for field in ("chunked_output_dir", "index_cache_dir", "extracted_dir", "fastembed_cache_dir"):
+        default = Config.model_fields[field].default
+        assert "/runtime/" in default, f"{field} = {default}"
 
 
 def test_an_upload_root_is_never_a_parent_of_another_tenants(tmp_path: Path):

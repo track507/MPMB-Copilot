@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
+from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
 from app.services import documents
 from app.services.documents import CachedDocument, CacheScope, DocumentError
 from app.settings import settings
@@ -56,17 +57,22 @@ class PathResolution:
 
 
 def _build_default_roots(deps) -> dict[str, Path]:
-    """Resolve the literal root strings to real directories using Deps."""
+    """
+    Resolve the literal root strings to real directories through the key scheme
+
+    ! UploadService._scope_dir builds the same three directories, so both call storage_keys instead of spelling the layout
+    ? An upload that lands where no tool looks is invisible, and nothing reports it as an error
+    """
     from app.config import config
 
-    base = Path(config.upload_dir)
+    base = Path(config.data_dir)
     return {
         ROOT_MPMB_2014: Path(config.mpmb_source_dir),
         ROOT_MPMB_2024: Path(config.mpmb_source_2024_dir),
         ROOT_IMPORTS: Path(config.imports_source_dir),
-        ROOT_UPLOADS_SESSION: base / "session" / deps.session_id,
-        ROOT_UPLOADS_GLOBAL: base / "global" / deps.user_id,
-        ROOT_UPLOADS_SHARED: base / "shared",
+        ROOT_UPLOADS_SESSION: base / session_prefix(deps.tenant_id, deps.user_id, deps.session_id),
+        ROOT_UPLOADS_GLOBAL: base / user_global_prefix(deps.tenant_id, deps.user_id),
+        ROOT_UPLOADS_SHARED: base / library_prefix(deps.tenant_id),
     }
 
 

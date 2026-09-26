@@ -14,7 +14,7 @@ def tenant_prefix(tenant_id: str) -> str:
 
 
 def tenant_meta_key(tenant_id: str) -> str:
-    return f"{tenant_prefix(tenant_id=tenant_id)}/meta.json"
+    return f"{tenant_prefix(tenant_id=tenant_id)}/_meta.json"
 
 
 def tenant_name_index_key(tenant_id: str) -> str:
