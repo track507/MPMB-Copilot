@@ -9,14 +9,13 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 from uuid import uuid4
 
 from app.config import config
 from app.logger import get_logger
-from app.services.documents.protocol import CacheScope, Extraction, OutlineEntry
+from app.services.documents.protocol import CachedDocument, CacheScope, Extraction, OutlineEntry
 
 logger = get_logger(__name__)
 
@@ -26,16 +25,6 @@ _SAFE_PART = re.compile(r"[A-Za-z0-9_-]+")
 
 SHARED_DIR = "shared"
 SOURCE_ROOTS_DIR = "_source_roots"
-
-
-@dataclass(frozen=True)
-class CachedDocument:
-    """A completed extraction on disk: the text the tools read and the metadata the outline serves"""
-
-    text_path: Path
-    outline: list[OutlineEntry]
-    pages_without_text: list[int]
-    summary: dict[str, Any]
 
 
 def base_dir() -> Path:

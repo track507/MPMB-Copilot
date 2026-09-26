@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Literal, Optional, Protocol
 
 # ! Typographic characters extract correctly and still break grep, since a user types a straight quote
-# ? Folding happens before the cache write so the sidecar is the ASCII the tools search
 _ASCII_FOLD = str.maketrans(
     {
         "\u2018": "'",
@@ -27,8 +26,10 @@ _ASCII_FOLD = str.maketrans(
 )
 
 # ! str.splitlines() breaks on every one of these, and read and grep count lines with it
-# ? Folding them to \n makes split("\n") and splitlines() agree, so outline line numbers stay valid everywhere
 _LINE_SEPARATORS = re.compile("\r\n|[\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]")
+
+# ! Declared here rather than in registry.py so core can read it without reaching an adapter
+EXTRACTABLE_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".csv", ".tsv"})
 
 
 def normalize(text: str) -> str:
@@ -112,3 +113,31 @@ class CacheScope:
     @classmethod
     def for_source_root(cls, name: str) -> "CacheScope":
         return cls(kind="source_root", key=name)
+
+
+def is_extractable(extension: str) -> bool:
+    return extension.lower() in EXTRACTABLE_EXTENSIONS
+
+
+@dataclass(frozen=True)
+class CachedDocument:
+    """
+    A completed extraction on disk: the text the tools read and the metadata the outline serves
+    """
+
+    text_path: Path
+    outline: list[OutlineEntry]
+    pages_without_text: list[int]
+    summary: dict[str, Any]
+
+
+class DocumentReader(Protocol):
+    """
+    How the tools turn a document into readable text, without naming what does the extracting
+
+    ! Only the two calls that touch disk live here; is_extractable is pure and needs no adapter
+    """
+
+    def lookup(self, path: Path, scope: CacheScope) -> Optional[CachedDocument]: ...
+
+    def ensure_extracted(self, path: Path, scope: CacheScope) -> CachedDocument: ...

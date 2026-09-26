@@ -8,12 +8,12 @@ import json
 import time
 from typing import Optional
 
+from app.services.documents.protocol import (
+    EXTRACTABLE_EXTENSIONS as EXTRACTABLE_EXTENSIONS,
+)
 from app.services.documents.protocol import DocumentExtractor
+from app.services.documents.protocol import is_extractable as is_extractable
 from app.settings import settings
-
-# ! Must widen in lockstep with UPLOAD_EXTENSIONS and the tools' ALLOWED_EXTENSIONS, one format per adapter change
-# ? Accepting an upload nothing can read recreates the dead end this registry exists to close
-EXTRACTABLE_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".csv", ".tsv"})
 
 # * The id names the sidecar on disk, so it must stay stable for a given adapter
 _EXTRACTOR_IDS: dict[str, str] = {".pdf": "pdf", ".csv": "csv", ".tsv": "csv"}
@@ -22,10 +22,6 @@ _AVAILABILITY_TTL_SECONDS = 60.0
 
 _extractors: dict[str, DocumentExtractor] = {}
 _availability: dict[tuple[str, str], tuple[float, Optional[str]]] = {}
-
-
-def is_extractable(extension: str) -> bool:
-    return extension.lower() in EXTRACTABLE_EXTENSIONS
 
 
 def extractor_id(extension: str) -> Optional[str]:
