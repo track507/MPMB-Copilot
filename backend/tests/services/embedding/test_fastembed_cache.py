@@ -12,7 +12,8 @@ def test_cache_path_is_absolute_and_outside_temp():
     assert path.is_absolute()
     assert "temp" not in str(path).lower()
     # ? Default anchors under the repo's data dir regardless of process cwd
-    assert path.parts[-3:] == ("data", "models", "fastembed")
+    # ! Under runtime/ because the model cache is disposable: it reinstalls, so no backup ever has to carry it
+    assert path.parts[-4:] == ("data", "runtime", "models", "fastembed")
 
 
 def test_fastembed_provider_passes_cache_dir(monkeypatch):

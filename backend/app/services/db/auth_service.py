@@ -12,9 +12,11 @@ from uuid import UUID
 from sqlalchemy import CursorResult, delete, func, select, update
 
 from app.core import security
+from app.core.storage_keys import DEFAULT_TENANT_ID, user_meta_key
 from app.logger import get_logger
 from app.model.orm import AuthSession, LoginAttempt, Session, User
 from app.services.db.connection import db
+from app.services.storage import meta
 
 logger = get_logger(__name__)
 
@@ -51,10 +53,41 @@ class AuthService:
 
     async def create_admin(self, username: str, password: str) -> User:
         # ! IntegrityError from the unique index settles the concurrent-setup race; caller maps it to 403
-        user = User(username=username, password_hash=security.hash_password(password), role="admin")
+        # ! tenant_id is NOT NULL with no default, so first-run setup fails outright without this
+        user = User(
+            username=username,
+            password_hash=security.hash_password(password),
+            role="admin",
+            tenant_id=DEFAULT_TENANT_ID,
+        )
         async with db.session() as session:
             session.add(user)
+
+        await self._project_tenant_users(str(user.tenant_id))
         return user
+
+    async def _project_tenant_users(self, tenant_id: str) -> None:
+        """
+        Rewrite one tenant's user breadcrumbs and its name index
+
+        Called after the commit, so it reads the post-commit world rather than the session that produced it
+        The whole tenant is rewritten because the index is a single object: a partial update cannot express a removal
+        """
+        async with db.session() as session:
+            users = list((await session.execute(select(User).where(User.tenant_id == tenant_id))).scalars())
+
+        for row in users:
+            meta.write_meta(
+                user_meta_key(tenant_id, str(row.id)),
+                meta.user_meta_payload(
+                    user_id=str(row.id),
+                    tenant_id=tenant_id,
+                    username=row.username,
+                    role=row.role,
+                    created_at=row.created_at,
+                ),
+            )
+        meta.write_name_index(tenant_id, [{"id": str(row.id), "username": row.username} for row in users])
 
     async def claim_orphan_sessions(self, admin_id: str) -> int:
         async with db.session() as session:

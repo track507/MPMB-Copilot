@@ -2,7 +2,7 @@
 Uploade registry: DB ops for the files table
 
 Rows are the SoT for ownership, scope, and content hash
-Bytes live on disk under config.upload_dir - UploadService owns that side
+Bytes live on disk under config.tenants_dir, keyed by storage_key - UploadService owns that side
 Nothing in this module touches the fs
 """
 

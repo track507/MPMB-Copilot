@@ -141,7 +141,6 @@ class Config(BaseSettings):
     # Other data directories
     index_cache_dir: str = "./data/runtime/index_cache"
     extracted_dir: str = "./data/runtime/extracted"
-    upload_dir: str = "./data/tenants"
 
     # ! FastEmbed model cache: never the OS temp dir (Windows purges it, silently breaking retrieval)
     # ! This also applies to ephermeral containers where the /tmp dir can be purged

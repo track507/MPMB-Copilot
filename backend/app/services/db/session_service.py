@@ -18,9 +18,11 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, CursorResult, func, select, update
 from sqlalchemy.orm import selectinload
 
+from app.core.storage_keys import session_meta_key
 from app.logger import get_logger
 from app.model.orm import Message, Session
 from app.services.db.connection import db
+from app.services.storage import meta
 
 logger = get_logger(__name__)
 
@@ -63,7 +65,18 @@ class SessionService:
             await s.flush()
             await s.refresh(session)
             logger.info(f"Created session {session.id} for {user_id}: {title}")
-            return session
+
+        # ! Written after the transaction closes, because an object store cannot be rolled back with it
+        meta.write_meta(
+            session_meta_key(tenant_id, user_id, str(session.id)),
+            meta.session_meta_payload(
+                session_id=str(session.id),
+                tenant_id=tenant_id,
+                user_id=user_id,
+                created_at=session.created_at,
+            ),
+        )
+        return session
 
     async def get_session(self, session_id: UUID, *, user_id: str) -> Optional[Session]:
         """

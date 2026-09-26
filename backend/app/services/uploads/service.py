@@ -129,13 +129,15 @@ class UploadService:
 
         file_hash = sha.hexdigest()
         final_path = scope_dir / filename
-        rel_path = final_path.relative_to(Path(config.upload_dir)).as_posix()
+        # ! Relative to data_dir, so the stored value is the key itself: tenants/<tenant>/library/<name>
+        # ? Anchoring on the uploads subtree instead would store a fragment that no other reader could resolve
+        storage_key = final_path.relative_to(Path(config.data_dir)).as_posix()
         content_type = upload.content_type or "application/octet-stream"
         row_values: _RowValues = dict(
             scope=scope,
             filename=filename,
             original_filename=(upload.filename or filename)[:255],
-            storage_key=rel_path,
+            storage_key=storage_key,
             tenant_id=tenant_id,
             content_type=content_type[:100],
             file_size=size,
@@ -174,7 +176,7 @@ class UploadService:
         rows = await upload_registry.list_files(
             **self._registry_target(scope=scope, user_id=user_id, session_id=session_id)
         )
-        base = Path(config.upload_dir)
+        base = Path(config.data_dir)
         for row in rows:
             if not (base / row.storage_key).exists() and not (row.meta_data or {}).get("missing"):
                 await upload_registry.mark_missing(row.id)
@@ -186,8 +188,8 @@ class UploadService:
         if row is None:
             raise UploadError(404, "not_found", "File not found")
         self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=False)
-        base = Path(config.upload_dir).resolve()
-        resolved = (Path(config.upload_dir) / row.storage_key).resolve()
+        base = Path(config.tenants_dir).resolve()
+        resolved = (Path(config.data_dir) / row.storage_key).resolve()
         try:
             resolved.relative_to(base)
         except ValueError:
@@ -203,7 +205,7 @@ class UploadService:
         if row is None:
             raise UploadError(404, "not_found", "File not found")
         self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=True)
-        (Path(config.upload_dir) / row.storage_key).unlink(missing_ok=True)
+        (Path(config.data_dir) / row.storage_key).unlink(missing_ok=True)
         await upload_registry.delete_file(file_id)
         await self._release_extraction(
             filename=row.filename, scope=row.scope, owner_user_id=row.owner_user_id, file_hash=row.file_hash
@@ -229,7 +231,7 @@ class UploadService:
 
     def sweep_stale_temps(self) -> int:
         """Delete .upload-* temps older than 24h; called once at startup."""
-        base = Path(config.upload_dir)
+        base = Path(config.tenants_dir)
         if not base.exists():
             return 0
         cutoff = time.time() - _TEMP_MAX_AGE_SECONDS
