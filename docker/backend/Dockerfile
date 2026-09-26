@@ -53,13 +53,13 @@ ENV PATH="/app/.venv/bin:$PATH" \
     TRANSFORMERS_OFFLINE=0 \
     HF_HOME=/tmp/huggingface \
     DATA_DIR=/app/data \
-    FASTEMBED_CACHE_DIR=/app/data/models/fastembed \
+    FASTEMBED_CACHE_DIR=/app/data/runtime/models/fastembed \
 	VALIDATOR_SCRIPT_PATH=/app/scripts/validate/src/validate.mjs
 
 WORKDIR /app
 
 # Create logs directory
-RUN mkdir -p /app/logs /app/data/chunked_output /app/data/index_cache /app/data/uploads
+RUN mkdir -p /app/logs /app/data/runtime/chunked_output /app/data/runtime/index_cache /app/data/tenants
 
 # Copy application code (from backend/ subdirectory)
 COPY backend/app /app/app

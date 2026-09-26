@@ -365,10 +365,10 @@ initializeEnvFile();
 
 const env = parseEnv(ENV_FILE);
 const dataDir = projectPath(setting("DATA_DIR", "./data", env));
-const mpmbSourceDir = projectPath(setting("MPMB_SOURCE_DIR", "./data/mpmb_source", env));
-const mpmbSource2024Dir = projectPath(setting("MPMB_SOURCE_2024_DIR", "./data/mpmb_source_2024", env));
-const importsSourceDir = projectPath(setting("IMPORTS_SOURCE_DIR", "./data/imports_source", env));
-const chunkedOutputDir = projectPath(setting("CHUNKED_OUTPUT_DIR", "./data/chunked_output", env));
+const mpmbSourceDir = projectPath(setting("MPMB_SOURCE_DIR", "./data/packs/mpmb/source_2014", env));
+const mpmbSource2024Dir = projectPath(setting("MPMB_SOURCE_2024_DIR", "./data/packs/mpmb/source_2024", env));
+const importsSourceDir = projectPath(setting("IMPORTS_SOURCE_DIR", "./data/packs/mpmb/imports", env));
+const chunkedOutputDir = projectPath(setting("CHUNKED_OUTPUT_DIR", "./data/runtime/chunked_output", env));
 
 const mpmbRepoUrl = setting("MPMB_REPO_URL", "https://github.com/morepurplemorebetter/MPMBs-Character-Record-Sheet.git", env);
 const mpmbRepo2024Url = setting("MPMB_REPO_2024_URL", "https://github.com/morepurplemorebetter/2024_MPMBs-Character-Record-Sheet.git", env);

@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const DEFAULT_CONTAINER_NAME = process.env.BACKEND_CONTAINER_NAME || "mpmb-backend";
-const DEFAULT_CHUNK_DIR = path.resolve(process.cwd(), "data", "chunked_output");
+const DEFAULT_CHUNK_DIR = path.resolve(process.cwd(), "data", "runtime", "chunked_output");
 
 function runDocker(args, { quiet = false } = {}) {
 	const result = spawnSync("docker", args, {
@@ -27,7 +27,7 @@ export function isBackendContainerRunning(containerName = DEFAULT_CONTAINER_NAME
 export function syncChunksToDocker({
 	containerName = DEFAULT_CONTAINER_NAME,
 	hostChunkDir = DEFAULT_CHUNK_DIR,
-	containerChunkDir = "/app/data/chunked_output",
+	containerChunkDir = "/app/data/runtime/chunked_output",
 } = {}) {
 	if (!existsSync(hostChunkDir)) {
 		throw new Error(`Chunk directory not found: ${hostChunkDir}`);

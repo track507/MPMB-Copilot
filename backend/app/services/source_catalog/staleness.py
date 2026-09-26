@@ -10,16 +10,16 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from app.config import config
 from app.logger import get_logger
 from app.model.schemas.source_catalog import CatalogState, RepoProvenance
 
 logger = get_logger(__name__)
 
-# Map repo names from the analyzer to their live working-tree paths.
 _REPO_LIVE_PATHS: dict[str, Path] = {
-    "mpmb_source": Path("data/mpmb_source"),
-    "mpmb_source_2024": Path("data/mpmb_source_2024"),
-    "imports_source": Path("data/imports_source"),
+    "mpmb_source": Path(config.mpmb_source_dir),
+    "mpmb_source_2024": Path(config.mpmb_source_2024_dir),
+    "imports_source": Path(config.imports_source_dir),
 }
 
 _GIT_UNAVAILABLE_LOGGED = False
