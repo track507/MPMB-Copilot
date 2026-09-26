@@ -89,12 +89,22 @@ override-dependencies = ["onnxruntime>=1.22; sys_platform != 'win32'"]
 
 [tool.importlinter]
 root_package = "app"
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 # ! The composition root is optional here so this holds whether or not app.composition exists
 name = "Edge > composition > core > model > ambient"
 type = "layers"
-layers = ["app.main", "app.api", "(app.composition)", "app.core", "app.model", "app.settings", "app.config", "app.logger"]
+layers = [
+	"app.main",
+	"app.api",
+	"(app.composition)",
+	"app.core",
+	"app.model",
+	"app.settings",
+	"app.config",
+	"app.logger",
+]
 
 [[tool.importlinter.contracts]]
 name = "Adapters never import the edge"
@@ -119,3 +129,26 @@ name = "Services never import the API layer"
 type = "forbidden"
 source_modules = ["app.services"]
 forbidden_modules = ["app.api"]
+
+[[tool.importlinter.contracts]]
+name = "Ports import no adapter and no infrastructure"
+type = "forbidden"
+source_modules = ["app.services.*.protocol"]
+forbidden_modules = [
+	"app.model.orm",
+	"app.services.db",
+	"app.services.embedding.providers",
+	"app.services.embedding.service",
+	"app.services.rerank.service",
+	"app.services.vector.qdrant",
+	"app.services.vector.store",
+	"anthropic",
+	"asyncpg",
+	"fastembed",
+	"httpx",
+	"onnxruntime",
+	"openai",
+	"pypdfium2",
+	"qdrant_client",
+	"sqlalchemy",
+]

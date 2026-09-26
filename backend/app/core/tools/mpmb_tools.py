@@ -22,6 +22,7 @@ from typing import Any, Literal, Optional
 from pydantic_ai import RunContext
 from pydantic_ai.toolsets.function import FunctionToolset
 
+from app.core.catalog import EMPTY_CATALOG, CatalogSnapshot
 from app.core.retriever import Retriever
 from app.core.tools.source_paths import (
     _build_default_roots,
@@ -60,6 +61,7 @@ class Deps:
     edition: str
     tenant_id: str
     user_id: str = "default"
+    catalog: CatalogSnapshot = EMPTY_CATALOG
     retriever: Optional[Retriever] = None
     seen_chunks: set[str] = field(default_factory=set)
     trace: list[dict[str, Any]] = field(default_factory=list)
@@ -297,7 +299,9 @@ async def _mpmb_search_impl(deps: Deps, query: str, edition: Optional[str] = Non
         return "[error] retrieval unavailable: no retriever is configured for this request."
 
     try:
-        result = await deps.retriever.retrieve(query=query, edition=edition, tenant_id=deps.tenant_id)
+        result = await deps.retriever.retrieve(
+            query=query, edition=edition, tenant_id=deps.tenant_id, catalog=deps.catalog
+        )
     except Exception as e:
         deps.trace.append({"tool": "mpmb_search", "query": query, "edition": edition, "chunks": []})
         return f"[error] retrieval unavailable: {e}. Fall back to mpmb_grep or mpmb_function for symbol-level lookup."

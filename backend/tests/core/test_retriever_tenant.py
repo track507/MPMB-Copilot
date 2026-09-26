@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from app.core.catalog import EMPTY_CATALOG
 from app.core.intent import IntentResult, QueryIntent
 from app.core.storage_keys import SHARED_TENANT
 from app.services.vector.qdrant import QdrantStore
@@ -58,7 +59,7 @@ async def test_a_search_never_returns_another_tenants_chunk():
     store = RecordingStore()
     retriever = build_retriever(store=store, classifier=_classifier())
 
-    result = await retriever.retrieve(query="anything", tenant_id=TENANT_A)
+    result = await retriever.retrieve(query="anything", tenant_id=TENANT_A, catalog=EMPTY_CATALOG)
 
     returned = {chunk["id"] for chunk in result.authoritative + result.examples}
     assert "b" not in returned
@@ -69,7 +70,7 @@ async def test_shared_pack_corpus_stays_readable():
     store = RecordingStore()
     retriever = build_retriever(store=store, classifier=_classifier())
 
-    result = await retriever.retrieve(query="anything", tenant_id=TENANT_A)
+    result = await retriever.retrieve(query="anything", tenant_id=TENANT_A, catalog=EMPTY_CATALOG)
 
     returned = {chunk["id"] for chunk in result.authoritative + result.examples}
     assert "s" in returned
@@ -84,7 +85,7 @@ async def test_every_store_call_carries_the_callers_tenant():
     store = RecordingStore()
     retriever = build_retriever(store=store, classifier=_classifier())
 
-    await retriever.retrieve(query="anything", tenant_id=TENANT_A)
+    await retriever.retrieve(query="anything", tenant_id=TENANT_A, catalog=EMPTY_CATALOG)
 
     assert store.tenants_seen
     assert set(store.tenants_seen) == {TENANT_A}

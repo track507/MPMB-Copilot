@@ -15,8 +15,8 @@ frontend can edit this via `PATCH /api/settings`.
 
 from typing import Optional
 
+from app.core.catalog import CatalogSnapshot
 from app.logger import get_logger
-from app.services.source_catalog import source_catalog_service
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -240,19 +240,19 @@ def _strip_placeholders(text: str) -> str:
 class PromptBuilder:
     """Builds prompt payloads for LLM calls."""
 
-    def get_static_instructions(self) -> str:
-        """Return the static system prompt text.
+    def get_static_instructions(self, *, catalog: CatalogSnapshot) -> str:
+        """
+        Return the static system prompt text
 
-        When catalog data is available and inject_catalog_context is True,
-        placeholders are replaced with deterministic catalog blocks.
-        Otherwise placeholders are stripped cleanly.
+        When catalog data is available and inject_catalog_context is True, placeholders are replaced with deterministic catalog blocks
+        Otherwise placeholders are stripped cleanly
         """
         custom: Optional[str] = getattr(settings, "system_prompt", None)
         base = custom.strip() if custom and custom.strip() else DEFAULT_SYSTEM_PROMPT
 
         inject = getattr(settings, "inject_catalog_context", True)
-        if inject and source_catalog_service.has_data():
-            registry_block, add_block = source_catalog_service.static_prompt_blocks()
+        if inject and catalog.has_data:
+            registry_block, add_block = catalog.static_prompt_blocks()
             if "<<CATALOG_REGISTRIES>>" in base:
                 base = base.replace("<<CATALOG_REGISTRIES>>", registry_block)
                 base = base.replace("<<CATALOG_ADD_FUNCTIONS>>", add_block)

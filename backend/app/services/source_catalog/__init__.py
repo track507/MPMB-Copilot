@@ -12,6 +12,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from app.core.catalog import (
+    CatalogSnapshot,
+    Indexes,
+    build_indexes,
+    deterministic_add_function_block,
+    deterministic_registry_block,
+)
 from app.logger import get_logger
 from app.model.schemas.source_catalog import (
     CatalogHealth,
@@ -20,12 +27,7 @@ from app.model.schemas.source_catalog import (
     ObjectTypeMatch,
     SymbolEntry,
 )
-from app.services.source_catalog.indexes import Indexes, build_indexes
 from app.services.source_catalog.loader import LoadResult, load_catalog
-from app.services.source_catalog.prompt_render import (
-    deterministic_add_function_block,
-    deterministic_registry_block,
-)
 from app.services.source_catalog.staleness import StalenessTTLCache
 
 logger = get_logger(__name__)
@@ -161,6 +163,19 @@ class SourceCatalogService:
 
     def static_prompt_blocks(self) -> tuple[str, str]:
         return self._registry_block, self._add_function_block
+
+    def snapshot(self) -> CatalogSnapshot:
+        """
+        The immutable view the domain reads for one turn
+        """
+        with self._lock:
+            return CatalogSnapshot(
+                indexes=self._indexes,
+                state=self._state,
+                registry_block=self._registry_block,
+                add_function_block=self._add_function_block,
+                coverage_warning_list=tuple(self._indexes.coverage_warnings) if self._indexes else (),
+            )
 
     # Internals
 

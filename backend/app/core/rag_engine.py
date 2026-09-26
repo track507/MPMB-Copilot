@@ -44,14 +44,14 @@ from app.core.agent import (
     generate as agent_generate,
 )
 from app.core.agent_messages import to_pydantic_messages
+from app.core.catalog import CatalogProvider, CatalogSnapshot
+from app.core.catalog import per_query_hints as _render_hints
 from app.core.prompts import prompt_builder
 from app.core.query_analysis import analyze_query
 from app.core.retriever import Retriever
 from app.core.tools import Deps, build_mpmb_toolset, wrap_with_budget
 from app.logger import get_logger
 from app.services.llm.protocol import ModelFactory
-from app.services.source_catalog import source_catalog_service
-from app.services.source_catalog.prompt_render import per_query_hints as _render_hints
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -114,11 +114,11 @@ def _derive_tool_status(result_text: str) -> str:
     return "success"
 
 
-def _build_catalog_hints(qa, settings_ref) -> Optional[str]:
+def _build_catalog_hints(qa, settings_ref, catalog: CatalogSnapshot) -> Optional[str]:
     """Construct per-query catalog hints from a QueryAnalysis."""
     object_type_match = None
     if qa is not None and qa.object_type:
-        match = source_catalog_service.find_object_type(qa.object_type)
+        match = catalog.find_object_type(qa.object_type)
         if match is None:
             # Synthesize a minimal match so the hint still surfaces the resolved type
             from app.model.schemas.source_catalog import ObjectTypeMatch
@@ -132,31 +132,24 @@ def _build_catalog_hints(qa, settings_ref) -> Optional[str]:
             object_type_match = match
 
     matched_symbols: list[Any] = []
-    # We don't have the symbol name in IntentResult today; v1 leaves matched_symbols empty.
-    # Future: thread the matched symbol through IntentResult.
-
-    # `health()` is async; per-request hint rendering needs a cheap sync read.
-    # has_data() distinguishes HEALTHY/STALE (both ok) from MISSING/MALFORMED.
-    # Known small gap: this collapses STALE -> HEALTHY for hint purposes, so the
-    # spec's "stale-warning prefix" doesn't fire yet. Tracked in closeout follow-ups.
-    from app.model.schemas.source_catalog import CatalogState
-
-    catalog_state = CatalogState.HEALTHY if source_catalog_service.has_data() else CatalogState.MISSING
+    # We don't have the symbol name in IntentResult today; v1 leaves matched_symbols empty
+    # Future: thread the matched symbol through IntentResult
 
     return _render_hints(
         object_type_match=object_type_match,
         matched_symbols=matched_symbols,
-        coverage_warnings=tuple(source_catalog_service.coverage_warnings()),
-        catalog_state=catalog_state,
+        coverage_warnings=catalog.coverage_warning_list,
+        catalog_state=catalog.state,
         injection_enabled=bool(getattr(settings_ref, "inject_catalog_context", True)),
     )
 
 
 class RAGEngine:
-    def __init__(self, *, retriever: Retriever, model_factory: ModelFactory) -> None:
+    def __init__(self, *, retriever: Retriever, model_factory: ModelFactory, catalog: CatalogProvider) -> None:
         # ! Injected: the agent loop names ports, and the composition root decides which adapters back them
         self._retriever = retriever
         self._model_factory = model_factory
+        self._catalog = catalog
 
     async def generate(
         self,
@@ -176,10 +169,12 @@ class RAGEngine:
         t_start = time.perf_counter()
 
         # ! No pre-retrieval - the agent calls mpmb_search itself when needed
-        analysis = analyze_query(query)
+        # * One snapshot for the whole turn, so the prompt, the hints and the tools all read the same catalog
+        catalog = self._catalog()
+        analysis = analyze_query(query, catalog=catalog)
         resolved_edition = edition or analysis.edition or settings.default_edition
 
-        catalog_hints = _build_catalog_hints(analysis, settings)
+        catalog_hints = _build_catalog_hints(analysis, settings, catalog)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
             edition=resolved_edition,
@@ -193,6 +188,7 @@ class RAGEngine:
                 edition=resolved_edition,
                 user_id=user_id,
                 tenant_id=tenant_id,
+                catalog=catalog,
                 retriever=self._retriever,
             )
             if toolset
@@ -205,7 +201,7 @@ class RAGEngine:
         t_generate = time.perf_counter()
         try:
             llm_response = await agent_generate(
-                instructions=prompt_builder.get_static_instructions(),
+                instructions=prompt_builder.get_static_instructions(catalog=catalog),
                 user_prompt=user_prompt,
                 history=conversation_history,
                 provider=provider,
@@ -266,9 +262,11 @@ class RAGEngine:
         resolved_provider = provider or settings.default_llm_provider
 
         # ! No pre-retrieval - the agent calls mpmb_search itself when needed
-        analysis = analyze_query(query)
+        # * One snapshot for the whole turn, so the prompt, the hints and the tools all read the same catalog
+        catalog = self._catalog()
+        analysis = analyze_query(query, catalog=catalog)
         resolved_edition = edition or analysis.edition or settings.default_edition
-        catalog_hints = _build_catalog_hints(analysis, settings)
+        catalog_hints = _build_catalog_hints(analysis, settings, catalog)
         user_prompt = prompt_builder.build_user_prompt(
             query=query,
             edition=resolved_edition,
@@ -282,6 +280,7 @@ class RAGEngine:
                 edition=resolved_edition,
                 user_id=user_id,
                 tenant_id=tenant_id,
+                catalog=catalog,
                 retriever=self._retriever,
             )
             if toolset
@@ -293,7 +292,7 @@ class RAGEngine:
 
         agent = build_agent(
             model_factory=self._model_factory,
-            instructions=prompt_builder.get_static_instructions(),
+            instructions=prompt_builder.get_static_instructions(catalog=catalog),
             provider=resolved_provider,
             model=model or settings.default_model,
             temperature=temperature,

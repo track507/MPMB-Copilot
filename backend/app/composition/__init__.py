@@ -15,6 +15,7 @@ from app.core.retriever import Retriever
 from app.services.embedding.service import embedding_service
 from app.services.llm.providers import build_model
 from app.services.rerank.service import rerank_service
+from app.services.source_catalog import source_catalog_service
 from app.services.vector.store import get_vector_store
 
 _retriever: Optional[Retriever] = None
@@ -38,7 +39,11 @@ def get_rag_engine() -> RAGEngine:
     """The wired agent loop, which hands the retriever to the tools through Deps"""
     global _rag_engine
     if _rag_engine is None:
-        _rag_engine = RAGEngine(retriever=get_retriever(), model_factory=build_model)
+        _rag_engine = RAGEngine(
+            retriever=get_retriever(),
+            model_factory=build_model,
+            catalog=source_catalog_service.snapshot,
+        )
     return _rag_engine
 
 

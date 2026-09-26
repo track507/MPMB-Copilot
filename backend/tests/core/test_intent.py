@@ -3,7 +3,6 @@ Tests for catalog-backed intent classification (Layer 1 symbol detection)
 """
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -38,8 +37,7 @@ def missing_service(monkeypatch, tmp_path: Path) -> SourceCatalogService:
 
 def _classify(svc: SourceCatalogService, query: str) -> "tuple[QueryIntent, str]":
     """Layer 1 only - classifier with intent_method=rule and an unused embedding."""
-    with patch("app.core.intent.source_catalog_service", svc):
-        result = build_classifier().classify(query, query_embedding=[0.0] * 8)
+    result = build_classifier().classify(query, query_embedding=[0.0] * 8, catalog=svc.snapshot())
     return result.primary, result.method
 
 

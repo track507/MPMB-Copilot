@@ -1,8 +1,8 @@
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
+from app.core.catalog import EMPTY_CATALOG
 from app.core.query_analysis import analyze_query
 from app.services.source_catalog import SourceCatalogService
 
@@ -51,7 +51,7 @@ def test_object_type_inference(
     ],
 )
 def test_edition_inference(query: str, expected: str | None) -> None:
-    assert analyze_query(query).edition == expected
+    assert analyze_query(query, catalog=EMPTY_CATALOG).edition == expected
 
 
 @pytest.fixture
@@ -77,8 +77,13 @@ def missing_qa_service(monkeypatch, tmp_path: Path) -> SourceCatalogService:
 
 
 def _analyze(svc: SourceCatalogService, query: str):
-    with patch("app.core.query_analysis.source_catalog_service", svc):
-        return analyze_query(query)
+    """
+    The catalog is now a value the caller hands over, so there is nothing to patch
+
+    This used to patch app.core.query_analysis.source_catalog_service by name, which only worked because the module
+    imported the service; the string target was the symptom, not the test's intent
+    """
+    return analyze_query(query, catalog=svc.snapshot())
 
 
 def test_catalog_registry_literal_match(healthy_qa_service) -> None:

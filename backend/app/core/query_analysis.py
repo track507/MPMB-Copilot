@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from app.services.source_catalog import source_catalog_service
+from app.core.catalog import CatalogSnapshot
 
 
 # * Result
@@ -109,9 +109,9 @@ _OBJECT_TYPE_KEYWORDS: dict[str, str] = {
 _OBJECT_TYPE_KEYWORDS_SORTED = sorted(_OBJECT_TYPE_KEYWORDS.items(), key=lambda x: len(x[0]), reverse=True)
 
 
-def _infer_object_type(query: str) -> Optional[str]:
+def _infer_object_type(query: str, catalog: CatalogSnapshot) -> Optional[str]:
     """Catalog-backed registry match, then curated NL alias fallback."""
-    catalog_match = source_catalog_service.find_object_type(query)
+    catalog_match = catalog.find_object_type(query)
     if catalog_match:
         return catalog_match.object_type
 
@@ -161,7 +161,7 @@ def _infer_edition(query: str) -> Optional[str]:
 # * Public API
 
 
-def analyze_query(query: str) -> QueryAnalysis:
+def analyze_query(query: str, *, catalog: CatalogSnapshot) -> QueryAnalysis:
     """Analyze a query for MPMB-specific metadata signals.
 
     Extracts object type and edition from the query text.
@@ -173,11 +173,12 @@ def analyze_query(query: str) -> QueryAnalysis:
 
     Args:
         query: Raw user query text.
+        catalog: The turn's catalog snapshot; an empty one falls back to the curated aliases.
 
     Returns:
         QueryAnalysis with inferred metadata (any field may be None).
     """
     return QueryAnalysis(
-        object_type=_infer_object_type(query),
+        object_type=_infer_object_type(query, catalog),
         edition=_infer_edition(query),
     )

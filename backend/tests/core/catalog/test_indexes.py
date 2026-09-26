@@ -1,11 +1,11 @@
 """
-Tests for source_catalog.indexes
+Tests for core.catalog.indexes
 """
 
 from pathlib import Path
 
+from app.core.catalog.indexes import build_indexes
 from app.model.schemas.source_catalog import SymbolKind
-from app.services.source_catalog.indexes import build_indexes
 from app.services.source_catalog.loader import load_catalog
 
 

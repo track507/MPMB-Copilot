@@ -33,6 +33,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from app.core.catalog import CatalogSnapshot
 from app.core.intent import IntentClassifier, IntentResult
 from app.core.query_analysis import QueryAnalysis, analyze_query
 from app.logger import get_logger
@@ -116,6 +117,7 @@ class Retriever:
         intent_override: Optional[str] = None,
         *,
         tenant_id: str,
+        catalog: CatalogSnapshot,
     ) -> RetrievalResult:
         """Retrieve relevant MPMB code chunks for a query.
 
@@ -124,6 +126,7 @@ class Retriever:
             edition: Force edition filter ('2014' or '2024').
                                         If None, inferred from query or left unfiltered.
             intent_override: Force an intent (bypasses classification).
+            catalog: The turn's catalog snapshot, used for object-type and symbol detection.
 
         Returns:
             RetrievalResult with tier-grouped chunks and analysis metadata.
@@ -134,13 +137,14 @@ class Retriever:
         query_embedding = self._embed_query(query)
 
         # 2. Analyze the query for metadata signals
-        analysis = analyze_query(query)
+        analysis = analyze_query(query, catalog=catalog)
 
         # 3. Classify intent (reuses the query embedding - zero extra cost)
         intent = self._classifier.classify(
             query=query,
             query_embedding=query_embedding,
             intent_override=intent_override,
+            catalog=catalog,
         )
 
         # 4. Resolve edition (explicit > inferred > default)

@@ -4,10 +4,10 @@ Catalog-derived system prompt blocks + per-query hints
 
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import patch
 
 import pytest
 
+from app.core.catalog import EMPTY_CATALOG
 from app.core.prompts import PromptBuilder
 from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.source_catalog import SourceCatalogService
@@ -39,7 +39,7 @@ def test_build_user_prompt_bare_query_passes_through():
 def test_get_static_instructions_returns_default_when_settings_empty():
     builder = PromptBuilder()
 
-    instructions = builder.get_static_instructions()
+    instructions = builder.get_static_instructions(catalog=EMPTY_CATALOG)
 
     assert "MorePurpleMoreBetter" in instructions
     assert "ES5" in instructions
@@ -51,7 +51,7 @@ def test_no_tools_addendum_when_disabled(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", False)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "MPMB Source Tools" not in text
     # Honest fallback: the prompt must not promise retrieval that never happens
     assert "No Tool Access" in text
@@ -63,7 +63,7 @@ def test_tool_use_addendum_present_when_enabled(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "MPMB Source Tools" in text
     assert "mpmb_search" in text
     assert "mpmb_read" in text
@@ -80,7 +80,7 @@ def test_diagnose_addendum_present_when_tools_enabled(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "Diagnosing Errors" in text
     assert "Root cause" in text
     assert "./data/uploads/session/" in text
@@ -93,7 +93,7 @@ def test_diagnose_addendum_absent_when_tools_disabled(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", False)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "Diagnosing Errors" not in text
 
 
@@ -109,7 +109,7 @@ def test_validating_section_ordered_with_tool_sections(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "Validating scripts" in text
     assert "two fix passes" in text
     assert "validator unavailable" in text
@@ -145,8 +145,8 @@ def missing_pb_service(monkeypatch, tmp_path: Path) -> SourceCatalogService:
 
 
 def _instructions(svc: SourceCatalogService) -> str:
-    with patch("app.core.prompts.source_catalog_service", svc):
-        return PromptBuilder().get_static_instructions()
+    """The snapshot is an argument now, so the old patch of app.core.prompts.source_catalog_service is gone"""
+    return PromptBuilder().get_static_instructions(catalog=svc.snapshot())
 
 
 def test_default_with_placeholders_renders(healthy_pb_service) -> None:
@@ -233,7 +233,7 @@ def test_addendum_names_uploaded_files_section(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-    text = prompt_builder.get_static_instructions()
+    text = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
     assert "## Uploaded files" in text
     assert "./data/uploads/shared/" in text
     assert "call `mpmb_outline` for its sections" in text  # document navigation workflow
@@ -250,7 +250,7 @@ def test_system_prompt_byte_identical_regardless_of_uploads(monkeypatch):
     from app.settings import settings
 
     monkeypatch.setattr(settings, "enable_tool_use", True)
-    baseline = prompt_builder.get_static_instructions()
+    baseline = prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG)
 
     # ? Uploads present must NOT change the system prompt - the manifest rides the user turn.
     async def fake_list_files(*, scope, **_):
@@ -259,7 +259,7 @@ def test_system_prompt_byte_identical_regardless_of_uploads(monkeypatch):
     monkeypatch.setattr(manifest_mod, "db", SimpleNamespace(is_connected=True))
     monkeypatch.setattr(manifest_mod, "upload_registry", SimpleNamespace(list_files=fake_list_files))
 
-    assert prompt_builder.get_static_instructions() == baseline
+    assert prompt_builder.get_static_instructions(catalog=EMPTY_CATALOG) == baseline
     assert "secret.js" not in baseline
 
 
@@ -283,7 +283,7 @@ async def test_rag_engine_appends_the_manifest_it_is_given(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
     await engine.generate(
         query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
     )
@@ -311,7 +311,7 @@ async def test_rag_engine_drops_the_manifest_when_tools_are_off(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None))
+    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
     await engine.generate(
         query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
     )

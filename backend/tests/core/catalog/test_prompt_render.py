@@ -1,20 +1,20 @@
 """
-Tests for source_catalog.prompt_render
+Tests for core.catalog.prompt_render
 """
 
 from pathlib import Path
 
-from app.model.schemas.source_catalog import (
-    CatalogState,
-    ObjectTypeMatch,
-)
-from app.services.source_catalog.indexes import build_indexes
-from app.services.source_catalog.loader import load_catalog
-from app.services.source_catalog.prompt_render import (
+from app.core.catalog.indexes import build_indexes
+from app.core.catalog.prompt_render import (
     deterministic_add_function_block,
     deterministic_registry_block,
     per_query_hints,
 )
+from app.model.schemas.source_catalog import (
+    CatalogState,
+    ObjectTypeMatch,
+)
+from app.services.source_catalog.loader import load_catalog
 
 
 def _build(valid_catalog_path: Path):

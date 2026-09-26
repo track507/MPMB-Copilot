@@ -26,7 +26,6 @@ class Indexes:
     symbol_count: int = 0
 
     def find_object_type(self, query: str) -> Optional[ObjectTypeMatch]:
-        """Word-boundary, longest-first match against catalog registry names."""
         for name in self.registry_names:
             if re.search(rf"\b{re.escape(name)}\b", query):
                 return ObjectTypeMatch(
@@ -38,8 +37,6 @@ class Indexes:
 
 
 def build_indexes(catalog: CatalogModel) -> Indexes:
-    """Build all derived structures from a parsed catalog."""
-
     # Symbol index: registries + mapped Add* declarations only (v1 scope)
     registry_repos: dict[str, set[str]] = defaultdict(set)
     registry_counts: dict[str, int] = defaultdict(int)
@@ -74,7 +71,7 @@ def build_indexes(catalog: CatalogModel) -> Indexes:
     # Registry names sorted longest-first for word-boundary scanning
     registry_names = tuple(sorted(registry_repos.keys(), key=lambda n: (-len(n), n)))
 
-    # Coverage warnings sorted by severity (high → medium → low) then missed desc
+    # Coverage warnings sorted by severity (high, medium, low) then missed desc
     severity_rank = {"high": 0, "medium": 1, "low": 2}
     coverage_sorted = tuple(
         sorted(

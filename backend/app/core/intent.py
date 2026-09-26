@@ -36,9 +36,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+from app.core.catalog import CatalogSnapshot
 from app.logger import get_logger
 from app.services.embedding.protocol import QueryEmbedder
-from app.services.source_catalog import source_catalog_service
 from app.settings import settings as dynamic_settings
 
 logger = get_logger(__name__)
@@ -95,14 +95,14 @@ _ERROR_CONTEXT_PATTERN = re.compile(
 )
 
 
-def _detect_symbol_intent(query: str) -> Optional[tuple[QueryIntent, str]]:
+def _detect_symbol_intent(query: str, catalog: CatalogSnapshot) -> Optional[tuple[QueryIntent, str]]:
     """
     Catalog-backed symbol detection
 
     Returns None when the catalog is missing/malformed (Layer 1 skipped)
     All catalog-derived symbols map to LOOKUP unless _ERROR_CONTEXT_PATTERN matches, in which case DEBUG wins
     """
-    symbol_index = source_catalog_service.symbol_index()
+    symbol_index = catalog.symbols
     if not symbol_index:
         return None
 
@@ -259,6 +259,8 @@ class IntentClassifier:
         query: str,
         query_embedding: list[float],
         intent_override: Optional[str] = None,
+        *,
+        catalog: CatalogSnapshot,
     ) -> IntentResult:
         """Classify query intent.
 
@@ -266,6 +268,7 @@ class IntentClassifier:
             query: Raw query text.
             query_embedding: Pre-computed dense embedding of the query.
             intent_override: Force a specific intent (bypasses classification).
+            catalog: The turn's catalog snapshot; an empty one skips layer 1 entirely.
 
         Returns:
             IntentResult with primary/secondary intent, confidence, and blend flag.
@@ -289,7 +292,7 @@ class IntentClassifier:
 
         # Layer 1: Symbol detection (always runs in hybrid mode)
         if method in ("rule", "hybrid"):
-            symbol_result = _detect_symbol_intent(query)
+            symbol_result = _detect_symbol_intent(query, catalog)
             if symbol_result:
                 intent, symbol = symbol_result
                 logger.debug(f"Symbol detection: '{symbol}' -> {intent.value}")
