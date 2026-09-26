@@ -16,7 +16,7 @@ concurrency:
     cancel-in-progress: false
 
 env:
-    HUSKY: "0"
+    LEFTHOOK: "0"
     UV_CACHE_DIR: .uv-cache
     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -25,6 +25,23 @@ jobs:
         name: Build and Publish Release
         runs-on: ubuntu-24.04
         timeout-minutes: 45
+        services:
+            postgres:
+                image: postgres:16-alpine
+                env:
+                    POSTGRES_USER: mpmb_user
+                    POSTGRES_PASSWORD: mpmb_password
+                    POSTGRES_DB: mpmb_test
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+
+        env:
+            TEST_DATABASE_URL: postgresql+asyncpg://mpmb_user:mpmb_password@127.0.0.1:5432/mpmb_test
 
         steps:
             - name: Checkout
@@ -58,8 +75,8 @@ jobs:
             - name: Sync backend dependencies
               run: uv sync --project backend --group dev --frozen
 
-            - name: Run tests
-              run: pnpm run test
+            - name: Run repository checks
+              run: pnpm run check
 
             - name: Build frontend
               run: pnpm run frontend:build
@@ -151,12 +168,9 @@ jobs:
                       --exclude='backend/.venv/' \
                       --exclude='dist/' \
                       --exclude='scripts/analyze/reports/' \
-                      --exclude='data/mpmb_source/' \
-                      --exclude='data/mpmb_source_2024/' \
-                      --exclude='data/imports_source/' \
-                      --exclude='data/chunked_output/' \
-                      --exclude='data/index_cache/' \
-                      --exclude='data/uploads/' \
+                      --exclude='data/packs/' \
+                      --exclude='data/runtime/' \
+                      --exclude='data/tenants/' \
                       --exclude='**/*.log'
 
                   mkdir -p "$bundle_dir/frontend/dist"

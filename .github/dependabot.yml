@@ -8,6 +8,10 @@ updates:
           day: monday
           time: "08:00"
       open-pull-requests-limit: 5
+      cooldown:
+          # ! Must stay above pnpm-workspace.yaml's minimumReleaseAge (1440 minutes)
+          # ? A shorter window opens PRs whose pnpm install is refused, so the PR is red before it is read
+          default-days: 3
       groups:
           actions:
               patterns: ["*"]
@@ -19,7 +23,14 @@ updates:
           day: monday
           time: "08:15"
       open-pull-requests-limit: 5
+      cooldown:
+          # ! Must stay above pnpm-workspace.yaml's minimumReleaseAge (1440 minutes)
+          # ? A shorter window opens PRs whose pnpm install is refused, so the PR is red before it is read
+          default-days: 3
       groups:
+          # ! Declared first so it wins: vitest and its coverage plugin must land in one PR or coverage breaks
+          vitest:
+              patterns: ["vitest", "@vitest/*"]
           frontend-minor-patch:
               update-types: ["minor", "patch"]
           types:
@@ -36,6 +47,10 @@ updates:
           day: monday
           time: "08:45"
       open-pull-requests-limit: 5
+      cooldown:
+          # ! Must stay above pnpm-workspace.yaml's minimumReleaseAge (1440 minutes)
+          # ? A shorter window opens PRs whose pnpm install is refused, so the PR is red before it is read
+          default-days: 3
       groups:
           backend-minor-patch:
               update-types: ["minor", "patch"]
@@ -49,6 +64,10 @@ updates:
           day: monday
           time: "09:00"
       open-pull-requests-limit: 5
+      cooldown:
+          # ! Must stay above pnpm-workspace.yaml's minimumReleaseAge (1440 minutes)
+          # ? A shorter window opens PRs whose pnpm install is refused, so the PR is red before it is read
+          default-days: 3
 
     - package-ecosystem: docker
       directory: /docker/backend
@@ -57,3 +76,7 @@ updates:
           day: monday
           time: "09:15"
       open-pull-requests-limit: 5
+      cooldown:
+          # ! Must stay above pnpm-workspace.yaml's minimumReleaseAge (1440 minutes)
+          # ? A shorter window opens PRs whose pnpm install is refused, so the PR is red before it is read
+          default-days: 3

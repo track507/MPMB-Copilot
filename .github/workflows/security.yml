@@ -19,7 +19,7 @@ concurrency:
     cancel-in-progress: true
 
 env:
-    HUSKY: "0"
+    LEFTHOOK: "0"
     UV_CACHE_DIR: .uv-cache
     FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
