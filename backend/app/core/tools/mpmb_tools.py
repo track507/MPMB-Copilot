@@ -33,8 +33,14 @@ from app.core.tools.source_paths import (
 )
 from app.core.tools.validator_client import ValidatorResult, run_validator
 from app.logger import get_logger
-from app.services import documents
-from app.services.documents import CachedDocument, CacheScope, DocumentError
+from app.services.documents.errors import DocumentError
+from app.services.documents.protocol import (
+    EXTRACTABLE_EXTENSIONS,
+    CachedDocument,
+    CacheScope,
+    DocumentReader,
+    is_extractable,
+)
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -60,6 +66,7 @@ class Deps:
     session_id: str
     edition: str
     tenant_id: str
+    documents: DocumentReader
     user_id: str = "default"
     catalog: CatalogSnapshot = EMPTY_CATALOG
     retriever: Optional[Retriever] = None
@@ -138,6 +145,7 @@ def _mpmb_grep_impl(
     max_matches = settings.tool_grep_max_matches
     total_matches = 0
     extraction = _GrepExtraction(
+        reader=deps.documents,
         budget=int(settings.document_setting("grep_extract_budget")),
         max_raw_bytes=int(settings.document_setting("grep_extract_max_file_bytes")),
     )
@@ -145,7 +153,7 @@ def _mpmb_grep_impl(
 
     for file_path, rel in iter_searchable_files(root_dir, path_glob or "**/*"):
         read_path = file_path
-        if documents.is_extractable(file_path.suffix):
+        if is_extractable(file_path.suffix):
             if scope is None:
                 scope = cache_scope_for(root, deps)
             document = extraction.admit(file_path, rel, scope)
@@ -198,6 +206,7 @@ class _GrepExtraction:
     Extracts the first N uncached documents in sorted order, so a repeat call finds those cached and reaches the next N
     """
 
+    reader: DocumentReader
     budget: int
     max_raw_bytes: int
     extracted: int = 0
@@ -211,7 +220,7 @@ class _GrepExtraction:
 
     def admit(self, file_path: Path, rel: Path, scope: CacheScope) -> Optional[CachedDocument]:
         """The document's cached extraction, extracting it within budget, or None when grep must skip it"""
-        cached = documents.lookup(file_path, scope)
+        cached = self.reader.lookup(file_path, scope)
         if cached is not None:
             return cached
         try:
@@ -225,7 +234,7 @@ class _GrepExtraction:
             self.deferred += 1
             return None
         try:
-            document = documents.ensure_extracted(file_path, scope)
+            document = self.reader.ensure_extracted(file_path, scope)
         except DocumentError:
             self.failed.append(rel.as_posix())
             return None
@@ -262,7 +271,7 @@ def _mpmb_outline_impl(
         return resolution.error
     document = resolution.document
     if document is None:
-        readable = ", ".join(sorted(documents.EXTRACTABLE_EXTENSIONS))
+        readable = ", ".join(sorted(EXTRACTABLE_EXTENSIONS))
         return f"[error] mpmb_outline reads documents ({readable}); {path} is plain text, so read it with mpmb_read"
 
     name = Path(path).name

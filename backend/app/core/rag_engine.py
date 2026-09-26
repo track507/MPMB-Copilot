@@ -51,6 +51,7 @@ from app.core.query_analysis import analyze_query
 from app.core.retriever import Retriever
 from app.core.tools import Deps, build_mpmb_toolset, wrap_with_budget
 from app.logger import get_logger
+from app.services.documents.protocol import DocumentReader
 from app.services.llm.protocol import ModelFactory
 from app.settings import settings
 
@@ -145,11 +146,19 @@ def _build_catalog_hints(qa, settings_ref, catalog: CatalogSnapshot) -> Optional
 
 
 class RAGEngine:
-    def __init__(self, *, retriever: Retriever, model_factory: ModelFactory, catalog: CatalogProvider) -> None:
+    def __init__(
+        self,
+        *,
+        retriever: Retriever,
+        model_factory: ModelFactory,
+        catalog: CatalogProvider,
+        documents: DocumentReader,
+    ) -> None:
         # ! Injected: the agent loop names ports, and the composition root decides which adapters back them
         self._retriever = retriever
         self._model_factory = model_factory
         self._catalog = catalog
+        self._documents = documents
 
     async def generate(
         self,
@@ -189,6 +198,7 @@ class RAGEngine:
                 user_id=user_id,
                 tenant_id=tenant_id,
                 catalog=catalog,
+                documents=self._documents,
                 retriever=self._retriever,
             )
             if toolset
@@ -281,6 +291,7 @@ class RAGEngine:
                 user_id=user_id,
                 tenant_id=tenant_id,
                 catalog=catalog,
+                documents=self._documents,
                 retriever=self._retriever,
             )
             if toolset

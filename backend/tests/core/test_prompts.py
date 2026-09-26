@@ -283,7 +283,12 @@ async def test_rag_engine_appends_the_manifest_it_is_given(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
+    engine = RAGEngine(
+        retriever=cast(Any, None),
+        model_factory=cast(Any, None),
+        catalog=lambda: EMPTY_CATALOG,
+        documents=cast(Any, None),
+    )
     await engine.generate(
         query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
     )
@@ -311,7 +316,12 @@ async def test_rag_engine_drops_the_manifest_when_tools_are_off(monkeypatch):
 
     monkeypatch.setattr(rag_mod, "agent_generate", fake_agent_generate)
 
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
+    engine = RAGEngine(
+        retriever=cast(Any, None),
+        model_factory=cast(Any, None),
+        catalog=lambda: EMPTY_CATALOG,
+        documents=cast(Any, None),
+    )
     await engine.generate(
         query="hello", user_id="u1", session_id=None, upload_manifest=MANIFEST, tenant_id=DEFAULT_TENANT_ID
     )

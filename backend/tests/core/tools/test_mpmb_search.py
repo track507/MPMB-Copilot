@@ -7,8 +7,8 @@ import pytest
 from app.core.intent import QueryIntent
 from app.core.query_analysis import QueryAnalysis
 from app.core.retriever import RetrievalResult
-from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import Deps, _mpmb_search_impl
+from tests.core.builders import build_deps
 
 
 class FakeIntent:
@@ -48,7 +48,7 @@ def _result(authoritative=None, examples=None, edition="2014") -> RetrievalResul
 def _deps(retrieve: Any = None) -> Deps:
     """Deps carrying a retriever stub, since retrieval reaches the tool through the context now"""
     retriever = SimpleNamespace(retrieve=retrieve) if retrieve is not None else None
-    return Deps(session_id="sess-1", edition="2014", retriever=cast(Any, retriever), tenant_id=DEFAULT_TENANT_ID)
+    return build_deps(retriever=cast(Any, retriever))
 
 
 @pytest.mark.asyncio

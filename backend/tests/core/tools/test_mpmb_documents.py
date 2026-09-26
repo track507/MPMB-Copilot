@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from app.config import config
-from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import (
     Deps,
     _mpmb_function_impl,
@@ -18,7 +17,9 @@ from app.core.tools.mpmb_tools import (
     _mpmb_read_impl,
 )
 from app.services.documents import registry
+from app.services.documents import service as documents_service
 from app.settings import settings
+from tests.core.builders import build_deps
 from tests.services.documents.builders import write_pdf
 
 SESSION = "./data/uploads/session/"
@@ -39,7 +40,7 @@ def roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
 
 @pytest.fixture
 def deps() -> Deps:
-    return Deps(session_id="s1", edition="2014", user_id="u1", tenant_id=DEFAULT_TENANT_ID)
+    return build_deps(session_id="s1", user_id="u1", documents=documents_service)
 
 
 def test_read_returns_the_extracted_text_with_page_markers(roots, deps):

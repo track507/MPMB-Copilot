@@ -12,6 +12,7 @@ from typing import Optional
 from app.core.intent import IntentClassifier
 from app.core.rag_engine import RAGEngine
 from app.core.retriever import Retriever
+from app.services.documents import service as documents_service
 from app.services.embedding.service import embedding_service
 from app.services.llm.providers import build_model
 from app.services.rerank.service import rerank_service
@@ -43,6 +44,8 @@ def get_rag_engine() -> RAGEngine:
             retriever=get_retriever(),
             model_factory=build_model,
             catalog=source_catalog_service.snapshot,
+            # ? The service module satisfies DocumentReader structurally; no wrapper class is needed
+            documents=documents_service,
         )
     return _rag_engine
 

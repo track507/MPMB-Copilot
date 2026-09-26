@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import Deps, _mpmb_function_impl, _mpmb_grep_impl, _mpmb_read_impl
+from tests.core.builders import build_deps
 
 
 @dataclass
@@ -20,7 +20,7 @@ def _setup_roots(tmp_path: Path) -> tuple[dict, Deps]:
     uploads = tmp_path / "uploads"
     (uploads / "sess-1").mkdir(parents=True)
     (uploads / "global").mkdir()
-    deps = Deps(session_id="sess-1", edition="2014", tenant_id=DEFAULT_TENANT_ID)
+    deps = build_deps()
     roots = {
         "./data/mpmb_source/": mpmb,
         "./data/mpmb_source_2024/": mpmb,  # reuse for test

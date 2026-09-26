@@ -27,7 +27,12 @@ async def test_stream_emits_tool_events_when_model_calls_tool(
     monkeypatch.setattr(settings, "enable_tool_use", True)
 
     # ? This test drives tools that never search, so the retriever and factory stay unused
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
+    engine = RAGEngine(
+        retriever=cast(Any, None),
+        model_factory=cast(Any, None),
+        catalog=lambda: EMPTY_CATALOG,
+        documents=cast(Any, None),
+    )
 
     call_counter = {"n": 0}
 
@@ -118,6 +123,7 @@ def _setup_tool_stream_env(tmp_path, monkeypatch):
         # ? build_agent is stubbed in these tests, so the factory is never called
         model_factory=cast(Any, None),
         catalog=lambda: EMPTY_CATALOG,
+        documents=cast(Any, None),
     )
     return settings, fake_retrieve, engine
 
@@ -295,6 +301,11 @@ async def test_generate_surfaces_retrieval_trace(monkeypatch):
     monkeypatch.setattr(re_mod, "agent_generate", fake_agent_generate)
     monkeypatch.setattr(re_mod.settings, "enable_tool_use", True)
 
-    engine = RAGEngine(retriever=cast(Any, None), model_factory=cast(Any, None), catalog=lambda: EMPTY_CATALOG)
+    engine = RAGEngine(
+        retriever=cast(Any, None),
+        model_factory=cast(Any, None),
+        catalog=lambda: EMPTY_CATALOG,
+        documents=cast(Any, None),
+    )
     resp = await engine.generate(query="how do I add a spell", session_id="s", tenant_id=DEFAULT_TENANT_ID)
     assert resp.retrieval == [{"tool": "mpmb_search", "query": "q", "edition": "2014", "chunks": []}]

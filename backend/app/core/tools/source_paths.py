@@ -9,8 +9,14 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 
 from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
-from app.services import documents
-from app.services.documents import CachedDocument, CacheScope, DocumentError
+from app.services.documents.errors import DocumentError
+from app.services.documents.protocol import (
+    EXTRACTABLE_EXTENSIONS,
+    CachedDocument,
+    CacheScope,
+    DocumentReader,
+    is_extractable,
+)
 from app.settings import settings
 
 # Stable literal roots the LLM can pass. Actual directories are resolved at call time from config + per-request Deps
@@ -28,9 +34,9 @@ ALLOWED_ROOTS: frozenset[str] = frozenset(
 # ? Upload roots resolve to per-user directories that may simply not exist yet; tools should report that as "nothing uploaded", not as a broken root
 UPLOAD_ROOTS: frozenset[str] = frozenset({ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL, ROOT_UPLOADS_SHARED})
 
-# ! Documents are readable only because an adapter extracts them; the set widens with documents.EXTRACTABLE_EXTENSIONS
+# ! Documents are readable only because an adapter extracts them; the set widens with EXTRACTABLE_EXTENSIONS
 ALLOWED_EXTENSIONS: frozenset[str] = (
-    frozenset({".js", ".md", ".sample", ".yml", ".yaml", ".txt", ".json"}) | documents.EXTRACTABLE_EXTENSIONS
+    frozenset({".js", ".md", ".sample", ".yml", ".yaml", ".txt", ".json"}) | EXTRACTABLE_EXTENSIONS
 )
 
 # * Which cache bucket each root's extractions land in; upload roots resolve per request from the caller's identity
@@ -89,17 +95,19 @@ def cache_scope_for(root: str, deps: Any) -> CacheScope:
     return CacheScope.for_source_root(_SOURCE_ROOT_CACHE_KEYS[root])
 
 
-def resolve_readable(path: Path, cache_scope: CacheScope, *, enforce_size_cap: bool = True) -> PathResolution:
+def resolve_readable(
+    path: Path, cache_scope: CacheScope, reader: DocumentReader, *, enforce_size_cap: bool = True
+) -> PathResolution:
     """
     The path a tool should actually read: the file itself for text formats, its extracted sidecar for documents
 
     Called only after resolve_safe_path's checks pass, because the root allowlist is what makes cache_scope valid
     """
-    if not documents.is_extractable(path.suffix):
+    if not is_extractable(path.suffix):
         return PathResolution(resolved_path=path)
 
     try:
-        document = documents.ensure_extracted(path, cache_scope)
+        document = reader.ensure_extracted(path, cache_scope)
     except DocumentError as e:
         return PathResolution(error=e.as_tool_error())
 
@@ -168,7 +176,7 @@ def iter_searchable_files(root_dir: Path, glob_pattern: str = "**/*") -> Iterato
         if any(p in DENIED_SUBDIRS for p in rel.parts[:-1]):
             continue
         # * A document's raw bytes are not what gets read, so its size is judged by the caller's extraction budget instead
-        if not documents.is_extractable(file_path.suffix):
+        if not is_extractable(file_path.suffix):
             try:
                 if file_path.stat().st_size > settings.tool_max_file_bytes:
                     continue
@@ -242,8 +250,10 @@ def resolve_safe_path(
         return PathResolution(error=f"[error] extension not allowed: {resolved.suffix.lower()}")
 
     # ! Documents skip the raw byte cap: a 300-page PDF exceeds it while its extracted text is what the model reads
-    if documents.is_extractable(resolved.suffix):
-        return resolve_readable(resolved, cache_scope_for(root, deps), enforce_size_cap=enforce_size_cap)
+    if is_extractable(resolved.suffix):
+        return resolve_readable(
+            resolved, cache_scope_for(root, deps), deps.documents, enforce_size_cap=enforce_size_cap
+        )
 
     size = resolved.stat().st_size
     if enforce_size_cap and size > settings.tool_max_file_bytes:
