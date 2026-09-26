@@ -210,9 +210,15 @@ Tailwind v4 CSS-first, shadcn/ui + radix, react-hook-form + zod, TanStack Virtua
 ## Docs map
 
 - `docs/superpowers/specs/ROADMAP.md` - master spec: vision, locked decisions, what's next.
+- `docs/superpowers/specs/DECISIONS.md` - live decisions carried out of specs that have shipped.
+  Read this before designing anything in its sections: per-tenant providers, OCR, release
+  process, production readiness.
 - `docs/superpowers/plans/MASTER.md` - implementation record: what is already built.
-- Per-feature: `specs/YYYY-MM-DD-<topic>-design.md`, `plans/YYYY-MM-DD-<topic>.md`, with
-  `--- BREAK FOR REVIEW ---` separating PR-sized chunks.
+- `docs/superpowers/archive/` - shipped and superseded specs and plans, indexed by its README.
+  Consolidated 2026-09-26; nothing was deleted. **Status there was judged against the repo, not
+  against checkboxes** - the GPU plan's boxes are unticked for work that shipped.
+- Per-feature, while work remains: `specs/YYYY-MM-DD-<topic>-design.md`,
+  `plans/YYYY-MM-DD-<topic>.md`, with `--- BREAK FOR REVIEW ---` separating PR-sized chunks.
 
 All of the above live under the untracked `docs/superpowers/`, so a fresh clone will
 not have them. When something needs to be discoverable from the repo alone, it belongs
