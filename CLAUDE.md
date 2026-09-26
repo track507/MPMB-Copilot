@@ -92,9 +92,9 @@ twice.
   mypy from the repo root, where mypy reports `Config File: Default` - it never
   found `backend/pyproject.toml`, so `strict = true` was never in effect. Run with
   its real config, mypy reported 375 errors in 45 files. The `vars.ENABLE_TYPECHECK`
-  job in `ci.yml` and the paragraph at `docs/RELEASE_PROCESS.md:70` still describe
-  the old arrangement, where typechecking was opt-in and `continue-on-error`; both
-  are now redundant, since `check` typechecks unconditionally.
+  job that described the old opt-in, `continue-on-error` arrangement was deleted from
+  `ci.yml` on 2026-09-25 - it could not fail, and `check` had been typechecking
+  unconditionally for five days.
 - **`lint:imports` gates the architecture, not just the style.** import-linter
   checks the five contracts declared in `backend/pyproject.toml` - the layer
   ordering (edge > composition > core > model > ambient), adapters never
@@ -109,11 +109,14 @@ twice.
   `scripts/*.mjs` with `checkJs: true`; the older ops scripts have pre-existing
   errors, so wiring it into `typecheck` would now turn the required gate red. Run it
   manually.
-- **`git push` runs the whole gate.** `.husky/pre-push` is `pnpm run check`, pytest
-  included - expect it to be slow. `pre-commit` is lint-staged only; `commit-msg` is
-  commitlint (sentence-case subject, header <= 100 chars, scope-enum only warns).
-- **`release.yml` runs `pnpm run test` only** - no lint or format check gates a
-  release build.
+- **`lefthook.yml` owns the hooks**, not husky - both husky and lint-staged were removed
+  on 2026-09-25, and `prepare` is `lefthook install`. `pre-push` splits the gate into five
+  parallel jobs, so expect it to be slow but not serial. `pre-commit` runs globbed
+  formatters with `stage_fixed: true`, which commits what they rewrite. `commit-msg` is
+  commitlint (sentence-case subject, header <= 100 chars, scope-enum only warns). Set
+  `LEFTHOOK=0` to skip, which is what the workflows do.
+- **`release.yml` runs the full `pnpm run check`** as of 2026-09-25. Before that it ran
+  `pnpm run test` alone, so a release could publish with lint, types or imports red.
 
 ## Gotchas that will cost you an hour
 
