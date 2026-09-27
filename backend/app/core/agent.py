@@ -86,6 +86,7 @@ def build_agent(
 
 # * Helpers
 def _extract_usage(usage: Any) -> dict[str, Any]:
+    cost = getattr(usage, "cost", None)
     input_tokens = getattr(usage, "input_tokens", 0) or 0
     output_tokens = getattr(usage, "output_tokens", 0) or 0
     return {
@@ -94,6 +95,7 @@ def _extract_usage(usage: Any) -> dict[str, Any]:
         "total_tokens": input_tokens + output_tokens,
         "cache_read_tokens": getattr(usage, "cache_read_tokens", 0) or 0,
         "cache_write_tokens": getattr(usage, "cache_write_tokens", 0) or 0,
+        "cost_usd": str(cost) if cost is not None else None,
     }
 
 

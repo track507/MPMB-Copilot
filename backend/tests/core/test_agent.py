@@ -103,3 +103,50 @@ def test_extract_usage_maps_cache_write_tokens():
     assert usage["total_tokens"] == 150
     assert usage["cache_read_tokens"] == 70
     assert usage["cache_write_tokens"] == 30
+
+
+def test_usage_carries_cost_as_a_string():
+    """
+    ! A float would lose precision below a cent, and these values get summed across a session
+
+    genai-prices returns a Decimal, which json cannot serialize, so the string is both the safe and the only option
+    """
+    from decimal import Decimal
+
+    from app.core.agent import _extract_usage
+
+    class FakeUsage:
+        input_tokens = 1000
+        output_tokens = 200
+        cost = Decimal("0.0043")
+
+    usage = _extract_usage(FakeUsage())
+    assert usage["cost_usd"] == "0.0043"
+    assert isinstance(usage["cost_usd"], str)
+
+
+def test_an_unpriced_model_reports_cost_as_none_not_zero():
+    """
+    ? genai-prices has no entry for every model, and zero would read as free
+
+    Three states, never two: a number, unknown, or no limit set
+    """
+    from app.core.agent import _extract_usage
+
+    class FakeUsage:
+        input_tokens = 1000
+        output_tokens = 200
+        cost = None
+
+    assert _extract_usage(FakeUsage())["cost_usd"] is None
+
+
+def test_usage_from_an_object_with_no_cost_attribute_does_not_raise():
+    """! Every provider's usage object reaches this function, and not all of them carry a cost field"""
+    from app.core.agent import _extract_usage
+
+    class BareUsage:
+        input_tokens = 10
+        output_tokens = 5
+
+    assert _extract_usage(BareUsage())["cost_usd"] is None
