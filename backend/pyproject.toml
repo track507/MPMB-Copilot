@@ -152,3 +152,53 @@ forbidden_modules = [
 	"qdrant_client",
 	"sqlalchemy",
 ]
+
+[[tool.importlinter.contracts]]
+# ! Ports are allowed; the named adapters are not, which is the whole dependency-inversion rule as a gate
+# The list is maintained by hand, so the infrastructure contract below is the backstop that follows indirect chains
+name = "Core depends on ports, never on concrete adapters"
+type = "forbidden"
+source_modules = ["app.core"]
+forbidden_modules = [
+	"app.model.orm",
+	"app.services.db",
+	"app.services.documents.cache",
+	"app.services.documents.registry",
+	"app.services.documents.service",
+	"app.services.documents.sweep",
+	"app.services.embedding.providers",
+	"app.services.embedding.service",
+	"app.services.indexing",
+	"app.services.llm.catalog",
+	"app.services.llm.providers",
+	"app.services.onnx_device",
+	"app.services.rerank.service",
+	"app.services.source_catalog",
+	"app.services.storage",
+	"app.services.task_manager",
+	"app.services.title_generator",
+	"app.services.uploads",
+	"app.services.vector.qdrant",
+	"app.services.vector.store",
+]
+
+[[tool.importlinter.contracts]]
+# Follows indirect chains, so it catches an adapter the list above forgets
+name = "Core never reaches infrastructure libraries"
+type = "forbidden"
+source_modules = ["app.core"]
+forbidden_modules = [
+	"alembic",
+	"anthropic",
+	"asyncpg",
+	"fastapi",
+	"fastembed",
+	"httpx",
+	"onnxruntime",
+	"openai",
+	"pypdfium2",
+	"qdrant_client",
+	"sentence_transformers",
+	"sqlalchemy",
+	"starlette",
+]
