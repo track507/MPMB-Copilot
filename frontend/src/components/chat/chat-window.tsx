@@ -10,6 +10,7 @@ import { useParams } from "@tanstack/react-router";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/hooks/use-sessions";
 import { useSessionFiles } from "@/lib/uploads";
+import { formatSessionTotal, sessionCost } from "@/lib/money";
 import { useSmoothText } from "@/hooks/use-smooth-text";
 import { useChatStore } from "@/stores/chat-store";
 import { MessageBubble } from "./message-bubble";
@@ -71,6 +72,7 @@ export function ChatWindow(): ReactElement {
 
 	// Server-confirmed messages from React Query
 	const serverMessages = session?.messages ?? [];
+	const spend = sessionCost(serverMessages);
 
 	// Group linked uploads by the user message they were attached to, for message chips
 	const filesByMessage = useMemo(() => {
@@ -360,6 +362,14 @@ export function ChatWindow(): ReactElement {
 							</button>
 						)}
 					</form>
+
+					{spend.usd > 0 && (
+						<p
+							className="mt-1.5 text-right text-[10px] tabular-nums text-muted-foreground"
+							title="Estimated from published list prices, not a bill">
+							{formatSessionTotal(spend)}
+						</p>
+					)}
 
 					{showCounter && (
 						<p className={cn("mt-1.5 text-right text-xs tabular-nums", isOverLimit ? "text-destructive" : "text-muted-foreground")}>

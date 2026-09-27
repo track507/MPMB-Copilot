@@ -50,6 +50,7 @@ export interface ChatUsage {
 	readonly total_tokens?: number | undefined;
 	readonly cache_read_tokens?: number | undefined;
 	readonly cache_write_tokens?: number | undefined;
+	readonly cost_usd?: string | null | undefined;
 }
 
 export interface ChatTiming {
