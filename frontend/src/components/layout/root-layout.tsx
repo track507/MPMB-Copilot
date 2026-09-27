@@ -1,5 +1,4 @@
 import { Outlet } from "@tanstack/react-router";
-import { Toaster } from "sonner";
 import { SidebarNav } from "./sidebar-nav";
 import { TopBar } from "./top-bar";
 import type { ReactElement } from "react";
@@ -16,8 +15,6 @@ export default function RootLayout(): ReactElement {
 					<Outlet />
 				</main>
 			</div>
-
-			<Toaster richColors closeButton position="bottom-right" />
 		</div>
 	);
 }

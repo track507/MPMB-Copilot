@@ -18,6 +18,7 @@ export default function LoginPage(): ReactElement {
 	const { data: authState } = useAuthState();
 	const login = useLogin();
 	const navigate = useNavigate();
+	const loginError = login.error?.message;
 	const inputClass = cn("w-full rounded-md border border-input bg-background px-3 py-2 text-sm", "focus:outline-none focus:ring-2 focus:ring-ring");
 
 	const {
@@ -62,6 +63,11 @@ export default function LoginPage(): ReactElement {
 					<input id="password" type="password" autoComplete="current-password" {...register("password")} className={inputClass} />
 					{errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
 				</div>
+				{loginError !== undefined && (
+					<p role="alert" className="text-xs text-destructive">
+						{loginError}
+					</p>
+				)}
 				<button
 					type="submit"
 					disabled={login.isPending}

@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- router entry module, not a fast-refresh component file */
 import { createRootRouteWithContext, createRoute, createRouter, Outlet } from "@tanstack/react-router";
+import { Toaster } from "sonner";
 import { lazy } from "react";
 import { requireAdmin, requireAuth } from "./routes/guards";
 import { queryClient } from "@/lib/query-client";
@@ -16,6 +17,7 @@ interface RouterContext {
 const HomePage = lazy(async () => import("@/pages/home"));
 const LoginPage = lazy(async () => import("@/pages/login"));
 const SetupPage = lazy(async () => import("@/pages/setup"));
+const ErrorPage = lazy(async () => import("@/pages/error"));
 const NotFoundPage = lazy(async () => import("@/pages/not-found"));
 const LibraryPage = lazy(async () => import("@/pages/library"));
 const AccountPage = lazy(async () => import("@/pages/account"));
@@ -29,9 +31,22 @@ function PageLoader(): ReactElement {
 	);
 }
 
+/**
+ * Everything every route needs, above the auth boundary
+ */
+function RootShell(): ReactElement {
+	return (
+		<>
+			<Outlet />
+			<Toaster richColors closeButton position="bottom-right" />
+		</>
+	);
+}
+
 const rootRoute = createRootRouteWithContext<RouterContext>()({
-	component: () => <Outlet />,
+	component: RootShell,
 	notFoundComponent: NotFoundPage,
+	errorComponent: ErrorPage,
 });
 
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
