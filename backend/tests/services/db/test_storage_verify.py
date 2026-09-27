@@ -83,7 +83,6 @@ async def _seed(tenant_id: str, storage_root: Path) -> dict[str, str]:
                 session_id=chat_id,
                 tenant_id=tenant_id,
                 user_id=user_id,
-                title=stored_chat.title,
                 created_at=stored_chat.created_at,
             ),
         )

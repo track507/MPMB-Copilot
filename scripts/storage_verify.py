@@ -19,9 +19,8 @@ from app.services.storage.verify import format_report, verify
 async def main() -> int:
     await db.connect(config.resolved_database_url)
     try:
-        async for session in db.session():
+        async with db.session() as session:
             report = await verify(session)
-            break
     finally:
         await db.disconnect()
 
