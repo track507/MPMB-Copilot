@@ -105,15 +105,16 @@ def test_the_global_root_is_one_users_library_inside_the_tenant():
 
 
 def test_no_upload_root_contains_a_name():
-    """Keys carry identity, so a root is built from ids and the literal segments that separate them"""
+    """
+    Keys carry identity, so a key is built from ids and the literal segments that separate them
+    """
     roots = _build_default_roots(FakeDeps())
-    literals = {"data", "tenants", "users", "sessions", "global", "library"}
+    literals = {"tenants", "users", "sessions", "global", "library"}
     known_ids = {TENANT_A, USER_A, SESSION_A}
 
     for root in (ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL, ROOT_UPLOADS_SHARED):
-        for segment in roots[root].as_posix().split("/"):
-            if segment in ("", "."):
-                continue
+        key = roots[root].relative_to(config.data_dir).as_posix()
+        for segment in key.split("/"):
             assert segment in literals or segment in known_ids, f"{segment} is neither a literal nor an id"
 
 

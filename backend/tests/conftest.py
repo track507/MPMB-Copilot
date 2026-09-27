@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from app.config import config
 from app.core.storage_keys import DEFAULT_TENANT_ID
 
 
@@ -54,3 +55,13 @@ def _bypass_auth_wall():
     yield
     app.dependency_overrides.pop(current_principal, None)
     app.dependency_overrides.pop(principal_or_service, None)
+
+
+@pytest.fixture(autouse=True)
+def _storage_root_is_never_the_real_one(tmp_path_factory, monkeypatch):
+    """
+    Point every test's storage root at a temp directory
+    """
+    root = tmp_path_factory.mktemp("storage")
+    monkeypatch.setattr(config, "data_dir", str(root), raising=False)
+    monkeypatch.setattr(config, "tenants_dir", str(root / "tenants"), raising=False)
