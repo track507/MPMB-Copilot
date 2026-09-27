@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
+from app.config import config
 from app.services.documents import DocumentError, normalize
 from app.services.documents.ops.pdf import MARKER, PdfExtractor
 from tests.services.documents.builders import GUIDE_PAGES, write_pdf
 
-# ? Gitignored with the rest of data/adobe_docs, so the one test that needs a real document skips where it is absent
-SPEC_PDF = Path(__file__).resolve().parents[4] / "data" / "adobe_docs" / "PDF32000_2008.pdf"
+SPEC_PDF = Path(config.packs_dir) / "mpmb" / "adobe_docs" / "PDF32000_2008.pdf"
 
 
 def _marker_lines(text: str) -> list[int]:
@@ -59,7 +59,7 @@ def test_an_unreadable_file_raises_extraction_failed(tmp_path: Path):
     assert exc.value.as_tool_error().startswith("[error]")
 
 
-@pytest.mark.skipif(not SPEC_PDF.exists(), reason="PDF 32000 spec is gitignored under data/adobe_docs")
+@pytest.mark.skipif(not SPEC_PDF.exists(), reason="PDF 32000 spec is gitignored under the MPMB pack")
 def test_real_document_keeps_phrases_whole_and_lines_consistent():
     # ! pypdf split "content stream" mid-word here, which is invisible to a reader and fatal to grep
     result = PdfExtractor().extract(SPEC_PDF)
