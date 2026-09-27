@@ -48,6 +48,7 @@ export interface ModelOption {
 	readonly id: string;
 	readonly label: string;
 	readonly effort: readonly string[];
+	readonly context_window?: number | null | undefined;
 }
 
 /** Per-provider model lists (the generation entries in the capabilities envelope). Empty list = free-form input. */

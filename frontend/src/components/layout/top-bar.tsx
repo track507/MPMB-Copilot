@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useMatches, useNavigate, useParams } from "@tanstack/react-router";
 import { useIndexStatus } from "@/hooks/use-settings";
 import { useSession } from "@/hooks/use-sessions";
+import { formatSessionTotal, sessionCost } from "@/lib/money";
+import { usePreferencesStore } from "@/stores/preferences-store";
 import { cn } from "@/lib/utils";
 import type { ReactElement } from "react";
 import { useLogout } from "@/hooks/use-auth";
@@ -16,6 +18,9 @@ export function TopBar(): ReactElement {
 	const page = matches.findLast((match) => match.staticData.title !== undefined)?.staticData;
 	const isChat = matches.some((match) => match.staticData.chat === true);
 	const title = isChat ? (session?.title ?? "New chat") : (page?.title ?? "MPMB Copilot");
+	const showUsage = usePreferencesStore((state) => state.showUsage);
+
+	const spend = sessionCost(session?.messages ?? []);
 	const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 	const logout = useLogout();
 	const navigate = useNavigate();
@@ -65,6 +70,13 @@ export function TopBar(): ReactElement {
 			</div>
 
 			<div className="flex items-center gap-1">
+				{isChat && showUsage && spend.usd > 0 && (
+					<span
+						className="mr-2 text-xs tabular-nums text-muted-foreground"
+						title="Estimated from published list prices for this conversation, not a billed amount">
+						{formatSessionTotal(spend)}
+					</span>
+				)}
 				<button
 					type="button"
 					onClick={toggleTheme}

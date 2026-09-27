@@ -10,7 +10,9 @@ import { useParams } from "@tanstack/react-router";
 import { useChat } from "@/hooks/use-chat";
 import { useSession } from "@/hooks/use-sessions";
 import { useSessionFiles } from "@/lib/uploads";
-import { formatSessionTotal, sessionCost } from "@/lib/money";
+import { contextHeadroom, formatHeadroom, selectedContextWindow } from "@/lib/context-headroom";
+import { usePreferencesStore } from "@/stores/preferences-store";
+import { useCapabilities } from "@/hooks/use-settings";
 import { useSmoothText } from "@/hooks/use-smooth-text";
 import { useChatStore } from "@/stores/chat-store";
 import { MessageBubble } from "./message-bubble";
@@ -72,7 +74,6 @@ export function ChatWindow(): ReactElement {
 
 	// Server-confirmed messages from React Query
 	const serverMessages = session?.messages ?? [];
-	const spend = sessionCost(serverMessages);
 
 	// Group linked uploads by the user message they were attached to, for message chips
 	const filesByMessage = useMemo(() => {
@@ -215,6 +216,10 @@ export function ChatWindow(): ReactElement {
 		[submitMessage]
 	);
 
+	const showUsage = usePreferencesStore((state) => state.showUsage);
+	const { data: capabilities } = useCapabilities();
+	const headroom = showUsage ? contextHeadroom(metadata?.usage?.input_tokens, selectedContextWindow(capabilities)) : null;
+
 	const charCount = input.length;
 	const isOverLimit = charCount > MAX_MESSAGE_LENGTH;
 	const showCounter = charCount >= COUNTER_REVEAL_AT;
@@ -258,6 +263,7 @@ export function ChatWindow(): ReactElement {
 											sources={msg.content.sources}
 											tools={msg.meta_data.tools}
 											cacheReadTokens={msg.meta_data.usage?.cache_read_tokens}
+											costUsd={msg.meta_data.usage?.cost_usd}
 											stopReason={msg.stop_reason ?? undefined}
 											attachments={filesByMessage.get(msg.id)}
 										/>
@@ -278,6 +284,7 @@ export function ChatWindow(): ReactElement {
 								isStreaming={isVisuallyStreaming}
 								tools={!isVisuallyStreaming ? metadata?.tools : undefined}
 								cacheReadTokens={!isVisuallyStreaming ? metadata?.usage?.cache_read_tokens : undefined}
+								costUsd={!isVisuallyStreaming ? metadata?.usage?.cost_usd : undefined}
 								stopReason={!isVisuallyStreaming ? metadata?.stop_reason : undefined}
 							/>
 						)}
@@ -363,11 +370,11 @@ export function ChatWindow(): ReactElement {
 						)}
 					</form>
 
-					{spend.usd > 0 && (
+					{headroom !== null && (
 						<p
 							className="mt-1.5 text-right text-[10px] tabular-nums text-muted-foreground"
-							title="Estimated from published list prices, not a bill">
-							{formatSessionTotal(spend)}
+							title={`${headroom.used.toLocaleString()} of ${headroom.window.toLocaleString()} input tokens on the last turn`}>
+							{formatHeadroom(headroom)}
 						</p>
 					)}
 

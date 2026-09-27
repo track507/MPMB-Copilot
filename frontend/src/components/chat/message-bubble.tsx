@@ -12,6 +12,8 @@ import type { ComponentPropsWithoutRef } from "react";
 import type { ChatToolsMetadata, SourceReference } from "@/types/chat";
 import type { MessageFeedback } from "@/types/session";
 import type { FileOut } from "@/types/uploads";
+import { formatTurnCost } from "@/lib/money";
+import { usePreferencesStore } from "@/stores/preferences-store";
 
 interface MessageBubbleProps {
 	readonly role: "user" | "assistant" | "system";
@@ -20,6 +22,7 @@ interface MessageBubbleProps {
 	readonly isStreaming?: boolean | undefined;
 	readonly tools?: ChatToolsMetadata | undefined;
 	readonly cacheReadTokens?: number | undefined;
+	readonly costUsd?: string | null | undefined;
 	readonly stopReason?: string | undefined;
 	readonly messageId?: string | undefined;
 	readonly sessionId?: string | undefined;
@@ -36,6 +39,7 @@ export const MessageBubble = memo(function MessageBubble({
 	isStreaming = false,
 	tools,
 	cacheReadTokens,
+	costUsd,
 	stopReason,
 	messageId,
 	sessionId,
@@ -43,6 +47,9 @@ export const MessageBubble = memo(function MessageBubble({
 	attachments,
 }: MessageBubbleProps): ReactElement {
 	const isUser = role === "user";
+	const showUsage = usePreferencesStore((state) => state.showUsage);
+	const turnCost = showUsage ? formatTurnCost(costUsd) : null;
+	const cached = showUsage && cacheReadTokens !== undefined && cacheReadTokens > 0;
 
 	return (
 		<div className={cn("flex min-w-0 gap-3", isUser && "flex-row-reverse")}>
@@ -144,12 +151,17 @@ export const MessageBubble = memo(function MessageBubble({
 					</div>
 				)}
 
-				{!isUser && cacheReadTokens !== undefined && cacheReadTokens > 0 && (
-					<div
-						className="flex w-fit items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-[10px] text-muted-foreground"
-						title={`${cacheReadTokens.toLocaleString()} input tokens read from cache`}>
-						<Zap className="size-3" />
-						cached
+				{/* One row rather than a pill each: cost and cache are both per-turn facts, and stacking them read as clutter */}
+				{!isUser && (turnCost !== null || cached) && (
+					<div className="flex w-fit items-center gap-1.5 text-[10px] text-muted-foreground">
+						{turnCost !== null && <span title="Estimated from published list prices, not a billed amount">{turnCost}</span>}
+						{turnCost !== null && cached && <span aria-hidden="true">&middot;</span>}
+						{cached && (
+							<span className="flex items-center gap-1" title={`${cacheReadTokens.toLocaleString()} input tokens read from cache`}>
+								<Zap className="size-3" />
+								cached
+							</span>
+						)}
 					</div>
 				)}
 
