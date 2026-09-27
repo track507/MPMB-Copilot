@@ -17,7 +17,9 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+from pydantic_ai._genai_prices import lookup_context_window
 
 from app.config import config
 from app.logger import get_logger
@@ -29,13 +31,13 @@ logger = get_logger(__name__)
 class ModelOption:
     id: str
     label: str
-    # ? Empty tuple = effort is unsupported for this model (frontend hides the effort control)
     effort_levels: tuple[str, ...] = ()
+    context_window: Optional[int] = None
 
 
 # * Static effort tables
-# ? Source of truth for the curated fallback and for any model the live capabilities lookup cannot classify
-# ? Anthropic ordering runs low to max, and OpenAI uses its own reasoning-effort scale
+# Source of truth for the curated fallback and for any model the live capabilities lookup cannot classify
+# Anthropic ordering runs low to max, and OpenAI uses its own reasoning-effort scale
 _ANTHROPIC_EFFORT: dict[str, tuple[str, ...]] = {
     "claude-opus-4-8": ("low", "medium", "high", "xhigh", "max"),
     "claude-opus-4-7": ("low", "medium", "high", "xhigh", "max"),
@@ -46,7 +48,7 @@ _ANTHROPIC_EFFORT: dict[str, tuple[str, ...]] = {
     "claude-haiku-4-5": (),
 }
 
-# ? Conservative fallback used only if the pydantic-ai profile / OpenAI SDK lookup fails
+# Conservative fallback used only if the pydantic-ai profile / OpenAI SDK lookup fails
 _OPENAI_EFFORT_FALLBACK: tuple[str, ...] = ("minimal", "low", "medium", "high")
 _ANTHROPIC_EFFORT_ORDER: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 
@@ -207,11 +209,17 @@ async def get_model_catalog() -> dict[str, list[dict[str, Any]]]:
         _cached("openai", _fetch_openai),
     )
     return {
-        "anthropic": [_serialize(o) for o in anthropic],
-        "openai": [_serialize(o) for o in openai],
+        "anthropic": [_serialize(o, "anthropic") for o in anthropic],
+        "openai": [_serialize(o, "openai") for o in openai],
         "ollama": [],
     }
 
 
-def _serialize(option: ModelOption) -> dict[str, Any]:
-    return {"id": option.id, "label": option.label, "effort": list(option.effort_levels)}
+def _serialize(option: ModelOption, provider: str) -> dict[str, Any]:
+    window = option.context_window or lookup_context_window(option.id, provider_name=provider)
+    return {
+        "id": option.id,
+        "label": option.label,
+        "effort": list(option.effort_levels),
+        "context_window": window,
+    }

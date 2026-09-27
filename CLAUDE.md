@@ -234,10 +234,12 @@ per cycle - the Upload API (7) shipped before "Explain this error" (5). Current 
 ingestion + OCR (8) -> clickable citations (9) -> reconsolidate (write tools, error
 explanation) -> section B.
 
-**Do not trust these as current:** `docs/PROJECT_PLAN.md` and `docs/TODO.md` (pre-pivot
-planning, describe forced-RAG designs that were never built), `frontend/README.md` (says
-react-router and `?session=` params; it is TanStack Router with real paths),
-`backend/README.md:65` (says `0.0.0.0`; the bind is `127.0.0.1`).
+**Do not trust these as current:** `docs/TODO.md` (pre-pivot planning; kept because it is the
+maintainer's own list, not because it is accurate), `frontend/README.md` (says react-router
+and `?session=` params; it is TanStack Router with real paths), `backend/README.md:65` (says
+`0.0.0.0`; the bind is `127.0.0.1`). `docs/PROJECT_PLAN.md` was deleted on 2026-09-26 - it
+described a forced retrieve-then-generate engine, a `scripts/setup.sh` and an npm/port-3000
+frontend, none of which were ever built.
 
 ## Non-goals
 

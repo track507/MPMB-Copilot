@@ -43,7 +43,7 @@ async def test_catalog_entries_have_id_and_label(monkeypatch):
     catalog = await get_model_catalog()
 
     for entry in [*catalog["anthropic"], *catalog["openai"]]:
-        assert set(entry) == {"id", "label", "effort"}
+        assert set(entry) == {"id", "label", "effort", "context_window"}
         assert entry["id"] and entry["label"]
         assert isinstance(entry["effort"], list)
 
@@ -133,3 +133,21 @@ async def test_provider_fetches_run_concurrently(monkeypatch):
     assert elapsed < 0.18
     assert catalog["anthropic"][0]["id"] == "claude-x"
     assert catalog["openai"][0]["id"] == "gpt-x"
+
+
+def test_serialize_carries_a_known_models_context_window():
+    from app.services.llm.catalog import ModelOption, _serialize
+
+    assert _serialize(ModelOption("claude-sonnet-4-6", "Sonnet 4.6"), "anthropic")["context_window"] == 1_000_000
+
+
+def test_serialize_reports_an_unknown_model_as_null_rather_than_raising():
+    from app.services.llm.catalog import ModelOption, _serialize
+
+    assert _serialize(ModelOption("not-a-real-model", "Nope"), "anthropic")["context_window"] is None
+
+
+def test_an_explicit_window_on_the_option_wins_over_the_lookup():
+    from app.services.llm.catalog import ModelOption, _serialize
+
+    assert _serialize(ModelOption("not-a-real-model", "Nope", (), 4096), "anthropic")["context_window"] == 4096
