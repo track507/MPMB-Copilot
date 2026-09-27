@@ -163,6 +163,11 @@ twice.
 - Every storage path is built by `core/storage_keys.py`. `UploadService._scope_dir` and
   `source_paths._build_default_roots` both call it, because two copies of a layout drift apart
   silently and an upload that lands where no tool looks is invisible.
+- **`app/core` names ports, never adapters, and eight import contracts enforce it.** Reading a
+  document goes through `Deps.documents` (the `DocumentReader` port); the catalog arrives as a
+  `CatalogSnapshot` taken once per turn. Importing `services.documents.service`,
+  `services.source_catalog` or any `services/*/ops` module from core is a red gate, not a review
+  comment. `app/composition/` is the only place a concrete adapter is chosen.
 - All source file access goes through `core/tools/source_paths.py` - the single choke point for
   the root allowlist, `..` rejection, extension allowlist, size caps, denied subdirs, symlink
   containment. Never read MPMB source another way.
