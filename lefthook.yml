@@ -53,4 +53,7 @@ pre-push:
           run: pnpm run typecheck
 
         - name: test
-          run: pnpm run test
+          run: pnpm run test:py
+
+        - name: test-frontend
+          run: pnpm run test:frontend

@@ -80,9 +80,14 @@ pnpm run lint:imports     # the architecture contracts alone (import-linter)
 ## Quality gates
 
 `pnpm run check` = lint (js/ts/py/md) + import contracts + format:check +
-typecheck (ty + `tsc`) + pytest, and it is the required CI job. Typechecking joined the gate on 2026-09-20,
-which makes `check:full` (`check && typecheck`) a duplicate - it now runs typecheck
-twice.
+typecheck (ty + `tsc`) + **both** test suites, and it is the required CI job. `test` chains
+`test:py` (pytest) and `test:frontend` (vitest); run either alone by name. The frontend suite
+joined the gate on 2026-09-27 - before that its 80 tests ran nowhere in CI, and a crash that
+`tsc` could not see (a `!== null` guard against a value that was `undefined`) was caught only
+by running them by hand.
+
+Typechecking joined the gate on 2026-09-20, which makes `check:full` (`check && typecheck`)
+a duplicate - it now runs typecheck twice.
 
 - **`typecheck:py` is green and gating** - it runs **ty** (Astral, Rust) in about a
   second and reports zero diagnostics. A new one is a regression, not debt. Two
@@ -110,9 +115,9 @@ twice.
   errors, so wiring it into `typecheck` would now turn the required gate red. Run it
   manually.
 - **`lefthook.yml` owns the hooks**, not husky - both husky and lint-staged were removed
-  on 2026-09-25, and `prepare` is `lefthook install`. `pre-push` splits the gate into five
-  parallel jobs, so expect it to be slow but not serial. `pre-commit` runs globbed
-  formatters with `stage_fixed: true`, which commits what they rewrite. `commit-msg` is
+  on 2026-09-25, and `prepare` is `lefthook install`. `pre-push` splits the gate into six
+  parallel jobs, the two test suites among them, so expect it to be slow but not serial.
+  `pre-commit` runs globbed formatters with `stage_fixed: true`, which commits what they rewrite. `commit-msg` is
   commitlint (sentence-case subject, header <= 100 chars, scope-enum only warns). Set
   `LEFTHOOK=0` to skip, which is what the workflows do.
 - **`release.yml` runs the full `pnpm run check`** as of 2026-09-25. Before that it ran
@@ -127,8 +132,10 @@ twice.
   arrow functions, template literals, classes, `Promise`, and most of `console`. It
   currently matches zero files. Add a `.js` file at the root and you inherit all of
   it; ops scripts are `.mjs` for exactly this reason.
-- **Root `tests/` is orphaned.** `pnpm run test` runs `pytest backend/`, so root
+- **Root `tests/` is orphaned.** `pnpm run test:py` runs `pytest backend/`, so root
   `tests/` is linted by ruff but never executed. The live suite is `backend/tests/`.
+- **`frontend/test/**` was outside the prettier glob until 2026-09-27**, so its files had never
+  been format-checked. It is in scope now; the one-time normalization touched five files.
 - **The backend container is CPU-only.** DirectML/CUDA exist only in a host backend from
   `backend/.venv`; `setup:all` runs postgres + qdrant in Docker and indexes through a host
   backend. "GPU support not installed" in Settings usually means a container is holding `:8000`.

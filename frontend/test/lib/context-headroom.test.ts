@@ -7,8 +7,7 @@ const envelope = (
 	provider: string,
 	model: string,
 	entries: Record<string, ReadonlyArray<{ id: string; context_window?: number | null }>>
-): CapabilityEnvelope =>
-	({ generation: { current: { provider, model, effort: "high" }, entries } }) as unknown as CapabilityEnvelope;
+): CapabilityEnvelope => ({ generation: { current: { provider, model, effort: "high" }, entries } }) as unknown as CapabilityEnvelope;
 
 describe("selectedContextWindow", () => {
 	it("reads the window off the entry for the selected provider and model", () => {

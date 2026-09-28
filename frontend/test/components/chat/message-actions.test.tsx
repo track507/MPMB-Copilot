@@ -35,14 +35,7 @@ describe("MessageActions", () => {
 	});
 
 	it("clears the vote when the active rating is clicked again", () => {
-		render(
-			<MessageActions
-				sessionId="s1"
-				messageId="m1"
-				content="x"
-				feedback={{ rating: "up", note: null, created_at: "", updated_at: "" }}
-			/>
-		);
+		render(<MessageActions sessionId="s1" messageId="m1" content="x" feedback={{ rating: "up", note: null, created_at: "", updated_at: "" }} />);
 		fireEvent.click(screen.getByTitle("Good response"));
 		expect(clearMutate).toHaveBeenCalledWith("m1", expect.anything());
 	});

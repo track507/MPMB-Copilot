@@ -3,6 +3,7 @@ Tests for source_catalog.loader
 """
 
 import threading
+import time
 from pathlib import Path
 
 from app.model.schemas.source_catalog import CatalogModel, CatalogState
@@ -81,15 +82,20 @@ def test_service_atomic_swap_under_concurrent_reads(valid_catalog_path: Path, mo
     stop = threading.Event()
     errors: list[str] = []
 
+    reads = 0
+
     def reader() -> None:
+        nonlocal reads
         while not stop.is_set():
             try:
                 idx = svc.symbol_index()
+                reads += 1
                 # If we ever observe an empty mapping while load is HEALTHY, that's torn read
                 if idx and "SpellsList" not in idx and "AddSubClass" not in idx:
                     errors.append("torn read observed")
             except Exception as exc:
                 errors.append(repr(exc))
+            time.sleep(0.001)
 
     threads = [threading.Thread(target=reader) for _ in range(4)]
     for t in threads:
@@ -110,3 +116,4 @@ def test_service_atomic_swap_under_concurrent_reads(valid_catalog_path: Path, mo
         t.join(timeout=2)
 
     assert errors == []
+    assert reads > 100, f"readers only managed {reads} reads, so the swap was never observed under load"
