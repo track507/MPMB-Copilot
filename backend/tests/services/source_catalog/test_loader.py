@@ -107,7 +107,13 @@ def test_service_atomic_swap_under_concurrent_reads(valid_catalog_path: Path, mo
     loop = asyncio.new_event_loop()
     try:
         for _ in range(10):
+            before = reads
             loop.run_until_complete(svc.reload())
+            # Wait for a read to land after this swap instead of asserting a total read count
+            deadline = time.monotonic() + 5.0
+            while reads == before and time.monotonic() < deadline:
+                time.sleep(0.001)
+            assert reads > before, "readers made no progress across a reload, so torn reads go unobserved"
     finally:
         loop.close()
 
@@ -116,4 +122,3 @@ def test_service_atomic_swap_under_concurrent_reads(valid_catalog_path: Path, mo
         t.join(timeout=2)
 
     assert errors == []
-    assert reads > 100, f"readers only managed {reads} reads, so the swap was never observed under load"

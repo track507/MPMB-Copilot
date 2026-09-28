@@ -22,7 +22,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json frontend/package.json
 COPY scripts/analyze/package.json scripts/analyze/package.json
 COPY scripts/validate scripts/validate
-RUN pnpm install --frozen-lockfile --filter @mpmb/validate \
+# --ignore-scripts: the root prepare is lefthook install, and this stage has neither git nor a .git dir
+RUN pnpm install --frozen-lockfile --filter @mpmb/validate --ignore-scripts \
     && pnpm --filter @mpmb/validate deploy --prod --legacy /validator
 
 # Final stage - minimal runtime
