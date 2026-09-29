@@ -10,8 +10,6 @@ import os
 
 import pytest
 
-from app.core.storage_keys import DEFAULT_TENANT_ID
-
 
 @pytest.mark.skipif(
     not os.getenv("RUN_LIVE_ANTHROPIC_TESTS"),
@@ -20,12 +18,13 @@ from app.core.storage_keys import DEFAULT_TENANT_ID
 @pytest.mark.asyncio
 async def test_live_anthropic_caching_writes_then_reads():
     from app.core.agent import generate
+    from app.services.llm.providers import build_model
 
     # Instructions must exceed the ~1024-token cacheable minimum for Sonnet
     instructions = "You are a concise test assistant for verifying prompt caching. " * 150
 
     first = await generate(
-        instructions=instructions, user_prompt="Say hello.", provider="anthropic", tenant_id=DEFAULT_TENANT_ID
+        instructions=instructions, user_prompt="Say hello.", provider="anthropic", model_factory=build_model
     )
     assert first.usage["cache_write_tokens"] > 0, f"expected cache write on turn 1, got {first.usage}"
 
@@ -38,6 +37,6 @@ async def test_live_anthropic_caching_writes_then_reads():
         user_prompt="Say hello again.",
         history=history,
         provider="anthropic",
-        tenant_id=DEFAULT_TENANT_ID,
+        model_factory=build_model,
     )
     assert second.usage["cache_read_tokens"] > 0, f"expected cache read on turn 2, got {second.usage}"
