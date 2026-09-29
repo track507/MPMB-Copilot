@@ -13,7 +13,8 @@ dependencies = [
 	"httpx>=0.26.0",
 	# Database (PostgreSQL)
 	"asyncpg>=0.29.0",
-	"sqlalchemy>=2.0.25",
+	# ! The asyncio extra, not bare sqlalchemy: 2.1 made greenlet opt-in and connection.py imports sqlalchemy.ext.asyncio
+	"sqlalchemy[asyncio]>=2.0.25",
 	"alembic>=1.13.0",
 	"psycopg2-binary>=2.9.9",
 	# RAG & Embeddings
