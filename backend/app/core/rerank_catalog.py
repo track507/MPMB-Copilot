@@ -53,8 +53,6 @@ CATALOG: tuple[RerankModel, ...] = (
     ),
 )
 
-_DEFAULT = CATALOG[0]
-
 
 def get_entry(provider: str, model: str) -> RerankModel | None:
     for entry in CATALOG:
