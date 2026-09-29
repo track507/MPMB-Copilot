@@ -3,10 +3,11 @@ import path from "node:path";
 import fg from "fast-glob";
 import type { RepoConfig, RepoProvenance } from "./types";
 
+// ! key is the report's stable identifier and matches validate's EDITION_REPOS - only dir tracks the data layout
 export const REPOS: RepoConfig[] = [
-	{ key: "mpmb_source", dir: "data/mpmb_source", edition: "2014", kind: "mpmb" },
-	{ key: "mpmb_source_2024", dir: "data/mpmb_source_2024", edition: "2024", kind: "mpmb" },
-	{ key: "imports_source", dir: "data/imports_source", edition: "auto", kind: "imports" },
+	{ key: "mpmb_source", dir: "data/packs/mpmb/source_2014", edition: "2014", kind: "mpmb" },
+	{ key: "mpmb_source_2024", dir: "data/packs/mpmb/source_2024", edition: "2024", kind: "mpmb" },
+	{ key: "imports_source", dir: "data/packs/mpmb/imports", edition: "auto", kind: "imports" },
 ];
 
 export const SKIP_NAMES = new Set(["gulpfile.js", "package.json", "package-lock.json"]);

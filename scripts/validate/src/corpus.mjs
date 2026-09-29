@@ -51,8 +51,8 @@ function jsFiles(dir) {
  */
 function parseTargets(argv) {
 	const targets = [
-		{ dir: path.join(ROOT, "data/mpmb_source"), edition: "2014" },
-		{ dir: path.join(ROOT, "data/mpmb_source_2024"), edition: "2024" },
+		{ dir: path.join(ROOT, "data/packs/mpmb/source_2014"), edition: "2014" },
+		{ dir: path.join(ROOT, "data/packs/mpmb/source_2024"), edition: "2024" },
 	];
 	for (let i = 0; i < argv.length; i++) {
 		if (argv[i] === "--extra") {
