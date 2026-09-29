@@ -5,14 +5,17 @@
  *
  * 1. Creates .env from .env.example when missing
  * 2. Resolves source paths from environment variables or .env
- * 3. Installs backend Python dependencies with uv (skip with --sku=ip-dependencies)
- * 4. Reports the ONNX execution provider and, on virst run, opts into a GPU inference
- * 5. Clones or updates the required repos
+ * 3. Installs backend Python dependencies with uv (skip with --skip-dependencies)
+ * 4. Reports the ONNX execution provider and, on first run, opts into GPU inference
+ * 5. Clones or updates the required repos, tags included
  * 6. Runs the source analyzer, then scripts/chunk_mpmb.py in the backend environment
  *
  * This doesn't build docker, start services, or trigger indexing
  *
- * Usage: pn run setup [--skip-dependencies] [--dry-run]
+ * --sources-only runs step 5 alone, to refresh the corpus without re-bootstrapping the environment
+ * Pair it with pnpm run rechunk, which runs the analyzer, the chunker and the index in order
+ *
+ * Usage: pnpm run setup [--skip-dependencies] [--sources-only] [--dry-run]
  */
 
 // ! Temporal has no Node runtime (V8 ships none through Node 24); install the global polyfill before any use
@@ -31,6 +34,7 @@ const UV_CACHE = ".uv-cache";
 
 const skipDependencies = process.argv.includes("--skip-dependencies");
 const dryRun = process.argv.includes("--dry-run");
+const sourcesOnly = process.argv.includes("--sources-only");
 
 // ANSI escape sequences for colored output
 // * Yes I know that not every terminal supports this
@@ -311,7 +315,8 @@ function syncGitRepository({ name, url, targetDir, branch, allowRemoteRetarget =
 			log(`Updating ${name}...`);
 			try {
 				act(`Update ${name}`, () => {
-					run("git", ["-C", targetDir, "fetch", "--all", "--prune"]);
+					// ! --tags explicitly: a bare fetch only follows tags that point at commits it already pulled
+					run("git", ["-C", targetDir, "fetch", "--all", "--prune", "--tags"]);
 					if (branch) {
 						run("git", ["-C", targetDir, "checkout", branch]);
 						run("git", ["-C", targetDir, "pull", "--ff-only", "origin", branch]);
@@ -389,7 +394,9 @@ ensureDir(path.join(dataDir, "index_cache"));
 ensureDir(path.join(dataDir, "uploads"));
 
 try {
-	if (skipDependencies) {
+	if (sourcesOnly) {
+		log("Refreshing sources only; skipping dependencies, the analyzer and the chunker");
+	} else if (skipDependencies) {
 		log("Skipping the backend dependency install (--skip-dependencies)", "WARNING");
 	} else {
 		log("Installing backend Python dependencies with uv...");
@@ -397,24 +404,28 @@ try {
 		log(`Backend environment ready at ${path.join(BACKEND_DIR, ".venv")}`, "SUCCESS");
 	}
 
-	initializeInferenceDevice(path.join(dataDir, "settings.json"));
+	if (!sourcesOnly) initializeInferenceDevice(path.join(dataDir, "settings.json"));
 
 	syncGitRepository({ name: "MPMB main repo (2014)", url: mpmbRepoUrl, targetDir: mpmbSourceDir, branch: branch2014 });
 	syncGitRepository({ name: "MPMB main repo (2024)", url: mpmbRepo2024Url, targetDir: mpmbSource2024Dir, branch: branch2024, allowRemoteRetarget: true });
 	syncGitRepository({ name: "Imports repo", url: importsRepoUrl, targetDir: importsSourceDir, branch: "" });
 
-	log("Running the source analyzer...");
-	// ! The chunker hard-fails without scripts/analyze/reports/mpmb-analysis.json, rebuilt from the trees just updated
-	act("Run the source analyzer", () => {
-		run("pnpm", ["run", "analyze"]);
-	});
+	if (sourcesOnly) {
+		log("Sources refreshed", "SUCCESS");
+		hint("Run pnpm run rechunk to rebuild the analyzer report, the chunks and the index");
+	} else {
+		log("Running the source analyzer...");
+		act("Run the source analyzer", () => {
+			run("pnpm", ["run", "analyze"]);
+		});
 
-	log("Starting chunker...");
-	act("Run the MPMB chunker", () => {
-		run("uv", ["--cache-dir", UV_CACHE, "run", "--no-sync", "--project", BACKEND_DIR, "python", CHUNK_SCRIPT]);
-	});
+		log("Starting chunker...");
+		act("Run the MPMB chunker", () => {
+			run("uv", ["--cache-dir", UV_CACHE, "run", "--no-sync", "--project", BACKEND_DIR, "python", CHUNK_SCRIPT]);
+		});
 
-	log("Setup complete", "SUCCESS");
+		log("Setup complete", "SUCCESS");
+	}
 } catch (error) {
 	log(error.message, "ERROR");
 	process.exit(1);
