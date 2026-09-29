@@ -22,9 +22,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json frontend/package.json
 COPY scripts/analyze/package.json scripts/analyze/package.json
 COPY scripts/validate scripts/validate
-# --ignore-scripts: the root prepare is lefthook install, and this stage has neither git nor a .git dir
+# ! --ignore-scripts on both commands: the root prepare is lefthook install, and this stage has no git and no .git dir
 RUN pnpm install --frozen-lockfile --filter @mpmb/validate --ignore-scripts \
-    && pnpm --filter @mpmb/validate deploy --prod --legacy /validator
+    && pnpm --filter @mpmb/validate deploy --prod --legacy /validator --ignore-scripts
 
 # Final stage - minimal runtime
 FROM python:${PYTHON_VERSION}-slim-bookworm
