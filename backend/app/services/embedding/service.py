@@ -3,6 +3,7 @@ from typing import Any, List, Optional, Protocol
 
 from app.config import config
 from app.logger import get_logger
+from app.services.secrets import OPENAI_API_KEY, secrets_service
 
 logger = get_logger(__name__)
 
@@ -29,9 +30,10 @@ class EmbeddingService:
             from app.services.embedding.providers.openai import OpenAIEmbeddingProvider
 
             # ! Fail here with the cause named, the way llm/providers.py does for generation
-            if not config.openai_api_key:
+            api_key = secrets_service.get(OPENAI_API_KEY)
+            if not api_key:
                 raise ValueError("Embedding provider 'openai' selected but OPENAI_API_KEY is not set")
-            return OpenAIEmbeddingProvider(model=model, api_key=config.openai_api_key)
+            return OpenAIEmbeddingProvider(model=model, api_key=api_key)
 
         if backend == "ollama":
             from app.services.embedding.providers.ollama import OllamaEmbeddingProvider

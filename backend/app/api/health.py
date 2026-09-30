@@ -9,6 +9,7 @@ from app.logger import get_logger
 from app.model.schemas.health import HealthResponse, ServiceStatus, SourceCatalogHealthBlock
 from app.model.schemas.source_catalog import CatalogState
 from app.services.db import db
+from app.services.llm.credentials import api_key_for
 from app.services.source_catalog import source_catalog_service
 from app.services.vector import get_vector_store
 
@@ -39,7 +40,7 @@ async def check_qdrant() -> ServiceStatus:
 async def check_llm_provider() -> ServiceStatus:
     """Check LLM provider configuration"""
     try:
-        api_key = config.get_llm_api_key()
+        api_key = api_key_for(config.default_llm_provider)
         if config.default_llm_provider == "ollama":
             return ServiceStatus(status="configured", message=f"Ollama at {config.ollama_host}")
         elif api_key:

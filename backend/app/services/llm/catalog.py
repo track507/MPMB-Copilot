@@ -21,8 +21,8 @@ from typing import Any, Optional
 
 from pydantic_ai._genai_prices import lookup_context_window
 
-from app.config import config
 from app.logger import get_logger
+from app.services.llm.credentials import api_key_for
 
 logger = get_logger(__name__)
 
@@ -130,7 +130,7 @@ def _anthropic_effort_from_capabilities(model_id: str, capabilities) -> tuple[st
 
 
 async def _fetch_anthropic() -> list[ModelOption]:
-    api_key = config.anthropic_api_key
+    api_key = api_key_for("anthropic")
     if not api_key:
         return list(ANTHROPIC_CURATED)
     try:
@@ -149,7 +149,7 @@ async def _fetch_anthropic() -> list[ModelOption]:
 
 
 async def _fetch_openai() -> list[ModelOption]:
-    api_key = config.openai_api_key
+    api_key = api_key_for("openai")
     if not api_key:
         return list(OPENAI_CURATED)
     try:

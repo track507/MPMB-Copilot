@@ -297,14 +297,6 @@ class Config(BaseSettings):
 
         return configs
 
-    def get_llm_api_key(self, provider: Optional[str] = None) -> Optional[str]:
-        provider = provider or self.default_llm_provider
-        if provider == "anthropic":
-            return self.anthropic_api_key
-        elif provider == "openai":
-            return self.openai_api_key
-        return None
-
 
 # Global config instance
 config = Config()

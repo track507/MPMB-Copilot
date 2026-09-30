@@ -20,6 +20,7 @@ from pydantic_ai.settings import ModelSettings
 
 from app.config import config
 from app.services.llm.catalog import effort_levels_for
+from app.services.llm.credentials import api_key_for
 from app.settings import settings
 
 
@@ -40,7 +41,7 @@ def build_model(
     effort = settings.default_effort if settings.default_effort in effort_levels_for(provider, model) else None
 
     if provider == "anthropic":
-        api_key = config.anthropic_api_key
+        api_key = api_key_for("anthropic")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY not set. Add it to .env or set the environment variable.")
         anthropic_model = AnthropicModel(
@@ -63,7 +64,7 @@ def build_model(
         return anthropic_model, model_settings
 
     if provider == "openai":
-        api_key = config.openai_api_key
+        api_key = api_key_for("openai")
         if not api_key:
             raise ValueError("OPENAI_API_KEY not set. Add it to .env or set the environment variable.")
         openai_model = OpenAIChatModel(
