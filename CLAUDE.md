@@ -184,7 +184,12 @@ a duplicate - it now runs typecheck twice.
 - `AUTH_DISABLED` is honored only while the bind host is loopback. Never read `config.auth_disabled`
   alone; use `auth_bypassed()`.
 - Construct `ToolBudgetToolset` fresh per request - it holds per-turn call state.
-- Read provider keys through the secrets abstraction, not `config.<key>` directly.
+- Read provider keys through `services/secrets/` (`secrets_service.get(ANTHROPIC_API_KEY)`), never
+  `config.<key>`. Generation providers go through `api_key_for` in `services/llm/credentials.py`;
+  the embedding service calls the port directly, because its OpenAI key is an embedding
+  credential that merely shares a name. `tests/services/secrets/test_no_direct_key_reads.py`
+  fails the gate if a new site reads config directly - import-linter cannot, since attribute
+  access is not an import. Encryption at rest and per-tenant keys are not built yet.
 - New user-scoped endpoints take a `current_principal` dependency and filter by `user_id`.
 
 **Frontend** (React 19 + React Compiler, Vite 8/rolldown, TanStack Router + Query, Zustand,
