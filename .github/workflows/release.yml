@@ -8,8 +8,7 @@ on:
     workflow_dispatch:
 
 permissions:
-    contents: write
-    actions: read
+    contents: read
 
 concurrency:
     group: release-${{ github.ref }}
@@ -25,6 +24,9 @@ jobs:
         name: Build and Publish Release
         runs-on: ubuntu-24.04
         timeout-minutes: 45
+        permissions:
+            contents: write
+            actions: read
         services:
             postgres:
                 image: postgres:16-alpine
