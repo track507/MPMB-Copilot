@@ -5,9 +5,14 @@ Detection is provider-based, not platform-based: whatever GPU-capable onnxruntim
 BM25 is token counting and never routes through this module
 """
 
+import threading
+from contextlib import AbstractContextManager, nullcontext
+
 from app.logger import get_logger
 
 logger = get_logger(__name__)
+
+_serial_lock = threading.Lock()
 
 # * Preference-ordered GPU execution providers; first available wins
 _GPU_PROVIDERS: tuple[tuple[str, str], ...] = (
@@ -56,6 +61,21 @@ def effective_device() -> str:
     if _cpu_fallback_reason is not None:
         return "cpu"
     return settings.inference_device
+
+
+def runs_serially(device: str) -> bool:
+    """
+    True when a session built on this device must not run while any other does
+
+    DirectML segfaults or suspends the device on concurrent Run calls, even across sessions; CPU and CUDA do not
+    """
+    detected = detect_gpu_provider()
+    return device == "gpu" and detected is not None and detected[0] == "DmlExecutionProvider"
+
+
+def inference_slot(device: str) -> AbstractContextManager[object]:
+    """Hold around a local ONNX run, passing the device its session was built on"""
+    return _serial_lock if runs_serially(device) else nullcontext()
 
 
 def cpu_fallback_reason() -> str | None:

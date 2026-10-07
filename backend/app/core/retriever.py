@@ -37,6 +37,7 @@ from app.core.catalog import CatalogSnapshot
 from app.core.intent import IntentClassifier, IntentResult
 from app.core.query_analysis import QueryAnalysis, analyze_query
 from app.logger import get_logger
+from app.services.compute.protocol import ComputeLane
 from app.services.embedding.protocol import QueryEmbedder
 from app.services.rerank.protocol import Reranker
 from app.services.vector.protocol import VectorStore
@@ -104,11 +105,25 @@ class Retriever:
         embedder: QueryEmbedder,
         reranker: Reranker,
         classifier: IntentClassifier,
+        compute: ComputeLane,
     ) -> None:
         self._store = store
         self._embedder = embedder
         self._reranker = reranker
         self._classifier = classifier
+        # ! Model calls go through the lane, never onto the event loop
+        self._compute = compute
+
+    def warm(self) -> None:
+        """Load every model a first query would; one failing does not stop the rest"""
+        steps = [lambda: self._embedder.embed_query("warm-up"), self._classifier.warm]
+        if settings.rerank_enabled:
+            steps.append(lambda: self._reranker.rerank("warm-up", [{"content": "warm-up"}], top_k=1))
+        for step in steps:
+            try:
+                step()
+            except Exception as e:
+                logger.warning(f"Model warm-up step failed: {e}")
 
     async def retrieve(
         self,
@@ -133,30 +148,24 @@ class Retriever:
         """
         t0 = time.perf_counter()
 
-        # 1. Embed the query (reused for both search and intent classification)
-        query_embedding = self._embed_query(query)
+        # 1. Embed the query and classify intent from that embedding
+        query_embedding, intent = await self._compute.run(
+            lambda: self._embed_and_classify(query, intent_override, catalog)
+        )
 
         # 2. Analyze the query for metadata signals
         analysis = analyze_query(query, catalog=catalog)
 
-        # 3. Classify intent (reuses the query embedding - zero extra cost)
-        intent = self._classifier.classify(
-            query=query,
-            query_embedding=query_embedding,
-            intent_override=intent_override,
-            catalog=catalog,
-        )
-
-        # 4. Resolve edition (explicit > inferred > default)
+        # 3. Resolve edition (explicit > inferred > default)
         resolved_edition = edition or analysis.edition
 
-        # 5. Build filters
+        # 4. Build filters
         filters = self._build_filters(analysis, resolved_edition)
 
-        # 6. Get tier budgets based on intent
+        # 5. Get tier budgets based on intent
         budget = self._resolve_budget(intent)
 
-        # 7. Execute retrieval (single or dual based on settings)
+        # 6. Execute retrieval (single or dual based on settings)
         mode = settings.retrieval_mode
 
         if mode == "single":
@@ -285,8 +294,7 @@ class Retriever:
         examples = self._deduplicate(examples, seen_ids={r["id"] for r in authoritative})
 
         if rerank_on:
-            authoritative = self._rerank_tier(query, authoritative, auth_limit)
-            examples = self._rerank_tier(query, examples, ex_limit)
+            authoritative, examples = await self._rerank_tiers(query, authoritative, auth_limit, examples, ex_limit)
 
         return authoritative, examples
 
@@ -340,15 +348,34 @@ class Retriever:
         examples = [r for r in all_results if r.get("source_tier") != "authoritative"]
 
         if rerank_on:
-            authoritative = self._rerank_tier(query, authoritative, auth_limit)
-            examples = self._rerank_tier(query, examples, ex_limit)
+            authoritative, examples = await self._rerank_tiers(query, authoritative, auth_limit, examples, ex_limit)
 
         return authoritative, examples
 
     # * Helpers
-    def _embed_query(self, query: str) -> list[float]:
-        """Embed the query text using the configured embedding service (applies any query prefix)."""
-        return self._embedder.embed_query(query)
+    def _embed_and_classify(
+        self, query: str, intent_override: Optional[str], catalog: CatalogSnapshot
+    ) -> tuple[list[float], IntentResult]:
+        query_embedding = self._embedder.embed_query(query)
+        intent = self._classifier.classify(
+            query=query,
+            query_embedding=query_embedding,
+            intent_override=intent_override,
+            catalog=catalog,
+        )
+        return query_embedding, intent
+
+    async def _rerank_tiers(
+        self,
+        query: str,
+        authoritative: list[dict[str, Any]],
+        auth_limit: int,
+        examples: list[dict[str, Any]],
+        ex_limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        return await self._compute.run(
+            lambda: (self._rerank_tier(query, authoritative, auth_limit), self._rerank_tier(query, examples, ex_limit))
+        )
 
     def _rerank_tier(self, query: str, candidates: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
         """Rerank one tier's candidate pool down to its budget, timed for the debug log."""

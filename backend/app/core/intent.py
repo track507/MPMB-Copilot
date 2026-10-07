@@ -254,6 +254,13 @@ class IntentClassifier:
         # ! Injected, never imported: app.core must not depend on a concrete embedding adapter
         self._embedder = embedder
 
+    def warm(self) -> None:
+        """Compute the centroids ahead of the first query"""
+        try:
+            _centroid_store.get_centroids(self._embedder)
+        except FileNotFoundError:
+            logger.warning("No intent examples file - classification will fall back to HOW_TO")
+
     def classify(
         self,
         query: str,

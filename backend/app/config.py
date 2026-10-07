@@ -105,6 +105,11 @@ class Config(BaseSettings):
             return self.embedding_threads
         return max(1, (os.cpu_count() or 4) // 2)
 
+    # * Compute lanes
+    interactive_workers: int = 4
+    job_workers: int = 2
+    jobs_per_tenant: int = 1
+
     # RAG Parameters
     chunk_size: int = 1000
     chunk_overlap: int = 200

@@ -137,9 +137,11 @@ type = "forbidden"
 source_modules = ["app.services.*.protocol"]
 forbidden_modules = [
 	"app.model.orm",
+	"app.services.compute.threads",
 	"app.services.db",
 	"app.services.embedding.providers",
 	"app.services.embedding.service",
+	"app.services.jobs.local",
 	"app.services.rerank.service",
 	"app.services.vector.qdrant",
 	"app.services.vector.store",
@@ -162,6 +164,7 @@ type = "forbidden"
 source_modules = ["app.core"]
 forbidden_modules = [
 	"app.model.orm",
+	"app.services.compute.threads",
 	"app.services.db",
 	"app.services.documents.cache",
 	"app.services.documents.registry",
@@ -169,6 +172,7 @@ forbidden_modules = [
 	"app.services.documents.sweep",
 	"app.services.embedding.providers",
 	"app.services.embedding.service",
+	"app.services.jobs.local",
 	"app.services.indexing",
 	"app.services.llm.catalog",
 	"app.services.llm.credentials",

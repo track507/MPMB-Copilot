@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
+from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.logger import get_logger
@@ -139,3 +140,15 @@ async def health_check():
 async def ping():
     """Simple ping endpoint"""
     return {"ping": "pong", "timestamp": datetime.now(timezone.utc)}
+
+
+@router.get("/ready")
+async def ready(request: Request) -> JSONResponse:
+    """Readiness: models warm, the database connected and migrated; /ping is liveness"""
+    state = request.app.state
+    checks = {
+        "models": bool(getattr(state, "warm", False)),
+        "database": db.is_connected and bool(getattr(state, "migrated", False)),
+    }
+    ok = all(checks.values())
+    return JSONResponse(status_code=200 if ok else 503, content={"ready": ok, **checks})
