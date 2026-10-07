@@ -14,12 +14,16 @@ Session persistence:
 """
 
 import asyncio
-from typing import Any
+import weakref
+from collections.abc import AsyncGenerator, Awaitable
+from typing import Any, TypeVar
 from uuid import UUID
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from app.api.admission import turn_gate
 from app.api.deps import Principal, current_principal
 from app.composition import get_rag_engine
 from app.config import config
@@ -33,6 +37,56 @@ from app.settings import settings
 
 logger = get_logger(__name__)
 router = APIRouter()
+
+T = TypeVar("T")
+
+
+def _overran(seconds: float) -> TimeoutError:
+    return TimeoutError(f"the turn exceeded its {seconds:g}s limit")
+
+
+async def _within_deadline(work: Awaitable[T]) -> T:
+    seconds = settings.turn_timeout_sec
+    timer = asyncio.timeout(seconds)
+    try:
+        async with timer:
+            return await work
+    except TimeoutError:
+        if timer.expired():
+            raise _overran(seconds) from None
+        raise
+
+
+async def _bounded(events: AsyncGenerator[T, None]) -> AsyncGenerator[T, None]:
+    """
+    Yield a turn's events until its deadline
+
+    The timer runs only while awaiting the agent, never across a yield
+    """
+    seconds = settings.turn_timeout_sec
+    deadline = asyncio.get_running_loop().time() + seconds
+    try:
+        while True:
+            timer = asyncio.timeout_at(deadline)
+            try:
+                async with timer:
+                    event = await anext(events)
+            except StopAsyncIteration:
+                return
+            except TimeoutError:
+                if timer.expired():
+                    raise _overran(seconds) from None
+                raise
+            yield event
+    finally:
+        await events.aclose()
+
+
+async def _persist(session_uuid: UUID | None, text: str, rag_response=None, *, error: str | None = None) -> None:
+    """Save the assistant message, even from inside a turn that is being cancelled"""
+    # ! anyio re-cancels every await inside a cancelled scope
+    with anyio.CancelScope(shield=True):
+        await _save_assistant_message(session_uuid, text, rag_response, error=error)
 
 
 # * Helpers
@@ -206,6 +260,8 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
 )
 async def chat(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Generate a complete RAG-powered response with session persistence."""
+    # ! Before anything is persisted
+    slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
@@ -226,18 +282,20 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             )
 
         try:
-            rag_response = await get_rag_engine().generate(
-                query=request.message,
-                conversation_history=history,
-                user_id=principal.user_id,
-                tenant_id=principal.tenant_id,
-                session_id=session_id,
-                edition=request.edition or settings.default_edition,
-                provider=request.provider,
-                model=request.model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+            rag_response = await _within_deadline(
+                get_rag_engine().generate(
+                    query=request.message,
+                    conversation_history=history,
+                    user_id=principal.user_id,
+                    tenant_id=principal.tenant_id,
+                    session_id=session_id,
+                    edition=request.edition or settings.default_edition,
+                    provider=request.provider,
+                    model=request.model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                )
             )
         except Exception as gen_error:
             await _save_assistant_message(session_uuid, "", error=str(gen_error))
@@ -261,6 +319,9 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             metadata=metadata,
         )
 
+    except TimeoutError as e:
+        logger.warning(f"Chat turn timed out: {e}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(e))
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
         raise HTTPException(
@@ -275,6 +336,8 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             if config.is_development
             else "An error occurred while generating the response.",
         )
+    finally:
+        slot.release()
 
 
 # * POST /chat/stream - streaming SSE response
@@ -286,6 +349,8 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
 )
 async def chat_stream(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Stream a RAG-powered response via SSE with session persistence."""
+    # ! Before anything is persisted
+    slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Streaming chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
@@ -308,26 +373,27 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         async def event_generator():
             """Generate SSE events from the RAG stream."""
             full_content = []
-            final_event = None
+            saved = False
 
             try:
-                async for event in get_rag_engine().stream(
-                    query=request.message,
-                    conversation_history=history,
-                    user_id=principal.user_id,
-                    tenant_id=principal.tenant_id,
-                    session_id=session_id,
-                    edition=request.edition or settings.default_edition,
-                    provider=request.provider,
-                    model=request.model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                async for event in _bounded(
+                    get_rag_engine().stream(
+                        query=request.message,
+                        conversation_history=history,
+                        user_id=principal.user_id,
+                        tenant_id=principal.tenant_id,
+                        session_id=session_id,
+                        edition=request.edition or settings.default_edition,
+                        provider=request.provider,
+                        model=request.model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                    )
                 ):
                     if event.done:
-                        final_event = event
-                        assistant_text = "".join(full_content)
-                        await _save_assistant_message(session_uuid, assistant_text, final_event)
+                        await _persist(session_uuid, "".join(full_content), event)
+                        saved = True
                         final_chunk = ChatStreamChunk(
                             chunk="",
                             done=True,
@@ -363,8 +429,9 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
             except Exception as e:
                 logger.error(f"Stream error: {e}", exc_info=True)
                 # ! Persist partial text + error so the user's question survives the page reload
-                partial_text = "".join(full_content)
-                await _save_assistant_message(session_uuid, partial_text, error=str(e))
+                if not saved:
+                    await _persist(session_uuid, "".join(full_content), error=str(e))
+                    saved = True
                 error_chunk = ChatStreamChunk(
                     chunk="",
                     done=True,
@@ -372,9 +439,18 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                 )
                 yield f"data: {error_chunk.model_dump_json()}\n\n"
                 yield "data: [DONE]\n\n"
+            except (asyncio.CancelledError, GeneratorExit):
+                if not saved:
+                    await _persist(session_uuid, "".join(full_content), error="interrupted before the answer finished")
+                raise
+            finally:
+                slot.release()
 
+        stream = event_generator()
+        # ! A generator that never starts never runs its finally
+        weakref.finalize(stream, slot.release)
         return StreamingResponse(
-            event_generator(),
+            stream,
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -385,14 +461,19 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         )
 
     except ValueError as e:
+        slot.release()
         logger.error(f"Configuration error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        slot.release()
         logger.error(f"Chat stream endpoint error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start streaming: {str(e)}" if config.is_development else "An error occurred.",
         )
+    except BaseException:
+        slot.release()
+        raise

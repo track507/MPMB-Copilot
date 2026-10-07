@@ -8,7 +8,7 @@ applies a partial update and persists to disk.
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import Principal, require_admin
 from app.logger import get_logger
@@ -47,6 +47,9 @@ class SettingsUpdate(BaseModel):
     rerank_candidate_k: int | None = None
     enable_tool_use: bool | None = None
     max_tool_calls: int | None = None
+    max_concurrent_turns: int | None = Field(default=None, ge=1)
+    max_concurrent_turns_per_user: int | None = Field(default=None, ge=1)
+    turn_timeout_sec: float | None = Field(default=None, gt=0)
     tool_search_limit: int | None = None
     anthropic_cache_instructions: bool | None = None
     anthropic_cache_messages: bool | None = None

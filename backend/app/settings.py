@@ -158,6 +158,16 @@ class Settings:
     so the model answers with what it has. 0 = no soft cap (a hard net of 50 model
     requests per turn still applies, handled gracefully)."""
 
+    # * Turn admission
+    max_concurrent_turns: int = 64
+    """Chat turns this process runs at once"""
+
+    max_concurrent_turns_per_user: int = 3
+    """Chat turns one user may run at once"""
+
+    turn_timeout_sec: float = 600.0
+    """Wall-clock limit on one chat turn"""
+
     source_catalog_path: Optional[str] = None
     """Override path to mpmb-analysis.json. None → resolution falls through to
     config/env, then to ./scripts/analyze/reports/mpmb-analysis.json."""

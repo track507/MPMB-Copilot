@@ -55,6 +55,7 @@ def problem_response(
     detail: str,
     type: str = "about:blank",
     instance: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
     **extensions: Any,
 ) -> JSONResponse:
     body: dict[str, Any] = {"type": type, "title": title, "status": status, "detail": detail}
@@ -63,7 +64,7 @@ def problem_response(
     for key, value in extensions.items():
         if value is not None:
             body[key] = value
-    return JSONResponse(status_code=status, content=body, media_type=PROBLEM_MEDIA_TYPE)
+    return JSONResponse(status_code=status, content=body, media_type=PROBLEM_MEDIA_TYPE, headers=headers)
 
 
 class ProblemError(Exception):
@@ -71,12 +72,22 @@ class ProblemError(Exception):
     Raise to emit a problem with an explicit machine `type`
     """
 
-    def __init__(self, *, status: int, type: str, title: str, detail: str, **extensions: Any) -> None:
+    def __init__(
+        self,
+        *,
+        status: int,
+        type: str,
+        title: str,
+        detail: str,
+        headers: Optional[dict[str, str]] = None,
+        **extensions: Any,
+    ) -> None:
         super().__init__(detail)
         self.status = status
         self.type = type
         self.title = title
         self.detail = detail
+        self.headers = headers
         self.extensions = extensions
 
 
@@ -111,6 +122,7 @@ def register_problem_handlers(app: FastAPI) -> None:
             title=exc.title,
             detail=exc.detail,
             instance=request.url.path,
+            headers=exc.headers,
             **exc.extensions,
         )
 
