@@ -22,6 +22,14 @@ from app.services.vector.protocol import VectorStore
 T = TypeVar("T")
 
 
+class _FakeEmbedder:
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0] * 8
+
+    def identity(self) -> dict[str, Any]:
+        return {"provider": "fake", "model": "fake", "dimension": 8}
+
+
 class InlineLane:
     """A compute lane that runs work inline"""
 
@@ -55,9 +63,7 @@ def build_retriever(
 
 def build_classifier(*, embedder: Any = None) -> IntentClassifier:
     """An IntentClassifier with an inert embedder, for the layers that never reach a centroid"""
-    return IntentClassifier(
-        embedder=cast(QueryEmbedder, embedder or SimpleNamespace(embed_query=lambda text: [0.0] * 8))
-    )
+    return IntentClassifier(embedder=cast(QueryEmbedder, embedder or _FakeEmbedder()))
 
 
 class InertDocuments:

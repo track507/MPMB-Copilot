@@ -34,7 +34,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from app.core.catalog import CatalogSnapshot
 from app.logger import get_logger
@@ -116,7 +116,9 @@ def _detect_symbol_intent(query: str, catalog: CatalogSnapshot) -> Optional[tupl
 
 # * Embedding classification (Layer 2)
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
+    """Compute cosine similarity between two vectors of the same length"""
+    if len(a) != len(b):
+        raise ValueError(f"vector lengths differ: {len(a)} vs {len(b)}")
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -137,6 +139,7 @@ class _CentroidStore:
         self._centroids: Optional[dict[QueryIntent, list[float]]] = None
         self._examples_path: Optional[Path] = None
         self._examples_mtime: float = 0.0
+        self._embedder_key: Optional[tuple[Any, ...]] = None
 
     def _resolve_path(self) -> Path:
         """Find the intent examples file."""
@@ -173,10 +176,12 @@ class _CentroidStore:
         """Return intent centroids, computing them if necessary."""
         # ! Check the cache itself, not only staleness
         # ! A first call can have a matching mtime, so _needs_recompute is False while _centroids is None
-        if self._centroids is not None and not self._needs_recompute():
+        embedder_key = tuple(sorted(embedder.identity().items()))
+        if self._centroids is not None and embedder_key == self._embedder_key and not self._needs_recompute():
             return self._centroids
 
         self._centroids = self._compute_centroids(embedder)
+        self._embedder_key = embedder_key
         return self._centroids
 
     def _compute_centroids(self, embedder: QueryEmbedder) -> dict[QueryIntent, list[float]]:
@@ -240,7 +245,11 @@ def _classify_by_embedding(
     if not centroids:
         return [(QueryIntent.HOW_TO, 0.0)], "fallback"
 
-    scores = [(intent, _cosine_similarity(query_embedding, centroid)) for intent, centroid in centroids.items()]
+    try:
+        scores = [(intent, _cosine_similarity(query_embedding, centroid)) for intent, centroid in centroids.items()]
+    except ValueError as e:
+        logger.warning(f"Intent centroids do not match the query embedding ({e}) - falling back to HOW_TO")
+        return [(QueryIntent.HOW_TO, 0.0)], "fallback"
     scores.sort(key=lambda x: x[1], reverse=True)
 
     return scores, "embedding"
