@@ -76,3 +76,16 @@ def test_high_severity_coverage_does_not_degrade(client_with_healthy_catalog, mo
     """High-severity coverage warnings are informational; they do not change status."""
     body = client_with_healthy_catalog.get("/api/health").json()
     assert body["source_catalog"]["status"] == "healthy"
+
+
+async def test_the_llm_health_check_reports_the_live_provider(monkeypatch):
+    from app.api.health import check_llm_provider
+    from app.config import config
+    from app.settings import settings
+
+    monkeypatch.setattr(config, "default_llm_provider", "anthropic")
+    monkeypatch.setattr(settings, "default_llm_provider", "ollama")
+
+    status = await check_llm_provider()
+
+    assert status.message is not None and status.message.startswith("Ollama at")

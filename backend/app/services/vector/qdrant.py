@@ -15,6 +15,7 @@ Collection schema:
                 source_tier, start_line, end_line, chunk_index, metadata.*
 """
 
+import asyncio
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -42,6 +43,7 @@ from app.config import config
 from app.core.embedding_catalog import dimension_for
 from app.core.storage_keys import SHARED_TENANT
 from app.logger import get_logger
+from app.settings import settings
 
 logger = get_logger(__name__)
 
@@ -49,6 +51,11 @@ logger = get_logger(__name__)
 # The nil UUID never collides with chunk ids (uuid4) and is excluded from every search via a must_not HasId condition in _build_qdrant_filter
 _IDENTITY_POINT_ID = "00000000-0000-0000-0000-000000000000"
 _IDENTITY_PAYLOAD_KEY = "_embedding_identity"
+
+
+def _identity_key(identity: dict[str, Any]) -> tuple[Any, ...]:
+    return (identity.get("provider"), identity.get("model"), identity.get("dimension"))
+
 
 # Payload fields we create keyword indexes on for fast filtering
 INDEXED_PAYLOAD_FIELDS = {
@@ -91,7 +98,8 @@ class QdrantStore:
         self._connected = False
         self._warned_missing_source_tier = False
         # Embedding-model stamp state, populated on connect() and after (re)indexing
-        self._identity_status = "unknown"  # unknown | ok | missing | mismatch
+        self._identity_status = "unknown"  # unknown | ok | missing | mismatch | incomplete
+        self._identity_for: Optional[tuple[Any, ...]] = None
         self._identity_message = ""
         self._has_identity_point = False
         # ? Chunker-version staleness is soft: stale chunks still serve queries, unlike a broken embedding stamp
@@ -302,7 +310,8 @@ class QdrantStore:
             ],
         )
         self._has_identity_point = True
-        self._identity_status = "ok"
+        self._identity_for = _identity_key(identity)
+        self._identity_status = "incomplete" if identity.get("complete") is False else "ok"
         self._identity_message = f"{identity.get('provider')}/{identity.get('model')} ({dim}d)"
         logger.info(f"Stamped embedding identity on '{self.collection_name}': {self._identity_message}")
 
@@ -348,14 +357,19 @@ class QdrantStore:
         )
 
     async def _load_identity_state(self) -> None:
-        """
-        Compare the collection's embedding stamp against current config and cache the result
+        self._compute_identity_state()
 
-        Status: ok (match or empty/fresh), missing (populated but unstamped, legacy), mismatch (different model/dimension - stored vectors are incompatible)
+    def _compute_identity_state(self) -> None:
+        """
+        Compare the collection's embedding stamp against the configured embedder and cache the result
+
+        Status: ok (match or empty/fresh), missing (populated but unstamped, legacy), mismatch (different
+        model/dimension - stored vectors are incompatible), incomplete (a build stamped its start, not its end)
         """
         from app.services.embedding.service import embedding_service
 
         current = embedding_service.identity()
+        self._identity_for = _identity_key(current)
         stored = self.read_identity()
         self._has_identity_point = stored is not None
 
@@ -387,8 +401,13 @@ class QdrantStore:
             logger.error(f"Embedding model mismatch for '{self.collection_name}': {self._identity_message}")
             return
 
-        self._identity_status = "ok"
-        self._identity_message = f"{current['provider']}/{current['model']} ({current['dimension']}d)"
+        if stored.get("complete") is False:
+            self._identity_status = "incomplete"
+            self._identity_message = "the last index build did not finish - re-index"
+            logger.warning(f"Qdrant collection '{self.collection_name}': {self._identity_message}")
+        else:
+            self._identity_status = "ok"
+            self._identity_message = f"{current['provider']}/{current['model']} ({current['dimension']}d)"
 
         # ? soft: a chunker-version mismatch means stale chunks (still queryable), not broken vectors
         from app.core.chunker import CHUNKER_VERSION
@@ -403,6 +422,10 @@ class QdrantStore:
 
     def _raise_if_identity_mismatch(self) -> None:
         """Refuse dense/hybrid queries when stored vectors were built by a different model"""
+        from app.services.embedding.service import embedding_service
+
+        if _identity_key(embedding_service.identity()) != self._identity_for:
+            self._compute_identity_state()
         if self._identity_status == "mismatch":
             raise RuntimeError(f"Embedding model mismatch: {self._identity_message}")
 
@@ -420,7 +443,9 @@ class QdrantStore:
             return "unavailable", self._identity_message
         if self._identity_status == "missing":
             return "ready", self._identity_message
-        message = self._identity_message or f"{config.embedding_provider}/{config.embedding_model}"
+        if self._identity_status == "incomplete":
+            return "degraded", self._identity_message
+        message = self._identity_message or f"{settings.embedding_provider}/{settings.embedding_model}"
         if self._chunks_stale:
             message = f"{message}; {self._chunks_message}"
         return "ready", message
@@ -602,6 +627,20 @@ class QdrantStore:
         """
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
+        return await asyncio.to_thread(
+            self._hybrid_search_sync, query_text, query_embedding, tenant_id, filters, limit, dense_limit, sparse_limit
+        )
+
+    def _hybrid_search_sync(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        tenant_id: str,
+        filters: Optional[dict[str, Any]],
+        limit: int,
+        dense_limit: int,
+        sparse_limit: int,
+    ) -> list[dict[str, Any]]:
         self._raise_if_identity_mismatch()
 
         # Generate BM25 sparse vector for the query
@@ -610,7 +649,7 @@ class QdrantStore:
 
         qdrant_filter = self._build_qdrant_filter(filters, tenant_id=tenant_id)
 
-        results = self.client.query_points(
+        results = self._require_client.query_points(
             collection_name=self.collection_name,
             prefetch=[
                 Prefetch(
@@ -644,11 +683,16 @@ class QdrantStore:
         """Dense-only vector search (no BM25 component)."""
         if not self.client:
             raise RuntimeError("Not connected. Call connect() first.")
+        return await asyncio.to_thread(self._dense_search_sync, query_embedding, tenant_id, filters, limit)
+
+    def _dense_search_sync(
+        self, query_embedding: list[float], tenant_id: str, filters: Optional[dict[str, Any]], limit: int
+    ) -> list[dict[str, Any]]:
         self._raise_if_identity_mismatch()
 
         qdrant_filter = self._build_qdrant_filter(filters, tenant_id=tenant_id)
 
-        results = self.client.query_points(
+        results = self._require_client.query_points(
             collection_name=self.collection_name,
             query=query_embedding,
             using="dense",

@@ -205,3 +205,44 @@ async def test_adopt_identity_noop_when_already_stamped():
     assert adopted is True
     assert message == "index already stamped"
     assert client.upserted == []
+
+
+async def test_a_build_that_never_finished_is_reported_degraded_but_still_serves():
+    from app.services.embedding.service import embedding_service
+
+    store = _store(_FakeClient(count=10, stored={**embedding_service.identity(), "complete": False}))
+    await store._load_identity_state()
+
+    assert store._identity_status == "incomplete"
+    assert (await store.identity_health())[0] == "degraded"
+    store._raise_if_identity_mismatch()
+
+
+async def test_changing_the_embedding_model_is_caught_on_the_next_query(monkeypatch):
+    from app.services.embedding.service import embedding_service
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "embedding_provider", "fastembed")
+    monkeypatch.setattr(settings, "embedding_model", "BAAI/bge-small-en-v1.5")
+    store = _store(_FakeClient(count=10, stored=dict(embedding_service.identity())))
+    await store._load_identity_state()
+    store._raise_if_identity_mismatch()
+
+    monkeypatch.setattr(settings, "embedding_model", "intfloat/multilingual-e5-large")
+
+    with pytest.raises(RuntimeError, match="re-index required"):
+        store._raise_if_identity_mismatch()
+
+
+async def test_searches_run_off_the_event_loop(monkeypatch):
+    import threading
+
+    store = _store(_FakeClient())
+    threads: list[int] = []
+    monkeypatch.setattr(store, "_hybrid_search_sync", lambda *args: threads.append(threading.get_ident()) or [])
+    monkeypatch.setattr(store, "_dense_search_sync", lambda *args: threads.append(threading.get_ident()) or [])
+
+    await store.hybrid_search("q", [0.0], tenant_id=DEFAULT_TENANT_ID)
+    await store.dense_search([0.0], tenant_id=DEFAULT_TENANT_ID)
+
+    assert len(threads) == 2 and threading.get_ident() not in threads
