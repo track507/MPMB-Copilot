@@ -19,32 +19,69 @@ from app.services.uploads.errors import UploadError
 from app.services.uploads.service import upload_service
 from app.settings import settings
 
+T = DEFAULT_TENANT_ID
+OTHER_TENANT = "019f3400-0000-7000-8000-00000000000b"
+
 # * access control (_check_access is pure - no disk, no registry)
 
 
 def test_check_access_admin_bypasses_all():
-    upload_service._check_access(scope="global", row_owner="u2", user_id="u1", role="admin", write=True)
-    upload_service._check_access(scope="shared", row_owner="x", user_id="u1", role="admin", write=True)
+    upload_service._check_access(
+        row_tenant=T, tenant_id=T, scope="global", row_owner="u2", user_id="u1", role="admin", write=True
+    )
+    upload_service._check_access(
+        row_tenant=T, tenant_id=T, scope="shared", row_owner="x", user_id="u1", role="admin", write=True
+    )
 
 
 def test_check_access_global_non_owner_forbidden():
     with pytest.raises(UploadError) as exc:
-        upload_service._check_access(scope="global", row_owner="u2", user_id="u1", role="user", write=False)
+        upload_service._check_access(
+            row_tenant=T, tenant_id=T, scope="global", row_owner="u2", user_id="u1", role="user", write=False
+        )
     assert exc.value.status_code == 403
 
 
 def test_check_access_global_owner_allowed():
-    upload_service._check_access(scope="global", row_owner="u1", user_id="u1", role="user", write=True)
+    upload_service._check_access(
+        row_tenant=T, tenant_id=T, scope="global", row_owner="u1", user_id="u1", role="user", write=True
+    )
 
 
 def test_check_access_shared_write_non_admin_forbidden():
     with pytest.raises(UploadError) as exc:
-        upload_service._check_access(scope="shared", row_owner="x", user_id="u1", role="user", write=True)
+        upload_service._check_access(
+            row_tenant=T, tenant_id=T, scope="shared", row_owner="x", user_id="u1", role="user", write=True
+        )
     assert exc.value.status_code == 403
 
 
 def test_check_access_shared_read_non_admin_allowed():
-    upload_service._check_access(scope="shared", row_owner="x", user_id="u1", role="user", write=False)
+    upload_service._check_access(
+        row_tenant=T, tenant_id=T, scope="shared", row_owner="x", user_id="u1", role="user", write=False
+    )
+
+
+def test_check_access_another_tenants_file_is_not_found_even_for_an_admin():
+    with pytest.raises(UploadError) as exc:
+        upload_service._check_access(
+            row_tenant=OTHER_TENANT, tenant_id=T, scope="shared", row_owner="x", user_id="u1", role="admin", write=False
+        )
+    assert exc.value.status_code == 404
+
+
+def test_check_access_session_non_owner_forbidden():
+    with pytest.raises(UploadError) as exc:
+        upload_service._check_access(
+            row_tenant=T, tenant_id=T, scope="session", row_owner="u2", user_id="u1", role="user", write=False
+        )
+    assert exc.value.status_code == 403
+
+
+def test_check_access_session_owner_allowed():
+    upload_service._check_access(
+        row_tenant=T, tenant_id=T, scope="session", row_owner="u1", user_id="u1", role="user", write=True
+    )
 
 
 # * store: scope/session validation (short-circuits before disk or registry)
@@ -179,7 +216,7 @@ async def test_store_orphan_cleanup_on_registry_failure(scope_dir, registry, mak
 
 async def test_list_rejects_unknown_scope(upload_root, registry):
     with pytest.raises(UploadError) as exc:
-        await upload_service.list_with_reconcile(scope="nope", user_id="u1", role="user")
+        await upload_service.list_with_reconcile(scope="nope", user_id="u1", role="user", tenant_id=T)
     assert exc.value.code == "invalid_scope"
 
 
@@ -192,7 +229,7 @@ async def test_list_reconcile_flags_missing(scope_dir, file_key_for, registry):
     already = SimpleNamespace(id=uuid4(), storage_key=file_key_for("shared", "gone.js"), meta_data={"missing": True})
     registry.list_files.return_value = [present, missing, already]
 
-    rows = await upload_service.list_with_reconcile(scope="shared", user_id="u1", role="user")
+    rows = await upload_service.list_with_reconcile(scope="shared", user_id="u1", role="user", tenant_id=T)
 
     assert rows == [present, missing, already]
     registry.mark_missing.assert_awaited_once_with(missing.id)  # only the newly-missing row
@@ -206,34 +243,36 @@ async def test_list_reconcile_flags_missing(scope_dir, file_key_for, registry):
 async def test_open_content_not_found(upload_root, registry):
     registry.get_file.return_value = None
     with pytest.raises(UploadError) as exc:
-        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user")
+        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
     assert exc.value.status_code == 404
     assert exc.value.code == "not_found"
 
 
 async def test_open_content_forbidden_for_other_owner(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="global", owner_user_id="u2", storage_key="global/u2/a.js"
+        id=uuid4(), tenant_id=T, scope="global", owner_user_id="u2", storage_key="global/u2/a.js"
     )
     with pytest.raises(UploadError) as exc:
-        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user")
+        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
     assert exc.value.status_code == 403
 
 
 async def test_open_content_rejects_path_traversal(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="shared", owner_user_id="u1", storage_key="../escape.js"
+        id=uuid4(), tenant_id=T, scope="shared", owner_user_id="u1", storage_key="../escape.js"
     )
     with pytest.raises(UploadError) as exc:
-        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user")
+        await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
     assert exc.value.code == "not_found"
 
 
 async def test_open_content_missing_on_disk_marks_missing(file_key_for, registry):
-    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", storage_key=file_key_for("shared", "gone.js"))
+    row = SimpleNamespace(
+        id=uuid4(), tenant_id=T, scope="shared", owner_user_id="u1", storage_key=file_key_for("shared", "gone.js")
+    )
     registry.get_file.return_value = row
     with pytest.raises(UploadError) as exc:
-        await upload_service.open_content(file_id=row.id, user_id="u1", role="user")
+        await upload_service.open_content(file_id=row.id, user_id="u1", role="user", tenant_id=T)
     assert exc.value.code == "file_missing"
     registry.mark_missing.assert_awaited_once_with(row.id)
 
@@ -242,10 +281,12 @@ async def test_open_content_returns_path_and_row(scope_dir, file_key_for, regist
     shared = scope_dir("shared")
     shared.mkdir(parents=True, exist_ok=True)
     (shared / "a.js").write_bytes(b"x")
-    row = SimpleNamespace(id=uuid4(), scope="shared", owner_user_id="u1", storage_key=file_key_for("shared", "a.js"))
+    row = SimpleNamespace(
+        id=uuid4(), tenant_id=T, scope="shared", owner_user_id="u1", storage_key=file_key_for("shared", "a.js")
+    )
     registry.get_file.return_value = row
 
-    resolved, returned = await upload_service.open_content(file_id=row.id, user_id="u1", role="user")
+    resolved, returned = await upload_service.open_content(file_id=row.id, user_id="u1", role="user", tenant_id=T)
 
     assert returned is row
     assert resolved == (shared / "a.js").resolve()
@@ -257,16 +298,16 @@ async def test_open_content_returns_path_and_row(scope_dir, file_key_for, regist
 async def test_delete_not_found(upload_root, registry):
     registry.get_file.return_value = None
     with pytest.raises(UploadError) as exc:
-        await upload_service.delete(file_id=uuid4(), user_id="u1", role="user")
+        await upload_service.delete(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
     assert exc.value.status_code == 404
 
 
 async def test_delete_shared_non_admin_forbidden(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
-        id=uuid4(), scope="shared", owner_user_id="u1", storage_key="shared/a.js"
+        id=uuid4(), tenant_id=T, scope="shared", owner_user_id="u1", storage_key="shared/a.js"
     )
     with pytest.raises(UploadError) as exc:
-        await upload_service.delete(file_id=uuid4(), user_id="u1", role="user")
+        await upload_service.delete(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
     assert exc.value.status_code == 403
 
 
@@ -276,6 +317,7 @@ async def test_delete_removes_disk_and_row(scope_dir, file_key_for, registry):
     (g / "a.js").write_bytes(b"x")
     row = SimpleNamespace(
         id=uuid4(),
+        tenant_id=T,
         scope="global",
         owner_user_id="u1",
         storage_key=file_key_for("global", "a.js"),
@@ -284,7 +326,7 @@ async def test_delete_removes_disk_and_row(scope_dir, file_key_for, registry):
     )
     registry.get_file.return_value = row
 
-    await upload_service.delete(file_id=row.id, user_id="u1", role="user")
+    await upload_service.delete(file_id=row.id, user_id="u1", role="user", tenant_id=T)
 
     assert not (g / "a.js").exists()
     registry.delete_file.assert_awaited_once_with(row.id)
@@ -313,6 +355,7 @@ def _sidecars(extracted, bucket: str, digest: str) -> list:
 def _pdf_row(*, scope="global", owner="u1", digest="a" * 64):
     return SimpleNamespace(
         id=uuid4(),
+        tenant_id=T,
         scope=scope,
         owner_user_id=owner,
         storage_key=f"{scope}/{owner}/g.pdf",
@@ -327,10 +370,10 @@ async def test_delete_releases_extracted_text_nothing_else_holds(upload_root, re
     registry.get_file.return_value = row
     registry.count_hash_in_bucket.return_value = 0
 
-    await upload_service.delete(file_id=row.id, user_id="u1", role="user")
+    await upload_service.delete(file_id=row.id, user_id="u1", role="user", tenant_id=T)
 
     assert list((extracted / "u1").iterdir()) == []
-    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, owner_user_id="u1")
+    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, tenant_id=T, owner_user_id="u1")
 
 
 async def test_delete_keeps_extracted_text_another_upload_still_holds(upload_root, registry, extracted):
@@ -339,22 +382,22 @@ async def test_delete_keeps_extracted_text_another_upload_still_holds(upload_roo
     registry.get_file.return_value = row
     registry.count_hash_in_bucket.return_value = 1
 
-    await upload_service.delete(file_id=row.id, user_id="u1", role="user")
+    await upload_service.delete(file_id=row.id, user_id="u1", role="user", tenant_id=T)
 
     assert sorted((extracted / "u1").iterdir()) == kept
 
 
 async def test_deleting_a_shared_document_counts_the_shared_bucket(upload_root, registry, extracted):
     row = _pdf_row(scope="shared", owner="admin")
-    _sidecars(extracted, "shared", row.file_hash)
+    _sidecars(extracted, f"shared/{T}", row.file_hash)
     registry.get_file.return_value = row
     registry.count_hash_in_bucket.return_value = 0
 
-    await upload_service.delete(file_id=row.id, user_id="admin", role="admin")
+    await upload_service.delete(file_id=row.id, user_id="admin", role="admin", tenant_id=T)
 
     # ! Shared content belongs to no user, so its count must not be the uploading admin's
-    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, owner_user_id=None)
-    assert list((extracted / "shared").iterdir()) == []
+    registry.count_hash_in_bucket.assert_awaited_once_with(file_hash=row.file_hash, tenant_id=T, owner_user_id=None)
+    assert list((extracted / "shared" / T).iterdir()) == []
 
 
 async def test_replacing_a_document_releases_the_old_extraction(upload_root, registry, extracted, make_upload):
@@ -397,3 +440,31 @@ def test_sweep_removes_old_temps_keeps_recent(upload_root):
 def test_sweep_missing_dir_returns_zero(upload_root, monkeypatch):
     monkeypatch.setattr(config, "tenants_dir", str(upload_root / "does-not-exist"))
     assert upload_service.sweep_stale_temps() == 0
+
+
+async def test_store_refuses_a_name_differing_only_in_case(upload_root, registry, make_upload):
+    registry.get_by_casefolded_name.return_value = SimpleNamespace(filename="A.js")
+
+    with pytest.raises(UploadError) as exc:
+        await upload_service.store(
+            scope="shared", user_id="u1", role="admin", tenant_id=T, upload=make_upload(b"x", "a.js")
+        )
+
+    assert exc.value.status_code == 409
+    registry.upsert_file.assert_not_awaited()
+
+
+@pytest.mark.parametrize(("role", "visible"), [("user", ["mine.js"]), ("admin", ["mine.js", "theirs.js"])])
+async def test_listing_a_session_shows_a_member_only_their_own_files(upload_root, registry, role, visible):
+    session = uuid4()
+    registry.list_files.return_value = [
+        SimpleNamespace(id=uuid4(), owner_user_id="u1", filename="mine.js", storage_key="k1", meta_data={}),
+        SimpleNamespace(id=uuid4(), owner_user_id="u2", filename="theirs.js", storage_key="k2", meta_data={}),
+    ]
+
+    rows = await upload_service.list_with_reconcile(
+        scope="session", user_id="u1", role=role, tenant_id=T, session_id=session
+    )
+
+    assert [row.filename for row in rows] == visible
+    assert registry.list_files.call_args.kwargs["tenant_id"] == T

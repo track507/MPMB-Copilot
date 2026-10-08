@@ -1,6 +1,7 @@
 import re
 from pathlib import PurePosixPath
 
+from app.core.storage_keys import RESERVED_NAMES
 from app.services.documents import EXTRACTABLE_EXTENSIONS
 from app.services.uploads.errors import UploadError
 
@@ -27,6 +28,9 @@ def sanitize_filename(name: str) -> str:
         raise UploadError(400, "invalid_filename", "Filename contains control characters")
     if len(cleaned) > 255:
         raise UploadError(400, "invalid_filename", "Filename is longer than 255 characters")
+
+    if cleaned.lower() in RESERVED_NAMES:
+        raise UploadError(400, "invalid_filename", f"'{cleaned}' is reserved for storage metadata")
 
     path = PurePosixPath(cleaned)
     if path.stem.lower() in _WINDOWS_RESERVED:

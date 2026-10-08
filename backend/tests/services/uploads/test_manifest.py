@@ -33,7 +33,7 @@ def scopes(monkeypatch):
 
 
 async def test_empty_scopes_returns_blank(scopes):
-    assert await build_upload_manifest(session_id=uuid4(), user_id="u1") == ""
+    assert await build_upload_manifest(session_id=uuid4(), user_id="u1", tenant_id="t1") == ""
 
 
 async def test_sections_in_order_session_library_shared(scopes):
@@ -41,7 +41,7 @@ async def test_sections_in_order_session_library_shared(scopes):
     scopes["global"] = _rows("g.js")
     scopes["shared"] = _rows("sh.js")
 
-    result = await build_upload_manifest(session_id=uuid4(), user_id="u1")
+    result = await build_upload_manifest(session_id=uuid4(), user_id="u1", tenant_id="t1")
 
     assert result.startswith("\n\n[uploaded files]\n")
     assert result.index("session:") < result.index("library:") < result.index("shared:")
@@ -51,7 +51,7 @@ async def test_sections_in_order_session_library_shared(scopes):
 async def test_no_session_id_omits_session_section(scopes):
     scopes["global"] = _rows("g.js")
 
-    result = await build_upload_manifest(session_id=None, user_id="u1")
+    result = await build_upload_manifest(session_id=None, user_id="u1", tenant_id="t1")
 
     assert "session:" not in result
     assert "library:" in result
@@ -64,7 +64,7 @@ async def test_extracted_document_shows_its_page_count(scopes, monkeypatch):
     monkeypatch.setattr(manifest_mod.documents, "cached_summary", fake_summary)
     scopes["global"] = _rows("guide.pdf")
 
-    result = await build_upload_manifest(session_id=None, user_id="u1")
+    result = await build_upload_manifest(session_id=None, user_id="u1", tenant_id="t1")
 
     assert "guide.pdf (274 pages)" in result
     assert "not readable" not in result
@@ -75,7 +75,7 @@ async def test_unextracted_document_is_listed_bare(scopes, monkeypatch):
     monkeypatch.setattr(manifest_mod.documents, "cached_summary", lambda *_: None)
     scopes["global"] = _rows("guide.pdf")
 
-    result = await build_upload_manifest(session_id=None, user_id="u1")
+    result = await build_upload_manifest(session_id=None, user_id="u1", tenant_id="t1")
 
     assert "library: guide.pdf (1)" in result
 
@@ -83,7 +83,7 @@ async def test_unextracted_document_is_listed_bare(scopes, monkeypatch):
 async def test_over_cap_files_elided(scopes):
     scopes["global"] = _rows(*[f"f{i}.js" for i in range(21)])
 
-    result = await build_upload_manifest(session_id=None, user_id="u1")
+    result = await build_upload_manifest(session_id=None, user_id="u1", tenant_id="t1")
 
     assert "and 1 more" in result  # 21 - 20 cap
     assert "(21)" in result  # total count stays uncapped
@@ -91,4 +91,20 @@ async def test_over_cap_files_elided(scopes):
 
 async def test_db_down_returns_blank(monkeypatch):
     monkeypatch.setattr(manifest_mod, "db", SimpleNamespace(is_connected=False))
-    assert await build_upload_manifest(session_id=uuid4(), user_id="u1") == ""
+    assert await build_upload_manifest(session_id=uuid4(), user_id="u1", tenant_id="t1") == ""
+
+
+async def test_every_listing_is_scoped_to_the_callers_tenant(monkeypatch):
+    queries: list[dict] = []
+
+    async def fake_list_files(**filters):
+        queries.append(filters)
+        return []
+
+    monkeypatch.setattr(manifest_mod, "db", SimpleNamespace(is_connected=True))
+    monkeypatch.setattr(manifest_mod, "upload_registry", SimpleNamespace(list_files=fake_list_files))
+
+    await build_upload_manifest(session_id=uuid4(), user_id="u1", tenant_id="t1")
+
+    assert [q["scope"] for q in queries] == ["session", "global", "shared"]
+    assert all(q["tenant_id"] == "t1" for q in queries)

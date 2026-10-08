@@ -8,10 +8,12 @@ Imports the database layer, which is why the package __init__ never imports this
 
 import asyncio
 import json
+from pathlib import Path
 
 from app.config import config
 from app.services.db import db, upload_registry
 from app.services.documents import cache
+from app.services.documents.protocol import CacheScope
 
 
 async def sweep() -> dict[str, int]:
@@ -20,8 +22,12 @@ async def sweep() -> dict[str, int]:
         by_owner = await upload_registry.hashes_by_bucket()
     finally:
         await db.disconnect()
-    # ? The registry keys buckets by owner, and the cache names the ownerless shared bucket on disk
-    known = {cache.SHARED_DIR if owner is None else owner: hashes for owner, hashes in by_owner.items()}
+    known = {
+        cache.bucket_dir(
+            CacheScope.shared(key) if kind == "shared" else CacheScope.for_user(key), Path()
+        ).as_posix(): hashes
+        for (kind, key), hashes in by_owner.items()
+    }
     return cache.sweep_orphans(known)
 
 

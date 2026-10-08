@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import Principal, require_admin
+from app.api.deps import Principal, require_instance_admin
 from app.logger import get_logger
 from app.services.db import api_key_service
 from app.services.db.api_key_service import KNOWN_SCOPES
@@ -39,7 +39,7 @@ def _serialize(key: Any) -> dict[str, Any]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, summary="Mint a service API key")
-async def create_api_key(body: ApiKeyCreate, admin: Principal = Depends(require_admin)) -> dict[str, Any]:
+async def create_api_key(body: ApiKeyCreate, admin: Principal = Depends(require_instance_admin)) -> dict[str, Any]:
     unknown = set(body.scopes) - KNOWN_SCOPES
     if unknown:
         # HTTP_422_UNPROCESSABLE_ENTITY is deprecated, use HTTP_422_UNPROCESSABLE_CONTENT
@@ -60,12 +60,12 @@ async def create_api_key(body: ApiKeyCreate, admin: Principal = Depends(require_
 
 
 @router.get("", summary="List API keys (prefixes only)")
-async def list_api_keys(_: Principal = Depends(require_admin)) -> list[dict[str, Any]]:
+async def list_api_keys(_: Principal = Depends(require_instance_admin)) -> list[dict[str, Any]]:
     return [_serialize(k) for k in await api_key_service.list_keys()]
 
 
 @router.delete("/{key_id}", summary="Revoke an API key")
-async def revoke_api_key(key_id: UUID, _: Principal = Depends(require_admin)) -> dict[str, str]:
+async def revoke_api_key(key_id: UUID, _: Principal = Depends(require_instance_admin)) -> dict[str, str]:
     revoked = await api_key_service.revoke_key(key_id)
     if not revoked:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found or already revoked")

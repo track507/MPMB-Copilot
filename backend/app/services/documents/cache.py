@@ -2,7 +2,7 @@
 Owner-keyed sidecar cache for extracted documents
 
 Filesystem only by design: the upload registry owns reference counting, so this module never reaches the database
-Layout under config.extracted_dir: <user_id>/, shared/, and _source_roots/<root>/, each holding <hash>.<id>.<version>.{txt,json}
+Layout under config.extracted_dir: <user_id>/, shared/<tenant_id>/, and _source_roots/<root>/, each holding <hash>.<id>.<version>.{txt,json}
 """
 
 import json
@@ -34,7 +34,7 @@ def base_dir() -> Path:
 def bucket_dir(scope: CacheScope, base: Optional[Path] = None) -> Path:
     root = base if base is not None else base_dir()
     if scope.kind == "shared":
-        return root / SHARED_DIR
+        return root / SHARED_DIR / scope.key
     if scope.kind == "source_root":
         return root / SOURCE_ROOTS_DIR / scope.key
     return root / scope.key
@@ -158,7 +158,8 @@ def sweep_orphans(known_hashes: Mapping[str, set[str]], base: Optional[Path] = N
     """
     Delete sidecars whose hash no longer has an upload row in their bucket
 
-    known_hashes maps a bucket directory name (a user id, or shared) to the hashes the registry still holds there
+    known_hashes maps a bucket path relative to the cache root (a user id, or shared/<tenant_id>) to the hashes the
+    registry still holds there
     Source-root sidecars have no registry rows by design and are never touched; per-file errors warn and continue
     """
     root = base if base is not None else base_dir()
@@ -166,10 +167,17 @@ def sweep_orphans(known_hashes: Mapping[str, set[str]], base: Optional[Path] = N
     if not root.is_dir():
         return counts
 
-    for bucket in root.iterdir():
-        if not bucket.is_dir() or bucket.name == SOURCE_ROOTS_DIR:
+    buckets: list[Path] = []
+    for child in root.iterdir():
+        if not child.is_dir() or child.name == SOURCE_ROOTS_DIR:
             continue
-        keep = known_hashes.get(bucket.name, set())
+        buckets.append(child)
+        if child.name == SHARED_DIR:
+            buckets.extend(sub for sub in child.iterdir() if sub.is_dir())
+
+    for bucket in buckets:
+        name = bucket.relative_to(root).as_posix()
+        keep = known_hashes.get(name, set())
         for sidecar in bucket.iterdir():
             if not sidecar.is_file():
                 continue
@@ -182,5 +190,5 @@ def sweep_orphans(known_hashes: Mapping[str, set[str]], base: Optional[Path] = N
                 counts["removed"] += 1
             except OSError as e:
                 counts["errors"] += 1
-                logger.warning(f"sweep could not remove {bucket.name}/{sidecar.name}: {e}")
+                logger.warning(f"sweep could not remove {name}/{sidecar.name}: {e}")
     return counts

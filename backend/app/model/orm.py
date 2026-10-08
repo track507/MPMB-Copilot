@@ -223,7 +223,13 @@ class File(Base):
             unique=True,
             postgresql_where=text("scope = 'global'"),
         ),
-        Index("uq_files_shared_filename", "filename", unique=True, postgresql_where=text("scope = 'shared'")),
+        Index(
+            "uq_files_shared_tenant_filename",
+            "tenant_id",
+            "filename",
+            unique=True,
+            postgresql_where=text("scope = 'shared'"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid7)

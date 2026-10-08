@@ -12,6 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.db import session_service, upload_registry
 
+T = DEFAULT_TENANT_ID
+OTHER = "019f3400-0000-7000-8000-00000000000b"
+
 
 async def _upsert(
     *,
@@ -21,6 +24,7 @@ async def _upsert(
     session_id=None,
     file_hash: str = "h1",
     file_size: int = 10,
+    tenant_id: str = DEFAULT_TENANT_ID,
 ):
     """
     Upsert a file with sensible defaults; override only what a test cares about
@@ -34,7 +38,7 @@ async def _upsert(
         file_size=file_size,
         file_hash=file_hash,
         owner_user_id=owner,
-        tenant_id=DEFAULT_TENANT_ID,
+        tenant_id=tenant_id,
         session_id=session_id,
     )
 
@@ -69,7 +73,7 @@ async def test_upsert_same_session_name_updates_in_place(session_id: UUID):
     )
     assert a.id == b.id  # same row, upsert not insert
     assert b.file_hash == "h2"  # content replaced
-    assert await upload_registry.count_files(scope="session", session_id=session_id) == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="session", session_id=session_id) == 1
 
 
 async def test_upsert_same_global_name_updates_in_place(db_session_scope):
@@ -78,7 +82,7 @@ async def test_upsert_same_global_name_updates_in_place(db_session_scope):
 
     assert a.id == b.id
     assert b.file_hash == "h2"
-    assert await upload_registry.count_files(scope="global", owner_user_id="u1") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u1") == 1
 
 
 async def test_upsert_same_shared_name_updates_in_place(db_session_scope):
@@ -86,7 +90,7 @@ async def test_upsert_same_shared_name_updates_in_place(db_session_scope):
     b = await _upsert(scope="shared", file_hash="h2")
 
     assert a.id == b.id
-    assert await upload_registry.count_files(scope="shared") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="shared") == 1
 
 
 # * upsert: distinct rows where the partial-index keys differ
@@ -97,15 +101,15 @@ async def test_different_names_are_distinct_rows(db_session_scope):
     await _upsert(scope="global", owner="u1", filename="a.js", file_hash="same")
     await _upsert(scope="global", owner="u1", filename="b.js", file_hash="same")
 
-    assert await upload_registry.count_files(scope="global", owner_user_id="u1") == 2
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u1") == 2
 
 
 async def test_global_same_filename_different_owners_coexist(db_session_scope):
     await _upsert(scope="global", owner="u1", filename="a.js")
     await _upsert(scope="global", owner="u2", filename="a.js")
 
-    assert await upload_registry.count_files(scope="global", owner_user_id="u1") == 1
-    assert await upload_registry.count_files(scope="global", owner_user_id="u2") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u1") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u2") == 1
 
 
 async def test_same_filename_across_scopes_coexist(session_id):
@@ -113,9 +117,9 @@ async def test_same_filename_across_scopes_coexist(session_id):
     await _upsert(scope="global", owner="u1", filename="a.js")
     await _upsert(scope="shared", filename="a.js")
 
-    assert await upload_registry.count_files(scope="session", session_id=session_id) == 1
-    assert await upload_registry.count_files(scope="global", owner_user_id="u1") == 1
-    assert await upload_registry.count_files(scope="shared") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="session", session_id=session_id) == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u1") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="shared") == 1
 
 
 # * check constraint: scope and session_id must agree
@@ -147,8 +151,10 @@ async def test_get_file_returns_row_or_none(db_session_scope):
 async def test_get_by_name_scoped_to_owner(db_session_scope):
     await _upsert(scope="global", owner="u1", filename="a.js")
 
-    assert await upload_registry.get_by_name(scope="global", filename="a.js", owner_user_id="u1") is not None
-    assert await upload_registry.get_by_name(scope="global", filename="a.js", owner_user_id="u2") is None
+    assert (
+        await upload_registry.get_by_name(tenant_id=T, scope="global", filename="a.js", owner_user_id="u1") is not None
+    )
+    assert await upload_registry.get_by_name(tenant_id=T, scope="global", filename="a.js", owner_user_id="u2") is None
 
 
 async def test_list_files_scoped_and_ordered(db_session_scope):
@@ -157,7 +163,7 @@ async def test_list_files_scoped_and_ordered(db_session_scope):
     await _upsert(scope="global", owner="u1", filename="c.js")
     await _upsert(scope="global", owner="u2", filename="z.js")  # different owner, excluded
 
-    rows = await upload_registry.list_files(scope="global", owner_user_id="u1")
+    rows = await upload_registry.list_files(tenant_id=T, scope="global", owner_user_id="u1")
     assert [r.filename for r in rows] == ["a.js", "b.js", "c.js"]
 
 
@@ -167,9 +173,9 @@ async def test_count_files_isolated_per_scope(session_id):
     await _upsert(scope="global", owner="u1", filename="a.js")
     await _upsert(scope="shared", filename="a.js")
 
-    assert await upload_registry.count_files(scope="session", session_id=session_id) == 2
-    assert await upload_registry.count_files(scope="global", owner_user_id="u1") == 1
-    assert await upload_registry.count_files(scope="shared") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="session", session_id=session_id) == 2
+    assert await upload_registry.count_files(tenant_id=T, scope="global", owner_user_id="u1") == 1
+    assert await upload_registry.count_files(tenant_id=T, scope="shared") == 1
 
 
 # * delete
@@ -250,19 +256,59 @@ async def test_hash_count_is_scoped_to_one_users_bucket(session_id: UUID):
     await _upsert(scope="global", filename="g.pdf", owner="u2", file_hash="h1")
 
     # ! Session and global share a user's bucket, and another user's identical upload must not count
-    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id="u1") == 2
-    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id="u3") == 0
+    assert await upload_registry.count_hash_in_bucket(tenant_id=T, file_hash="h1", owner_user_id="u1") == 2
+    assert await upload_registry.count_hash_in_bucket(tenant_id=T, file_hash="h1", owner_user_id="u3") == 0
 
 
 async def test_hash_count_for_the_shared_bucket_ignores_personal_copies(db_session_scope):
     await _upsert(scope="shared", filename="rules.pdf", owner="admin", file_hash="h1")
     await _upsert(scope="global", filename="rules.pdf", owner="admin", file_hash="h1")
 
-    assert await upload_registry.count_hash_in_bucket(file_hash="h1", owner_user_id=None) == 1
+    assert await upload_registry.count_hash_in_bucket(tenant_id=T, file_hash="h1", owner_user_id=None) == 1
 
 
 async def test_hashes_group_by_the_bucket_they_keep_alive(db_session_scope):
     await _upsert(scope="global", filename="a.pdf", owner="u1", file_hash="h1")
     await _upsert(scope="shared", filename="b.pdf", owner="admin", file_hash="h2")
 
-    assert await upload_registry.hashes_by_bucket() == {"u1": {"h1"}, None: {"h2"}}
+    assert await upload_registry.hashes_by_bucket() == {("user", "u1"): {"h1"}, ("shared", T): {"h2"}}
+
+
+@pytest.fixture
+async def other_tenant(db_session_scope):
+    from sqlalchemy import text
+
+    from app.services.db.connection import db
+
+    async with db.session() as s:
+        await s.execute(text("INSERT INTO tenants (id, slug, name) VALUES (:id, 'other', 'Other')"), {"id": OTHER})
+    return OTHER
+
+
+async def test_two_tenants_keep_same_named_library_files_apart(other_tenant):
+    a = await _upsert(scope="shared", filename="guide.pdf", file_hash="ha")
+    b = await _upsert(scope="shared", filename="guide.pdf", file_hash="hb", tenant_id=other_tenant)
+
+    assert a.id != b.id
+    assert [r.file_hash for r in await upload_registry.list_files(tenant_id=T, scope="shared")] == ["ha"]
+    assert [r.file_hash for r in await upload_registry.list_files(tenant_id=other_tenant, scope="shared")] == ["hb"]
+
+
+async def test_a_library_hash_count_never_crosses_tenants(other_tenant):
+    await _upsert(scope="shared", filename="guide.pdf", file_hash="same", tenant_id=other_tenant)
+
+    assert await upload_registry.count_hash_in_bucket(tenant_id=T, file_hash="same", owner_user_id=None) == 0
+
+
+async def test_a_case_variant_of_an_existing_name_is_found(db_session_scope):
+    await _upsert(scope="global", filename="Guide.pdf")
+
+    found = await upload_registry.get_by_casefolded_name(
+        tenant_id=T, scope="global", filename="guide.pdf", owner_user_id="u1"
+    )
+    exact = await upload_registry.get_by_casefolded_name(
+        tenant_id=T, scope="global", filename="Guide.pdf", owner_user_id="u1"
+    )
+
+    assert found is not None and found.filename == "Guide.pdf"
+    assert exact is None

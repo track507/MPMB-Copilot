@@ -58,7 +58,7 @@ def test_the_stream_keeps_bare_newlines_on_every_platform(tmp_path: Path):
 
 def test_each_scope_kind_gets_its_own_bucket(tmp_path: Path):
     assert cache.bucket_dir(USER, tmp_path) == tmp_path / "u1"
-    assert cache.bucket_dir(CacheScope.shared(), tmp_path) == tmp_path / "shared"
+    assert cache.bucket_dir(CacheScope.shared("t1"), tmp_path) == tmp_path / "shared" / "t1"
     assert (
         cache.bucket_dir(CacheScope.for_source_root("mpmb_source"), tmp_path)
         == tmp_path / "_source_roots" / "mpmb_source"
@@ -80,12 +80,12 @@ def test_unlink_removes_every_version_for_one_hash_in_one_bucket(tmp_path: Path)
     for version in ("1", "2"):
         cache.write_pair(USER, HASH_A, "pdf", version, _extraction(), ".pdf", base=tmp_path)
     cache.write_pair(USER, HASH_B, "pdf", "1", _extraction(), ".pdf", base=tmp_path)
-    cache.write_pair(CacheScope.shared(), HASH_A, "pdf", "1", _extraction(), ".pdf", base=tmp_path)
+    cache.write_pair(CacheScope.shared("t1"), HASH_A, "pdf", "1", _extraction(), ".pdf", base=tmp_path)
 
     assert cache.unlink_hash(USER, HASH_A, base=tmp_path) == 4
 
     assert cache.read_pair(USER, HASH_B, "pdf", "1", base=tmp_path) is not None
-    assert cache.read_pair(CacheScope.shared(), HASH_A, "pdf", "1", base=tmp_path) is not None
+    assert cache.read_pair(CacheScope.shared("t1"), HASH_A, "pdf", "1", base=tmp_path) is not None
 
 
 def test_sweep_keeps_known_hashes_removes_orphans_and_never_touches_source_roots(tmp_path: Path):
@@ -101,3 +101,15 @@ def test_sweep_keeps_known_hashes_removes_orphans_and_never_touches_source_roots
     assert cache.read_pair(USER, HASH_B, "pdf", "1", base=tmp_path) is None
     # ? Source-root documents have no registry rows by design, so the sweep has no way to judge them
     assert cache.read_pair(source, HASH_B, "pdf", "1", base=tmp_path) is not None
+
+
+def test_sweep_judges_each_tenants_library_bucket_on_its_own(tmp_path: Path):
+    tenant_a, tenant_b = CacheScope.shared("ta"), CacheScope.shared("tb")
+    cache.write_pair(tenant_a, HASH_A, "pdf", "1", _extraction(), ".pdf", base=tmp_path)
+    cache.write_pair(tenant_b, HASH_A, "pdf", "1", _extraction(), ".pdf", base=tmp_path)
+
+    counts = cache.sweep_orphans({"shared/ta": {HASH_A}}, base=tmp_path)
+
+    assert counts == {"kept": 2, "removed": 2, "errors": 0}
+    assert cache.read_pair(tenant_a, HASH_A, "pdf", "1", base=tmp_path) is not None
+    assert cache.read_pair(tenant_b, HASH_A, "pdf", "1", base=tmp_path) is None

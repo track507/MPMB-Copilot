@@ -96,10 +96,7 @@ class CacheScope:
     key: str
 
     def __post_init__(self) -> None:
-        if self.kind == "shared":
-            if self.key:
-                raise ValueError("a shared cache scope carries no key")
-        elif not _SAFE_KEY.fullmatch(self.key):
+        if not _SAFE_KEY.fullmatch(self.key):
             raise ValueError(f"cache scope key is not a safe path component: {self.key!r}")
 
     @classmethod
@@ -107,8 +104,9 @@ class CacheScope:
         return cls(kind="user", key=user_id)
 
     @classmethod
-    def shared(cls) -> "CacheScope":
-        return cls(kind="shared", key="")
+    def shared(cls, tenant_id: str) -> "CacheScope":
+        """One tenant's library bucket; derived text never crosses a tenant boundary"""
+        return cls(kind="shared", key=tenant_id)
 
     @classmethod
     def for_source_root(cls, name: str) -> "CacheScope":

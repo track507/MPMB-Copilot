@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.api.admission import turn_gate
-from app.api.deps import Principal, current_principal
+from app.api.deps import Principal, current_principal, is_instance_admin
 from app.composition import get_rag_engine
 from app.config import config
 from app.logger import get_logger
@@ -82,6 +82,14 @@ async def _bounded(events: AsyncGenerator[T, None]) -> AsyncGenerator[T, None]:
         await events.aclose()
 
 
+def _check_model_override(request: ChatRequest, principal: Principal) -> None:
+    """Choosing the provider or model per request is an instance admin's call; everyone else gets the configured one"""
+    if (request.provider or request.model) and not is_instance_admin(principal):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Choosing the provider or model requires an instance admin"
+        )
+
+
 async def _persist(session_uuid: UUID | None, text: str, rag_response=None, *, error: str | None = None) -> None:
     """Save the assistant message, even from inside a turn that is being cancelled"""
     # ! anyio re-cancels every await inside a cancelled scope
@@ -126,7 +134,9 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_i
         return None
 
 
-async def _save_user_message(session_uuid: UUID | None, user_message: str, user_id: str) -> Message | None:
+async def _save_user_message(
+    session_uuid: UUID | None, user_message: str, user_id: str, *, provider: str | None = None
+) -> Message | None:
     """
     Save the user message and trigger title generation on the first message
 
@@ -144,7 +154,7 @@ async def _save_user_message(session_uuid: UUID | None, user_message: str, user_
 
         # ? First user message in a new session - kick off async title generation
         if user_msg.sequence_number == 1:
-            asyncio.create_task(generate_session_title(session_uuid, user_message, user_id))
+            asyncio.create_task(generate_session_title(session_uuid, user_message, user_id, provider=provider))
         return user_msg
     except Exception as e:
         logger.error(f"Failed to save user message: {e}")
@@ -239,7 +249,7 @@ def _build_metadata(
     return meta
 
 
-async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
+async def _upload_manifest(session_uuid: UUID | None, user_id: str, tenant_id: str) -> str:
     """
     The per-turn inventory of uploaded files, assembled at the edge and passed into the agent loop
 
@@ -247,7 +257,7 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
     """
     if not settings.enable_tool_use:
         return ""
-    return await build_upload_manifest(session_id=session_uuid, user_id=user_id)
+    return await build_upload_manifest(session_id=session_uuid, user_id=user_id, tenant_id=tenant_id)
 
 
 # * POST /chat - complete response
@@ -260,6 +270,7 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
 )
 async def chat(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Generate a complete RAG-powered response with session persistence."""
+    _check_model_override(request, principal)
     # ! Before anything is persisted
     slot = turn_gate.acquire(principal.user_id)
     try:
@@ -273,7 +284,9 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before generation so it survives downstream failures
-        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
+        user_msg = await _save_user_message(
+            session_uuid, request.message, user_id=principal.user_id, provider=request.provider
+        )
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,
@@ -294,7 +307,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
                     model=request.model,
                     temperature=request.temperature,
                     max_tokens=request.max_tokens,
-                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id, principal.tenant_id),
                 )
             )
         except Exception as gen_error:
@@ -349,6 +362,7 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
 )
 async def chat_stream(request: ChatRequest, principal: Principal = Depends(current_principal)):
     """Stream a RAG-powered response via SSE with session persistence."""
+    _check_model_override(request, principal)
     # ! Before anything is persisted
     slot = turn_gate.acquire(principal.user_id)
     try:
@@ -362,7 +376,9 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         session_id = str(session_uuid) if session_uuid else (request.session_id or "")
 
         # * Persist user message before streaming so it survives any agent/model failure
-        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
+        user_msg = await _save_user_message(
+            session_uuid, request.message, user_id=principal.user_id, provider=request.provider
+        )
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,
@@ -388,7 +404,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                         model=request.model,
                         temperature=request.temperature,
                         max_tokens=request.max_tokens,
-                        upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                        upload_manifest=await _upload_manifest(session_uuid, principal.user_id, principal.tenant_id),
                     )
                 ):
                     if event.done:

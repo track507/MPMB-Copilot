@@ -37,3 +37,10 @@ def test_rejects(name, code):
     with pytest.raises(UploadError) as exc:
         sanitize_filename(name)
     assert exc.value.code == code
+
+
+@pytest.mark.parametrize("name", ["_meta.json", "BY-NAME.json", "_Meta.JSON"])
+def test_refuses_storage_metadata_names(name):
+    with pytest.raises(UploadError) as exc:
+        sanitize_filename(name)
+    assert exc.value.code == "invalid_filename"

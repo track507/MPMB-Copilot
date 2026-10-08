@@ -78,11 +78,16 @@ async def principal_or_service(request: Request) -> Principal:
     return await current_principal(request)
 
 
+def is_instance_admin(principal: Principal) -> bool:
+    """An admin of the operator tenant: the only principal that may change instance-wide state"""
+    return principal.role == "admin" and principal.tenant_id == DEFAULT_TENANT_ID
+
+
 def require_scope(scope: str):
-    """Admins hold all scopes implicitly; service principals need the explicit grant; plain users are refused."""
+    """Instance admins hold all scopes implicitly; service principals need the explicit grant; others are refused"""
 
     async def _check(principal: Principal = Depends(principal_or_service)) -> Principal:
-        if principal.role == "admin":
+        if is_instance_admin(principal):
             return principal
         if principal.role == "service" and scope in principal.scopes:
             return principal
@@ -94,4 +99,10 @@ def require_scope(scope: str):
 async def require_admin(principal: Principal = Depends(current_principal)) -> Principal:
     if principal.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return principal
+
+
+async def require_instance_admin(principal: Principal = Depends(current_principal)) -> Principal:
+    if not is_instance_admin(principal):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Instance admin access required")
     return principal

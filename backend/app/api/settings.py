@@ -10,7 +10,7 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import Principal, require_admin
+from app.api.deps import Principal, require_instance_admin
 from app.logger import get_logger
 from app.settings import settings
 
@@ -66,7 +66,7 @@ class SettingsUpdate(BaseModel):
     status_code=status.HTTP_200_OK,
     summary="Get current behavioral settings",
 )
-async def get_settings(_: Principal = Depends(require_admin)) -> dict[str, Any]:
+async def get_settings(_: Principal = Depends(require_instance_admin)) -> dict[str, Any]:
     """Return the current hot-reloadable settings as a dict."""
     return settings.to_dict()
 
@@ -76,7 +76,7 @@ async def get_settings(_: Principal = Depends(require_admin)) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
     summary="List all selectable capabilities for the store",
 )
-async def get_capabilities(_: Principal = Depends(require_admin)) -> dict[str, Any]:
+async def get_capabilities(_: Principal = Depends(require_instance_admin)) -> dict[str, Any]:
     """
     Unified provider/capability catalog for the settings store
 
@@ -94,7 +94,7 @@ async def get_capabilities(_: Principal = Depends(require_admin)) -> dict[str, A
     summary="Update behavioral settings",
     description="Partial update. Only fields present in the body are changed.",
 )
-async def update_settings(body: SettingsUpdate, _: Principal = Depends(require_admin)) -> dict[str, Any]:
+async def update_settings(body: SettingsUpdate, _: Principal = Depends(require_instance_admin)) -> dict[str, Any]:
     """Apply a partial settings update and persist to disk."""
     updates = body.model_dump(exclude_none=True)
 

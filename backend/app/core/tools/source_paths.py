@@ -89,7 +89,7 @@ def cache_scope_for(root: str, deps: Any) -> CacheScope:
     Only this and user_id are request-derived, which is why extraction takes a CacheScope rather than the whole deps
     """
     if root == ROOT_UPLOADS_SHARED:
-        return CacheScope.shared()
+        return CacheScope.shared(deps.tenant_id)
     if root in (ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL):
         return CacheScope.for_user(deps.user_id)
     return CacheScope.for_source_root(_SOURCE_ROOT_CACHE_KEYS[root])

@@ -7,6 +7,10 @@ A key that can change is a key that breaks every ref to it, so nothing mutable h
 
 SHARED_TENANT = "_shared"
 DEFAULT_TENANT_ID = "019f3400-0000-7000-8000-000000000000"
+META_NAME = "_meta.json"
+NAME_INDEX_NAME = "by-name.json"
+# ! Breadcrumb leaves, never valid upload names
+RESERVED_NAMES = frozenset({META_NAME, NAME_INDEX_NAME})
 
 
 def tenant_prefix(tenant_id: str) -> str:
@@ -14,11 +18,11 @@ def tenant_prefix(tenant_id: str) -> str:
 
 
 def tenant_meta_key(tenant_id: str) -> str:
-    return f"{tenant_prefix(tenant_id=tenant_id)}/_meta.json"
+    return f"{tenant_prefix(tenant_id=tenant_id)}/{META_NAME}"
 
 
 def tenant_name_index_key(tenant_id: str) -> str:
-    return f"{tenant_prefix(tenant_id=tenant_id)}/by-name.json"
+    return f"{tenant_prefix(tenant_id=tenant_id)}/{NAME_INDEX_NAME}"
 
 
 def library_prefix(tenant_id: str) -> str:
@@ -30,7 +34,7 @@ def user_prefix(tenant_id: str, user_id: str) -> str:
 
 
 def user_meta_key(tenant_id: str, user_id: str) -> str:
-    return f"{user_prefix(tenant_id, user_id)}/_meta.json"
+    return f"{user_prefix(tenant_id, user_id)}/{META_NAME}"
 
 
 def user_global_prefix(tenant_id: str, user_id: str) -> str:
@@ -42,7 +46,7 @@ def session_prefix(tenant_id: str, user_id: str, session_id: str) -> str:
 
 
 def session_meta_key(tenant_id: str, user_id: str, session_id: str) -> str:
-    return f"{session_prefix(tenant_id, user_id, session_id)}/_meta.json"
+    return f"{session_prefix(tenant_id, user_id, session_id)}/{META_NAME}"
 
 
 def file_key(prefix: str, file_id: str) -> str:

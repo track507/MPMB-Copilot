@@ -97,6 +97,7 @@ async def list_uploads(
         scope=scope.value,
         user_id=principal.user_id,
         role=principal.role,
+        tenant_id=principal.tenant_id,
         session_id=session_id,
     )
     return FileListOut(files=[_to_out(r) for r in rows], total=len(rows))
@@ -110,7 +111,9 @@ async def list_uploads(
 )
 async def download_upload(file_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
-    path, row = await upload_service.open_content(file_id=file_id, user_id=principal.user_id, role=principal.role)
+    path, row = await upload_service.open_content(
+        file_id=file_id, user_id=principal.user_id, role=principal.role, tenant_id=principal.tenant_id
+    )
     # ! attachment + nosniff: stored .js served inline would be a stored-XSS vector
     return FileResponse(
         path,
@@ -129,4 +132,6 @@ async def download_upload(file_id: UUID, principal: Principal = Depends(current_
 )
 async def delete_upload(file_id: UUID, principal: Principal = Depends(current_principal)):
     _require_db()
-    await upload_service.delete(file_id=file_id, user_id=principal.user_id, role=principal.role)
+    await upload_service.delete(
+        file_id=file_id, user_id=principal.user_id, role=principal.role, tenant_id=principal.tenant_id
+    )

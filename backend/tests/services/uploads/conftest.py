@@ -76,6 +76,7 @@ def registry(monkeypatch):
     mock = AsyncMock()
     mock.count_files.return_value = 0
     mock.get_by_name.return_value = None
+    mock.get_by_casefolded_name.return_value = None
     mock.upsert_file.return_value = SimpleNamespace(id=uuid4(), meta_data={})
     mock.mark_missing.return_value = None
     mock.delete_file.return_value = True

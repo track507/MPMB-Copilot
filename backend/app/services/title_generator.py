@@ -52,13 +52,16 @@ def _sanitize(title: str) -> str:
     return cleaned
 
 
-async def generate_session_title(session_id: UUID, user_message: str, user_id: str) -> None:
+async def generate_session_title(
+    session_id: UUID, user_message: str, user_id: str, *, provider: str | None = None
+) -> None:
     """
     Generate and persist a session title from the first user message
 
     Runs in a background task; logs and swallows errors so a failure here cannot break the chat response that already finished streaming
     """
-    provider = settings.default_llm_provider
+    # ! Same provider as the turn
+    provider = provider or settings.default_llm_provider
     try:
         response = await agent_generate(
             instructions=_TITLE_INSTRUCTIONS,
