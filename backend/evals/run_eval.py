@@ -17,8 +17,11 @@ import json
 import time
 from pathlib import Path
 
-from app.core.retriever import retriever
+from app.composition import get_retriever
+from app.core.catalog import CatalogSnapshot
+from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.services.embedding.service import embedding_service
+from app.services.source_catalog import source_catalog_service
 from app.services.vector import get_vector_store
 from app.settings import settings
 from evals.harness import aggregate, format_matrix, score_case
@@ -48,7 +51,7 @@ CONFIGS: list[tuple[str, dict]] = [
 ]
 
 
-async def run_config(label: str, overrides: dict, cases: list[dict]) -> dict:
+async def run_config(label: str, overrides: dict, cases: list[dict], catalog: CatalogSnapshot) -> dict:
     # ? Direct attribute set: in-process only; settings.update() would persist to disk
     for key, value in overrides.items():
         setattr(settings, key, value)
@@ -58,7 +61,9 @@ async def run_config(label: str, overrides: dict, cases: list[dict]) -> dict:
     per_case: list[dict] = []
     reranked_seen = False
     for case in cases:
-        result = await retriever.retrieve(case["query"], case.get("edition"))
+        result = await get_retriever().retrieve(
+            case["query"], case.get("edition"), tenant_id=DEFAULT_TENANT_ID, catalog=catalog
+        )
         chunks = [*result.authoritative, *result.examples]
         reranked_seen = reranked_seen or any("rerank_score" in c for c in chunks)
         scored = score_case(chunks, case["expect"])
@@ -80,10 +85,12 @@ async def main() -> None:
     if not await store.health_check():
         await store.connect()
 
+    source_catalog_service.load()
+    catalog = source_catalog_service.snapshot()
     cases = json.loads(_CASES.read_text(encoding="utf-8"))
     runs: dict[str, dict] = {}
     for label, overrides in CONFIGS:
-        runs[label] = await run_config(label, overrides, cases)
+        runs[label] = await run_config(label, overrides, cases, catalog)
 
     aggs = {label: run["aggregate"] for label, run in runs.items() if not run["failed"]}
     if "baseline" in aggs:
