@@ -98,6 +98,9 @@ def chat_client(monkeypatch):
 def saved(monkeypatch) -> list[dict]:
     messages: list[dict] = []
 
+    async def fake_get_session(session_id, *, user_id):
+        return SimpleNamespace(id=session_id)
+
     async def fake_history(_session_uuid, *, user_id):
         return []
 
@@ -106,6 +109,7 @@ def saved(monkeypatch) -> list[dict]:
         return SimpleNamespace(id=uuid4(), sequence_number=2)
 
     monkeypatch.setattr("app.api.chat.db", SimpleNamespace(is_connected=True))
+    monkeypatch.setattr("app.api.chat.session_service.get_session", fake_get_session)
     monkeypatch.setattr("app.api.chat.session_service.get_conversation_history", fake_history)
     monkeypatch.setattr("app.api.chat.session_service.add_message", fake_add_message)
     return messages
@@ -201,7 +205,7 @@ def test_a_stream_that_fails_after_its_answer_was_saved_is_not_saved_twice(chat_
 async def _stream_response(monkeypatch, caps, agent):
     caps(total=10, per_user=5)
     _engine(monkeypatch, stream=agent)
-    request = ChatRequest(message="hi", session_id=str(uuid4()))
+    request = ChatRequest(message="hi", session_id=uuid4())
     principal = Principal(user_id="stream-user", role="admin", tenant_id=DEFAULT_TENANT_ID)
     return await chat_mod.chat_stream(request, principal)
 
@@ -258,7 +262,7 @@ async def test_a_cancelled_stream_saves_its_partial_answer(saved, monkeypatch, c
 async def test_a_save_completes_inside_a_scope_that_is_already_cancelled(monkeypatch):
     committed: list[str] = []
 
-    async def slow_save(session_uuid, text, rag_response=None, error=None):
+    async def slow_save(session_uuid, text, rag_response=None, *, error=None, user_id):
         await asyncio.sleep(0.01)
         committed.append(text)
 
@@ -266,7 +270,7 @@ async def test_a_save_completes_inside_a_scope_that_is_already_cancelled(monkeyp
 
     with anyio.CancelScope() as scope:
         scope.cancel()
-        await chat_mod._persist(None, "partial", error="interrupted")
+        await chat_mod._persist(None, "partial", error="interrupted", user_id="u1")
 
     assert committed == ["partial"]
 

@@ -151,21 +151,24 @@ def test_feedback_is_gated_on_session_ownership(as_user, monkeypatch):
     assert seen == [BOB, BOB]
 
 
-async def test_load_history_scopes_to_the_caller(monkeypatch):
-    """A foreign session id must read as empty, not as someone else's turns."""
+async def test_resolve_session_asks_on_behalf_of_the_caller(monkeypatch):
+    from fastapi import HTTPException
+
     from app.api import chat as chat_mod
 
     captured: dict = {}
 
-    async def fake_history(session_id, *, user_id):
+    async def fake_get_session(session_id, *, user_id):
         captured["user_id"] = user_id
-        return []
+        return None
 
-    monkeypatch.setattr(chat_mod.session_service, "get_conversation_history", fake_history)
+    monkeypatch.setattr(chat_mod.session_service, "get_session", fake_get_session)
     monkeypatch.setattr(chat_mod, "db", SimpleNamespace(is_connected=True))
 
-    await chat_mod._load_history(str(uuid4()), BOB)
-    # ! Scoped to the caller, not to the id they supplied
+    with pytest.raises(HTTPException) as caught:
+        await chat_mod._resolve_session(uuid4(), BOB)
+
+    assert caught.value.status_code == 404
     assert captured["user_id"] == BOB
 
 

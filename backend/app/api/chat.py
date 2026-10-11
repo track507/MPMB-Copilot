@@ -90,27 +90,29 @@ def _check_model_override(request: ChatRequest, principal: Principal) -> None:
         )
 
 
-async def _persist(session_uuid: UUID | None, text: str, rag_response=None, *, error: str | None = None) -> None:
+async def _persist(
+    session_uuid: UUID | None, text: str, rag_response=None, *, user_id: str, error: str | None = None
+) -> None:
     """Save the assistant message, even from inside a turn that is being cancelled"""
     # ! anyio re-cancels every await inside a cancelled scope
     with anyio.CancelScope(shield=True):
-        await _save_assistant_message(session_uuid, text, rag_response, error=error)
+        await _save_assistant_message(session_uuid, text, rag_response, error=error, user_id=user_id)
 
 
 # * Helpers
-async def _load_history(session_id_str: str | None, user_id: str) -> tuple[UUID | None, list[dict[str, Any]]]:
-    """Load conversation history for a session the caller owns."""
-    if not session_id_str or not db.is_connected:
-        return None, []
+async def _resolve_session(session_id: UUID | None, user_id: str) -> tuple[UUID | None, list[dict[str, Any]]]:
+    """
+    The caller's own active session and its history, or neither
 
-    try:
-        session_uuid = UUID(session_id_str)
-        # ! Scoped read: a foreign session id returns empty history, never another user's turns
-        history = await session_service.get_conversation_history(session_uuid, user_id=user_id)
-        return session_uuid, history
-    except (ValueError, Exception) as e:
-        logger.warning(f"Failed to load session history: {e}")
+    A session the caller does not own, or one that is soft-deleted, is a 404, as on every route in api/sessions.py
+    Without a database the turn runs stateless and nothing is written
+    """
+    if session_id is None or not db.is_connected:
         return None, []
+    # ! 404, never 403: a 403 would confirm the session exists
+    if await session_service.get_session(session_id, user_id=user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    return session_id, await session_service.get_conversation_history(session_id, user_id=user_id)
 
 
 async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_id: str, tenant_id: str) -> UUID | None:
@@ -150,6 +152,7 @@ async def _save_user_message(
             session_id=session_uuid,
             role="user",
             content={"text": user_message},
+            user_id=user_id,
         )
 
         # ? First user message in a new session - kick off async title generation
@@ -166,6 +169,8 @@ async def _save_assistant_message(
     assistant_content: str,
     rag_response=None,
     error: str | None = None,
+    *,
+    user_id: str,
 ) -> None:
     """Save the assistant message. Records partial content + error when the stream fails."""
     if not session_uuid or not db.is_connected:
@@ -212,6 +217,7 @@ async def _save_assistant_message(
             session_id=session_uuid,
             role="assistant",
             content=assistant_content_dict,
+            user_id=user_id,
             **kwargs,
         )
     except Exception as e:
@@ -269,19 +275,19 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str, tenant_id: s
     description="Send a message and receive AI-generated MPMB code assistance",
 )
 async def chat(request: ChatRequest, principal: Principal = Depends(current_principal)):
-    """Generate a complete RAG-powered response with session persistence."""
+    """Generate a complete RAG-powered response with session persistence"""
     _check_model_override(request, principal)
-    # ! Before anything is persisted
+    # ! Both before anything is persisted: ownership first, then admission
+    session_uuid, history = await _resolve_session(request.session_id, principal.user_id)
     slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id, principal.user_id)
         session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
-        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
+        session_id = str(session_uuid) if session_uuid else ""
 
         # * Persist user message before generation so it survives downstream failures
         user_msg = await _save_user_message(
@@ -311,10 +317,10 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
                 )
             )
         except Exception as gen_error:
-            await _save_assistant_message(session_uuid, "", error=str(gen_error))
+            await _save_assistant_message(session_uuid, "", error=str(gen_error), user_id=principal.user_id)
             raise
 
-        await _save_assistant_message(session_uuid, rag_response.content, rag_response)
+        await _save_assistant_message(session_uuid, rag_response.content, rag_response, user_id=principal.user_id)
 
         metadata = _build_metadata(
             session_id=session_id,
@@ -361,19 +367,19 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
     description="Stream AI-generated responses via Server-Sent Events (SSE)",
 )
 async def chat_stream(request: ChatRequest, principal: Principal = Depends(current_principal)):
-    """Stream a RAG-powered response via SSE with session persistence."""
+    """Stream a RAG-powered response via SSE with session persistence"""
     _check_model_override(request, principal)
-    # ! Before anything is persisted
+    # ! Both before anything is persisted: ownership first, then admission
+    session_uuid, history = await _resolve_session(request.session_id, principal.user_id)
     slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Streaming chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id, principal.user_id)
         session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
-        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
+        session_id = str(session_uuid) if session_uuid else ""
 
         # * Persist user message before streaming so it survives any agent/model failure
         user_msg = await _save_user_message(
@@ -408,7 +414,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                     )
                 ):
                     if event.done:
-                        await _persist(session_uuid, "".join(full_content), event)
+                        await _persist(session_uuid, "".join(full_content), event, user_id=principal.user_id)
                         saved = True
                         final_chunk = ChatStreamChunk(
                             chunk="",
@@ -446,7 +452,7 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                 logger.error(f"Stream error: {e}", exc_info=True)
                 # ! Persist partial text + error so the user's question survives the page reload
                 if not saved:
-                    await _persist(session_uuid, "".join(full_content), error=str(e))
+                    await _persist(session_uuid, "".join(full_content), error=str(e), user_id=principal.user_id)
                     saved = True
                 error_chunk = ChatStreamChunk(
                     chunk="",
@@ -457,7 +463,12 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                 yield "data: [DONE]\n\n"
             except (asyncio.CancelledError, GeneratorExit):
                 if not saved:
-                    await _persist(session_uuid, "".join(full_content), error="interrupted before the answer finished")
+                    await _persist(
+                        session_uuid,
+                        "".join(full_content),
+                        error="interrupted before the answer finished",
+                        user_id=principal.user_id,
+                    )
                 raise
             finally:
                 slot.release()

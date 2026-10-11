@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -29,13 +29,13 @@ class ChatRequest(BaseModel):
     """
 
     message: str = Field(..., min_length=1, max_length=50000, description="User message")
-    session_id: Optional[str] = Field(None, description="Session UUID for conversation persistence")
+    session_id: Optional[UUID] = Field(None, description="Session UUID for conversation persistence")
     provider: Optional[str] = Field(None, description="LLM provider (anthropic/openai/ollama)")
     model: Optional[str] = Field(None, description="Specific model to use")
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature for generation")
     max_tokens: Optional[int] = Field(None, gt=0, le=8000, description="Maximum tokens to generate")
     include_source: bool = Field(True, description="Include source code references")
-    edition: Optional[str] = Field(None, description="D&D edition (2014/2024)")
+    edition: Optional[Literal["2014", "2024"]] = Field(None, description="D&D edition")
     attached_file_ids: Optional[list[UUID]] = Field(
         None, description="Session scope upload ids to stamp onto this user message"
     )

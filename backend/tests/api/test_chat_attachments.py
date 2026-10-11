@@ -23,13 +23,13 @@ def chat_client(monkeypatch):
 
 
 def _wire_chat(monkeypatch, user_msg_id):
-    """Mock enough of the chat pipeline that POST /chat returns 200."""
+    async def fake_get_session(session_id, *, user_id):
+        return SimpleNamespace(id=session_id)
 
     async def fake_history(_session_uuid, *, user_id):
         return []
 
     async def fake_add_message(**_kwargs):
-        # sequence_number != 1 avoids the async title-generation task
         return SimpleNamespace(id=user_msg_id, sequence_number=2)
 
     async def fake_generate(**_kwargs):
@@ -37,6 +37,7 @@ def _wire_chat(monkeypatch, user_msg_id):
             content="ok", provider="p", model="m", usage={}, timing={}, tools=None, retrieval=None, stop_reason=None
         )
 
+    monkeypatch.setattr("app.api.chat.session_service.get_session", fake_get_session)
     monkeypatch.setattr("app.api.chat.session_service.get_conversation_history", fake_history)
     monkeypatch.setattr("app.api.chat.session_service.add_message", fake_add_message)
     monkeypatch.setattr("app.api.chat.get_rag_engine", lambda: SimpleNamespace(generate=fake_generate))

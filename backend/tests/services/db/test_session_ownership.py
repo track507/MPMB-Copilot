@@ -138,6 +138,17 @@ async def test_conversation_history_gates_before_reading(sql):
     assert _owner_filter_in(sql.statements[0])
 
 
+async def test_add_message_gates_on_an_active_owned_session(sql):
+    with pytest.raises(LookupError):
+        await session_service.add_message(uuid4(), "user", {"text": "hi"}, user_id=ALICE)
+    guard = _compiled(sql.statements[0])
+    assert _owner_filter_in(sql.statements[0])
+    assert "sessions.deleted_at IS NULL" in guard
+    assert "FOR UPDATE" in guard
+    assert len(sql.statements) == 1
+    assert sql.added == []
+
+
 async def test_the_assertions_have_teeth(sql, monkeypatch):
     """
     Mutation check: neutering _owned() must make the assertions above fail
@@ -168,6 +179,7 @@ async def test_every_session_method_requires_an_owner(sql):
         lambda: session_service.delete_session(sid),
         lambda: session_service.get_messages(sid),
         lambda: session_service.get_conversation_history(sid),
+        lambda: session_service.add_message(sid, "user", {"text": "x"}),
     ]
     for call in calls:
         with pytest.raises(TypeError):

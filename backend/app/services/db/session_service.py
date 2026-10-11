@@ -6,9 +6,9 @@ All operations use the async database pool from `database.py`.
 Usage:
     from app.services.db import session_service
 
-    session = await session_service.create_session(title="My Chat")
-    msg = await session_service.add_message(session.id, "user", {"text": "Hello"})
-    history = await session_service.get_messages(session.id)
+    session = await session_service.create_session(title="My Chat", user_id=user_id, tenant_id=tenant_id)
+    msg = await session_service.add_message(session.id, "user", {"text": "Hello"}, user_id=user_id)
+    history = await session_service.get_messages(session.id, user_id=user_id)
 """
 
 from datetime import datetime, timezone
@@ -185,6 +185,7 @@ class SessionService:
         role: str,
         content: dict[str, Any],
         *,
+        user_id: str,
         provider: Optional[str] = None,
         model: Optional[str] = None,
         prompt_tokens: int = 0,
@@ -194,13 +195,22 @@ class SessionService:
         stop_reason: Optional[str] = None,
         meta_data: Optional[dict[str, Any]] = None,
     ) -> Message:
-        """Add a message to a session.
+        """
+        Append a message to an active session the caller owns
 
-        Sequence number is auto-incremented based on the current max
-        for the session.
+        Raises LookupError for a foreign or soft-deleted session, so nothing is written into it
+        The sequence number is one past the session's current maximum
         """
         async with db.session() as s:
-            # Get next sequence number
+            # ! The row lock also serializes concurrent appends, so two turns never take the same sequence number
+            owned = await s.execute(
+                select(Session.id)
+                .where(Session.id == session_id, Session.deleted_at.is_(None), *_owned(user_id))
+                .with_for_update()
+            )
+            if owned.scalar_one_or_none() is None:
+                raise LookupError(f"Session {session_id} not found")
+
             result = await s.execute(
                 select(func.coalesce(func.max(Message.sequence_number), 0)).where(Message.session_id == session_id)
             )
@@ -224,7 +234,6 @@ class SessionService:
             await s.flush()
             await s.refresh(message)
 
-            # Update session's updated_at
             await s.execute(
                 update(Session).where(Session.id == session_id).values(updated_at=datetime.now(timezone.utc))
             )
