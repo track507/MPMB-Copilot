@@ -59,3 +59,29 @@ def test_shared_tenant_cannot_collide_with_a_real_tenant_id():
 def test_no_prefix_starts_or_ends_with_a_separator(prefix):
     assert not prefix.startswith("/")
     assert not prefix.endswith("/")
+
+
+UNSAFE = ["..", "../..", "a/b", "a\\b", "", ".", "a b", "a\x00b", "C:x"]
+BUILDERS = [
+    lambda v: keys.tenant_prefix(v),
+    lambda v: keys.user_prefix(TENANT, v),
+    lambda v: keys.user_global_prefix(TENANT, v),
+    lambda v: keys.session_prefix(TENANT, USER, v),
+    lambda v: keys.session_meta_key(TENANT, USER, v),
+    lambda v: keys.file_key(keys.library_prefix(TENANT), v),
+    lambda v: keys.pack_prefix(v),
+]
+
+
+@pytest.mark.parametrize("build", BUILDERS)
+@pytest.mark.parametrize("bad", UNSAFE)
+def test_every_identity_segment_refuses_path_syntax(build, bad):
+    with pytest.raises(ValueError):
+        build(bad)
+
+
+def test_the_identifiers_in_use_are_valid_segments():
+    assert keys.tenant_prefix(keys.SHARED_TENANT) == "tenants/_shared"
+    assert keys.tenant_prefix(keys.DEFAULT_TENANT_ID).endswith(keys.DEFAULT_TENANT_ID)
+    assert keys.session_prefix(TENANT, "default", "unknown").endswith("/users/default/sessions/unknown")
+    assert keys.pack_prefix("mpmb") == "packs/mpmb"

@@ -18,7 +18,7 @@ from starlette.datastructures import Headers
 
 import app.services.uploads.service as service_mod
 from app.config import config
-from app.core.storage_keys import DEFAULT_TENANT_ID, file_key, library_prefix, user_global_prefix
+from app.core.storage_keys import DEFAULT_TENANT_ID, library_prefix, user_global_prefix
 
 
 @pytest.fixture
@@ -56,14 +56,14 @@ def scope_dir(upload_root):
 @pytest.fixture
 def file_key_for():
     """
-    A full storage key for one file in a scope, spelled through the key scheme
+    A full storage key for one file in a scope, spelled the way UploadService writes it
 
-    ? Tests used to hand-write flat keys like "shared/a.js", which stopped matching the layout without failing loudly
+    ! The leaf is the sanitized filename, so it is joined here rather than passed to file_key, which takes an id
     """
 
     def _key(scope: str, name: str, *, tenant_id: str = DEFAULT_TENANT_ID, user_id: str = "u1") -> str:
         prefix = user_global_prefix(tenant_id, user_id) if scope == "global" else library_prefix(tenant_id)
-        return file_key(prefix, name)
+        return f"{prefix}/{name}"
 
     return _key
 
