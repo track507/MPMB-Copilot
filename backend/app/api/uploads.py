@@ -10,6 +10,7 @@ Endpoints:
 UploadError propagates to the app-level problem handler (see app/core/problem.py)
 """
 
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -17,10 +18,12 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.api.deps import Principal, current_principal
+from app.composition import get_job_runner
 from app.logger import get_logger
 from app.model.orm import File
 from app.model.schemas.upload import FileListOut, FileOut, UploadScope
 from app.services.db import db, session_service
+from app.services.documents import ocr_job
 from app.services.uploads import UploadError, upload_service
 
 logger = get_logger(__name__)
@@ -77,7 +80,23 @@ async def upload_file(
         upload=file,
         session_id=session_id,
     )
+    await _queue_ocr(row)
     return _to_out(row=row)
+
+
+async def _queue_ocr(row: File) -> None:
+    """Queue OCR for an uploaded PDF; never fails the upload"""
+    if Path(row.filename).suffix.lower() != ".pdf":
+        return
+    tenant_id = str(row.tenant_id)
+    cache_scope = ocr_job.upload_cache_scope(row.scope, str(row.owner_user_id), tenant_id)
+    job = ocr_job.job_for(tenant_id, row.storage_key, cache_scope, row.file_hash, ".pdf")
+    if job is None:
+        return
+    try:
+        await get_job_runner().submit(job)
+    except Exception as e:
+        logger.warning("ocr_queue_failed", file_id=str(row.id), error=str(e))
 
 
 # * List a scope

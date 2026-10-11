@@ -40,6 +40,7 @@ from app.services.documents.protocol import (
     CacheScope,
     DocumentReader,
     is_extractable,
+    ocr_note,
 )
 from app.settings import settings
 
@@ -282,7 +283,7 @@ def _mpmb_outline_impl(
         lines.append(f"{name}: {summary['pages']} pages, {len(document.outline)} outline entries")
         if document.pages_without_text:
             pages = ", ".join(str(p) for p in document.pages_without_text)
-            lines.append(f"[no text layer on pages {pages}; OCR is not available yet, so they read as empty]")
+            lines.append(f"[no text layer on pages {pages}; {ocr_note(summary)}]")
         if not document.outline:
             lines.append("This PDF has no bookmarks. Each page starts at a [page N] line, so mpmb_grep for one to jump")
     else:
@@ -510,7 +511,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
 
         Use first on an uploaded .pdf, .csv or .tsv: each entry is `L<line>: <section>`, and that line number is what mpmb_read takes
         Then mpmb_grep to locate a term and mpmb_read a line range for the passage
-        Also lists pages with no text layer, which read as empty because OCR is not available yet
+        Also lists pages with no text layer and where OCR stands for them
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_outline root={root} path={path}")

@@ -14,6 +14,7 @@ from app.core.intent import IntentClassifier
 from app.core.rag_engine import RAGEngine
 from app.core.retriever import Retriever
 from app.services.compute.threads import ThreadLane
+from app.services.documents import ocr_job
 from app.services.documents import service as documents_service
 from app.services.embedding.service import embedding_service
 from app.services.jobs.local import LocalJobRunner
@@ -59,7 +60,7 @@ def get_job_runner() -> LocalJobRunner:
     global _job_runner
     if _job_runner is None:
         _job_runner = LocalJobRunner(
-            {},
+            {ocr_job.KIND: ocr_job.run},
             lane=ThreadLane("job", config.job_workers),
             per_tenant=config.jobs_per_tenant,
         )
@@ -74,8 +75,7 @@ def get_rag_engine() -> RAGEngine:
             retriever=get_retriever(),
             model_factory=build_model,
             catalog=source_catalog_service.snapshot,
-            # ? The service module satisfies DocumentReader structurally; no wrapper class is needed
-            documents=documents_service,
+            documents=ocr_job.OcrAwareReader(documents_service, submit=get_job_runner().submit_nowait),
         )
     return _rag_engine
 

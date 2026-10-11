@@ -121,6 +121,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.catalog_warmup = asyncio.create_task(get_model_catalog())
     app.state.catalog_warmup.add_done_callback(_warmup_done)
     app.state.model_warmup = asyncio.create_task(_warm_models(app))
+    get_job_runner().attach(asyncio.get_running_loop())
     yield
 
     # Shutdown

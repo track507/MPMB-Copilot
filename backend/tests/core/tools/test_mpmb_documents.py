@@ -160,3 +160,46 @@ def test_source_root_documents_cache_outside_every_user_bucket(roots, deps, tmp_
     _mpmb_outline_impl(roots, deps, SOURCE, "reference.pdf")
     buckets = {p.name for p in (tmp_path / "extracted").iterdir()}
     assert buckets == {"_source_roots"}
+
+
+class _Stamped:
+    def __init__(self, state: str) -> None:
+        self._state = state
+
+    def lookup(self, path, scope):
+        return documents_service.lookup(path, scope)
+
+    def ensure_extracted(self, path, scope):
+        from dataclasses import replace
+
+        document = documents_service.ensure_extracted(path, scope)
+        return replace(document, summary={**document.summary, "ocr": self._state})
+
+
+@pytest.mark.parametrize(
+    ("state", "note"),
+    [
+        ("pending", "OCR is reading them now"),
+        ("stalled", "OCR failed on them"),
+        ("unavailable", "OCR is unavailable"),
+        ("off", "OCR is turned off"),
+        ("done", "OCR found no readable text"),
+    ],
+)
+def test_outline_says_where_ocr_stands(roots, state, note):
+    write_pdf(roots[SESSION] / "guide.pdf")
+    deps = build_deps(session_id="s1", user_id="u1", documents=_Stamped(state))
+    outline = _mpmb_outline_impl(roots, deps, SESSION, "guide.pdf")
+    assert f"no text layer on pages 2; {note}" in outline
+
+
+def test_a_scan_being_read_says_so_instead_of_refusing_for_good(roots):
+    write_pdf(roots[SESSION] / "scan.pdf", pages=[[], []], outline=[])
+    deps = build_deps(session_id="s1", user_id="u1", documents=_Stamped("pending"))
+    result = _mpmb_read_impl(roots, deps, SESSION, "scan.pdf")
+    assert "read again in a few minutes" in result
+
+
+def test_a_document_without_an_ocr_state_says_ocr_is_for_uploads(roots, deps):
+    write_pdf(roots[SESSION] / "guide.pdf")
+    assert "OCR runs only on uploaded documents" in _mpmb_outline_impl(roots, deps, SESSION, "guide.pdf")

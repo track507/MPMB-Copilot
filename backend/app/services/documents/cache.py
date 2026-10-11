@@ -110,8 +110,8 @@ def write_pair(
         "version": version,
         "original_extension": original_extension.lower(),
     }
-    _atomic_write(text_path, extraction.text)
-    _atomic_write(json_path, json.dumps(meta, ensure_ascii=True))
+    atomic_write(text_path, extraction.text)
+    atomic_write(json_path, json.dumps(meta, ensure_ascii=True))
 
     return CachedDocument(
         text_path=text_path,
@@ -121,7 +121,7 @@ def write_pair(
     )
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def atomic_write(path: Path, content: str) -> None:
     temp = path.with_name(f".{path.name}.tmp-{uuid4().hex}")
     try:
         # ? newline="" keeps \n as written, so Windows cannot turn the stream into \r\n and shift every line count

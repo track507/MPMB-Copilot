@@ -141,3 +141,21 @@ async def test_a_non_finite_number_is_refused_at_submit():
     with pytest.raises(ValueError):
         await runner.submit(Job(kind="work", tenant_id=TENANT_A, payload={"score": float("nan")}))
     await runner.shutdown()
+
+
+def test_submit_nowait_before_attach_drops_the_job():
+    recorder = Recorder()
+    runner = _runner(recorder)
+    runner.submit_nowait(_job(TENANT_A, "early"))
+    assert recorder.started == []
+
+
+async def test_submit_nowait_from_another_thread_runs_the_job():
+    recorder = Recorder()
+    runner = _runner(recorder)
+    runner.attach(asyncio.get_running_loop())
+    recorder.gate("threaded").set()
+    worker = threading.Thread(target=runner.submit_nowait, args=(_job(TENANT_A, "threaded"),))
+    worker.start()
+    worker.join()
+    await _until(lambda: recorder.done == ["threaded"])

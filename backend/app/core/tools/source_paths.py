@@ -16,6 +16,7 @@ from app.services.documents.protocol import (
     CacheScope,
     DocumentReader,
     is_extractable,
+    ocr_note,
 )
 from app.settings import settings
 
@@ -116,7 +117,7 @@ def resolve_readable(
         # ? A partly scanned guide still reads; only a document with no text anywhere is refused outright
         return PathResolution(
             error=DocumentError(
-                "no_text_layer", f"{path.name} has no text layer on any page; OCR is not available yet"
+                "no_text_layer", f"{path.name} has no text layer on any page; {ocr_note(document.summary)}"
             ).as_tool_error()
         )
 

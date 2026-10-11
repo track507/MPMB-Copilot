@@ -5,6 +5,7 @@ A capped tenant waits on its own semaphore, outside the lane's queue, so it cann
 """
 
 import asyncio
+import concurrent.futures
 import json
 from collections.abc import Mapping
 from dataclasses import replace
@@ -25,6 +26,19 @@ class LocalJobRunner:
         self._tenant_slots: dict[str, asyncio.Semaphore] = {}
         self._live: dict[tuple[str, str], str] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def attach(self, loop: asyncio.AbstractEventLoop) -> None:
+        """The loop submit_nowait schedules onto"""
+        self._loop = loop
+
+    def submit_nowait(self, job: Job) -> None:
+        """Submit from any thread without waiting; dropped with a warning before attach"""
+        if self._loop is None:
+            logger.warning("job_dropped_unattached", kind=job.kind, tenant_id=job.tenant_id)
+            return
+        future = asyncio.run_coroutine_threadsafe(self.submit(job), self._loop)
+        future.add_done_callback(_log_submit_failure)
 
     async def submit(self, job: Job) -> str:
         if job.kind not in self._handlers:
@@ -66,3 +80,11 @@ class LocalJobRunner:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
         self._lane.shutdown()
+
+
+def _log_submit_failure(future: "concurrent.futures.Future[str]") -> None:
+    if future.cancelled():
+        return
+    error = future.exception()
+    if error is not None:
+        logger.error("job_submit_failed", error=str(error))

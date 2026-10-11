@@ -172,7 +172,8 @@ Documents (.pdf, .csv, .tsv) read as extracted text, and a PDF's text
 carries a `[page N]` line where each page starts. Do not read a long
 document whole: call `mpmb_outline` for its sections, `mpmb_grep` to
 locate a term, then `mpmb_read` the line range around it. A page listed
-as having no text layer is an image, so it reads as empty."""
+as having no text layer is an image, and the note beside it says
+where OCR stands for that page."""
 
 
 DIAGNOSE_ADDENDUM = """\
