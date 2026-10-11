@@ -58,6 +58,7 @@ _DEFAULT_DOCUMENTS: dict[str, Any] = {
     # ? A 300-page guide extracts to roughly 1-3 MB, so this bounds the pathological case without rejecting real ones
     "max_extracted_bytes": 8_388_608,
     "libreoffice_enabled": False,
+    "ocr_enabled": True,
 }
 
 

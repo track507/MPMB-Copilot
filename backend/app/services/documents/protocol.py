@@ -6,7 +6,7 @@ This module also owns what a line is, because outline, read and grep must all co
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Optional, Protocol
 
@@ -53,6 +53,35 @@ class OutlineEntry:
     level: int = 0
 
 
+@dataclass(frozen=True)
+class PageVisuals:
+    """
+    What a page holds that text extraction cannot convey
+
+    Recorded for every page with image objects, whether or not that page also has text
+    """
+
+    page: int
+    image_count: int
+    image_coverage: float
+    # ? Text under the largest image, a hint and never a label
+    nearby_text: Optional[str] = None
+    transcribed_by: Optional[str] = None
+
+
+class PageTranscriber(Protocol):
+    """One rendered page image in, text out"""
+
+    id: str
+    version: str
+
+    def check_availability(self) -> Optional[str]:
+        """None when usable, otherwise the reason, surfaced verbatim to the model"""
+        ...
+
+    def transcribe(self, image: bytes) -> str: ...
+
+
 @dataclass
 class Extraction:
     """An extractor's output: the normalized stream plus what the tools need to navigate it"""
@@ -61,6 +90,7 @@ class Extraction:
     outline: list[OutlineEntry]
     pages_without_text: list[int]
     summary: dict[str, Any]
+    page_visuals: list[PageVisuals] = field(default_factory=list)
 
 
 class DocumentExtractor(Protocol):
@@ -127,6 +157,23 @@ class CachedDocument:
     outline: list[OutlineEntry]
     pages_without_text: list[int]
     summary: dict[str, Any]
+
+
+# * The OCR state an adapter records under summary["ocr"] for a document with empty pages
+OcrState = Literal["off", "pending", "stalled", "unavailable", "done"]
+
+_OCR_NOTES: dict[str, str] = {
+    "pending": "OCR is reading them now, so read again in a few minutes",
+    "stalled": "OCR failed on them after repeated attempts",
+    "unavailable": "OCR is unavailable on this server",
+    "off": "OCR is turned off",
+    "done": "OCR found no readable text on them",
+}
+
+
+def ocr_note(summary: dict[str, Any]) -> str:
+    """What a tool says about pages with no text layer, from the summary's OCR state"""
+    return _OCR_NOTES.get(str(summary.get("ocr", "")), "OCR runs only on uploaded documents")
 
 
 class DocumentReader(Protocol):
