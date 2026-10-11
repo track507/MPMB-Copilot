@@ -43,6 +43,7 @@ from app.config import config
 from app.core.embedding_catalog import dimension_for
 from app.core.storage_keys import SHARED_TENANT
 from app.logger import get_logger
+from app.services.secrets import QDRANT_API_KEY, secrets_service
 from app.settings import settings
 
 logger = get_logger(__name__)
@@ -179,6 +180,8 @@ class QdrantStore:
                 host=config.qdrant_host,
                 port=config.qdrant_port,
                 timeout=config.qdrant_timeout,
+                api_key=secrets_service.get(QDRANT_API_KEY),
+                https=config.qdrant_https,
             )
 
             # Verify connection

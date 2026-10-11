@@ -5,7 +5,7 @@ The env adapter's resolution rules
 import pytest
 
 from app.config import config
-from app.services.secrets import ANTHROPIC_API_KEY, OPENAI_API_KEY, EnvSecretsProvider
+from app.services.secrets import ANTHROPIC_API_KEY, OPENAI_API_KEY, QDRANT_API_KEY, EnvSecretsProvider
 
 
 @pytest.fixture
@@ -37,3 +37,8 @@ def test_an_unknown_name_does_not_reach_config(monkeypatch, provider):
 def test_names_are_the_env_var_spellings():
     assert ANTHROPIC_API_KEY == "ANTHROPIC_API_KEY"
     assert OPENAI_API_KEY == "OPENAI_API_KEY"
+
+
+def test_resolves_the_qdrant_key(monkeypatch, provider):
+    monkeypatch.setattr(config, "qdrant_api_key", "qk-test", raising=False)
+    assert provider.get(QDRANT_API_KEY) == "qk-test"

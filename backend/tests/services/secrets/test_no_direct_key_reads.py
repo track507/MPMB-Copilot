@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[3] / "app"
-_FORBIDDEN = re.compile(r"(?:config|self)\.(?:anthropic_api_key|openai_api_key|get_llm_api_key)\b")
+_FORBIDDEN = re.compile(r"(?:config|self)\.(?:anthropic_api_key|openai_api_key|qdrant_api_key|get_llm_api_key)\b")
 _ALLOWED = {Path("services/secrets/env.py")}
 
 
@@ -28,4 +28,5 @@ def test_the_guard_can_fail():
     # ! Guards the guard: a regex that matched nothing would also report no offenders
     assert _FORBIDDEN.search("        api_key = config.openai_api_key")
     assert _FORBIDDEN.search("            return self.anthropic_api_key")
+    assert _FORBIDDEN.search("        api_key=config.qdrant_api_key,")
     assert not _FORBIDDEN.search("        api_key = api_key_for('openai')")

@@ -9,6 +9,7 @@ from typing import Optional, Protocol
 
 ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
 OPENAI_API_KEY = "OPENAI_API_KEY"
+QDRANT_API_KEY = "QDRANT_API_KEY"
 
 
 class SecretsProvider(Protocol):

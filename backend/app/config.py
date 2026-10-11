@@ -89,6 +89,8 @@ class Config(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection: str = "mpmb_code"
     qdrant_timeout: int = 30
+    qdrant_api_key: Optional[str] = None
+    qdrant_https: bool = False
 
     # Embedding Settings
     embedding_provider: str = "fastembed"
