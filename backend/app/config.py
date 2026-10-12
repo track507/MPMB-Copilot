@@ -47,6 +47,7 @@ class Config(BaseSettings):
             "http://localhost:5001",
         ]
     )
+    max_request_body_bytes: int = 1_048_576
     # ! Host header allowlist: the DNS-rebinding defense; add public hostnames for a deployment, "*" disables it
     allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "::1"])
     trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(default_factory=list)

@@ -17,6 +17,7 @@ from app.api import (
     source_catalog as source_catalog_api,
 )
 from app.api import uploads as uploads_api
+from app.api.body_limit import BodyLimitMiddleware
 from app.api.client_ip import TrustedProxyMiddleware
 from app.api.deps import current_principal, is_loopback, principal_or_service
 from app.api.hosts import HostAllowlistMiddleware
@@ -145,6 +146,7 @@ app = FastAPI(
 )
 
 # Middleware
+app.add_middleware(BodyLimitMiddleware)
 # ! Starlette runs the last-added middleware first: request logging wraps the host check, so refused hosts are logged
 app.add_middleware(
     CORSMiddleware,
