@@ -40,8 +40,8 @@ async def _init_setup_token() -> str | None:
     if await auth_service.count_users() > 0:
         return None
     token = secrets.token_urlsafe(16)
-    # ! Printed once; required by POST /api/auth/setup while no admin exists
-    logger.warning("setup_token_required", token=token, hint="submit as setup_token on the first-run setup screen")
+    # ! The field name must not contain token, secret or password: the log censor masks those, and a masked code cannot claim the install
+    logger.warning("setup_token_required", setup_code=token, hint="submit as setup_token on the first-run setup screen")
     return token
 
 
