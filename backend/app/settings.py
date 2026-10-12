@@ -57,6 +57,12 @@ _DEFAULT_DOCUMENTS: dict[str, Any] = {
     "grep_extract_max_file_bytes": 10_485_760,
     # ? A 300-page guide extracts to roughly 1-3 MB, so this bounds the pathological case without rejecting real ones
     "max_extracted_bytes": 8_388_608,
+    # ? The largest real references (the PDF 1.7 specification) run to about 750 pages
+    "max_pdf_pages": 2_000,
+    # ! Checked between pages only: a single page stuck inside PDFium cannot be interrupted in process
+    "extract_budget_sec": 120,
+    # ? Extraction-time ceiling, above the read-time max_extracted_bytes so mpmb_outline still navigates large documents
+    "max_document_text_bytes": 67_108_864,
     "libreoffice_enabled": False,
     "ocr_enabled": True,
 }

@@ -9,12 +9,14 @@ import hashlib
 import io
 import json
 import re
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Optional
 
 from app.services.documents.errors import DocumentError
 from app.services.documents.protocol import Extraction, OutlineEntry, PageTranscriber, PageVisuals, normalize
+from app.settings import settings
 
 EXTENSIONS = frozenset({".pdf"})
 # ! Bump on any change to the extraction output
@@ -59,6 +61,11 @@ class PdfExtractor:
         # ? Imported here, not at module scope, so an absent optional dependency is genuinely tolerated
         import pypdfium2
 
+        max_pages = int(settings.document_setting("max_pdf_pages"))
+        budget_sec = float(settings.document_setting("extract_budget_sec"))
+        max_text_bytes = int(settings.document_setting("max_document_text_bytes"))
+        deadline = time.monotonic() + budget_sec
+
         try:
             document = pypdfium2.PdfDocument(str(path))
         except Exception as e:
@@ -68,10 +75,20 @@ class PdfExtractor:
         empty_pages: list[int] = []
         page_visuals: list[PageVisuals] = []
         page_start_line: dict[int, int] = {}
+        text_bytes = 0
 
         try:
-            for index in range(len(document)):
+            page_count = len(document)
+            if page_count > max_pages:
+                raise DocumentError(
+                    "limit_exceeded", f"the PDF has {page_count} pages; documents over {max_pages} pages are not read"
+                )
+            for index in range(page_count):
                 page_number = index + 1
+                if time.monotonic() >= deadline:
+                    raise DocumentError(
+                        "limit_exceeded", f"reading the PDF passed its {budget_sec:g}s budget at page {page_number}"
+                    )
                 # ! Marker lines are part of the stream, so every line number below counts them
                 lines.append(marker(page_number))
                 page_start_line[index] = len(lines)
@@ -85,6 +102,12 @@ class PdfExtractor:
                     textpage.close()
                     page.close()
 
+                text_bytes += len(text.encode("utf-8"))
+                if text_bytes > max_text_bytes:
+                    raise DocumentError(
+                        "extracted_too_large",
+                        f"the PDF's text passed {max_text_bytes // 1_048_576} MB at page {page_number}",
+                    )
                 if not text.strip():
                     empty_pages.append(page_number)
                 if visuals is not None:
