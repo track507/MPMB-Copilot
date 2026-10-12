@@ -69,7 +69,8 @@ def _client_ip(request: Request) -> str:
 
 
 def _socket_peer(request: Request) -> str:
-    return getattr(request.state, "socket_peer", None) or _client_ip(request)
+    peer = getattr(request.state, "socket_peer", None)
+    return peer if isinstance(peer, str) and peer else _client_ip(request)
 
 
 @router.get("/state", summary="Auth state for frontend routing")

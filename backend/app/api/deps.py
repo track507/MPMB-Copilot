@@ -6,7 +6,7 @@ auth_disabled is an env-only dev escape honored only on loopback
 """
 
 from dataclasses import dataclass
-from ipaddress import ip_address
+from ipaddress import IPv6Address, ip_address
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -35,7 +35,9 @@ def is_loopback(host: str) -> bool:
         address = ip_address(host)
     except ValueError:
         return False
-    return (getattr(address, "ipv4_mapped", None) or address).is_loopback
+    if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped.is_loopback
+    return address.is_loopback
 
 
 def is_local_request(request: Request) -> bool:
