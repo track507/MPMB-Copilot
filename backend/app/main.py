@@ -17,6 +17,7 @@ from app.api import (
     source_catalog as source_catalog_api,
 )
 from app.api import uploads as uploads_api
+from app.api.client_ip import TrustedProxyMiddleware
 from app.api.deps import current_principal, is_loopback, principal_or_service
 from app.api.hosts import HostAllowlistMiddleware
 from app.api.problem import register_problem_handlers
@@ -154,6 +155,7 @@ app.add_middleware(
 )
 app.add_middleware(HostAllowlistMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(TrustedProxyMiddleware)
 
 
 # * RFC 9457 problem+json for every error (HTTPException, validation, ProblemException, UploadError, unhandled)

@@ -46,7 +46,7 @@ def _cookie_secure(request: Request) -> bool:
         return True
     if config.cookie_secure == "never":
         return False
-    # ? auto: trust the effective scheme (uvicorn --proxy-headers makes this correct behind a trusted proxy)
+    # ? auto: trust the effective scheme, which TrustedProxyMiddleware sets from X-Forwarded-Proto only for a trusted peer
     return request.url.scheme == "https"
 
 
@@ -66,6 +66,10 @@ def _set_session_cookie(response: Response, request: Request, raw_token: str) ->
 
 def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
+
+
+def _socket_peer(request: Request) -> str:
+    return getattr(request.state, "socket_peer", None) or _client_ip(request)
 
 
 @router.get("/state", summary="Auth state for frontend routing")
@@ -111,7 +115,13 @@ async def setup(body: SetupRequest, request: Request, response: Response) -> dic
     request.app.state.setup_token = None
     raw = await auth_service.create_session(user.id)
     _set_session_cookie(response, request, raw)
-    logger.info(f"admin_created username={user.username} claimed_sessions={claimed}")
+    logger.info(
+        "admin_created",
+        username=user.username,
+        claimed_sessions=claimed,
+        client_ip=_client_ip(request),
+        peer=_socket_peer(request),
+    )
     return {"username": user.username, "role": user.role}
 
 
@@ -129,11 +139,14 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     if user is None:
         security.dummy_verify()  # ? uniform timing for unknown usernames
         await auth_service.record_login_failure(body.username, ip)
+        logger.warning("login_failed", username=body.username, client_ip=ip, peer=_socket_peer(request))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNIFORM_LOGIN_ERROR)
     if user.disabled or not user.password_hash or not security.verify_password(user.password_hash, body.password):
         await auth_service.record_login_failure(body.username, ip)
+        logger.warning("login_failed", username=body.username, client_ip=ip, peer=_socket_peer(request))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNIFORM_LOGIN_ERROR)
     await auth_service.clear_login_failures(body.username, ip)
+    logger.info("login_succeeded", username=body.username, client_ip=ip, peer=_socket_peer(request))
     raw = await auth_service.create_session(user.id)
     _set_session_cookie(response, request, raw)
     return {"username": user.username, "role": user.role}

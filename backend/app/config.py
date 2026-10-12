@@ -49,6 +49,8 @@ class Config(BaseSettings):
     )
     # ! Host header allowlist: the DNS-rebinding defense; add public hostnames for a deployment, "*" disables it
     allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "::1"])
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    client_ip_header: Literal["X-Forwarded-For", "CF-Connecting-IP"] = "X-Forwarded-For"
 
     # LLM Provider Settings
     default_llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
@@ -183,7 +185,7 @@ class Config(BaseSettings):
                 return False
         return value
 
-    @field_validator("allowed_origins", "allowed_hosts", mode="before")
+    @field_validator("allowed_origins", "allowed_hosts", "trusted_proxy_cidrs", mode="before")
     @classmethod
     def normalize_allowed_origins(cls, value: object) -> object:
         """Accept a list setting as either JSON or comma-separated text"""
