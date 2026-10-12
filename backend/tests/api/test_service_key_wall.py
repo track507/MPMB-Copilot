@@ -24,7 +24,7 @@ def unwalled_client(monkeypatch):
 
     monkeypatch.setattr(deps.config, "auth_disabled", False, raising=False)
     monkeypatch.setattr(deps, "db", SimpleNamespace(is_connected=True))
-    yield TestClient(app, raise_server_exceptions=False)
+    yield TestClient(app, raise_server_exceptions=False, client=("127.0.0.1", 50000))
 
 
 def _mock_key(monkeypatch, scopes):

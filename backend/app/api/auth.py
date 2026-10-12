@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import COOKIE_NAME, Principal, current_principal
+from app.api.deps import COOKIE_NAME, Principal, current_principal, is_local_request
 from app.config import config
 from app.core import security
 from app.logger import get_logger
@@ -72,7 +72,7 @@ def _client_ip(request: Request) -> str:
 async def auth_state(request: Request) -> dict[str, Any]:
     from app.api.deps import auth_bypassed
 
-    if auth_bypassed():
+    if auth_bypassed(request):
         return {"state": "authenticated", "user": {"username": "default", "role": "admin"}}
     _require_db()
     if await auth_service.count_users() == 0:
@@ -97,6 +97,9 @@ async def setup(body: SetupRequest, request: Request, response: Response) -> dic
     if await auth_service.count_users() > 0:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Setup already completed")
     required = getattr(request.app.state, "setup_token", None)
+    if required is None and not is_local_request(request):
+        # ! No token is issued on a loopback bind, so a remote first visitor must not be able to claim the install
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Complete setup from this machine")
     if required is not None and not _secrets.compare_digest(body.setup_token or "", required):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="A valid setup token is required")
     try:

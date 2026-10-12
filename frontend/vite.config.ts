@@ -14,11 +14,14 @@ export default defineConfig({
 		},
 	},
 	server: {
-		host: true,
+		// ! Loopback only: the proxy below forwards to a loopback backend, so a LAN-facing dev server would extend it to the LAN
+		host: "127.0.0.1",
 		proxy: {
 			"/api": {
 				target: "http://127.0.0.1:8000",
 				changeOrigin: true,
+				// ! Appends the browser's address to X-Forwarded-For, which the backend's local-request check reads
+				xfwd: true,
 			},
 		},
 	},

@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.storage_keys import DEFAULT_TENANT_ID
 
 
-def _client(monkeypatch, *, users: int = 0, setup_token: str | None = None):
+def _client(monkeypatch, *, users: int = 0, setup_token: str | None = None, peer: str = "127.0.0.1"):
     from app.api import auth as auth_api
     from app.api import deps
 
@@ -20,7 +20,7 @@ def _client(monkeypatch, *, users: int = 0, setup_token: str | None = None):
     app = FastAPI()
     app.state.setup_token = setup_token
     app.include_router(auth_api.router)
-    return TestClient(app)
+    return TestClient(app, client=(peer, 50000))
 
 
 def test_state_setup_required(monkeypatch):
@@ -181,3 +181,9 @@ def test_login_503_when_db_down(monkeypatch):
     monkeypatch.setattr(auth_api, "db", SimpleNamespace(is_connected=False))
     resp = client.post("/auth/login", json={"username": "t", "password": "whatever-long"})
     assert resp.status_code == 503
+
+
+def test_setup_without_a_token_refuses_a_remote_peer(monkeypatch):
+    client = _client(monkeypatch, users=0, peer="192.168.1.77")
+    resp = client.post("/auth/setup", json={"username": "abc", "password": "a-long-password"})
+    assert resp.status_code == 403

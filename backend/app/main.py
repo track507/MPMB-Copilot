@@ -18,6 +18,7 @@ from app.api import (
 )
 from app.api import uploads as uploads_api
 from app.api.deps import current_principal, is_loopback, principal_or_service
+from app.api.hosts import HostAllowlistMiddleware
 from app.api.problem import register_problem_handlers
 from app.composition import get_job_runner
 from app.composition import warm as warm_models
@@ -143,6 +144,7 @@ app = FastAPI(
 )
 
 # Middleware
+# ! Starlette runs the last-added middleware first: request logging wraps the host check, so refused hosts are logged
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins,
@@ -150,6 +152,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(HostAllowlistMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
 
