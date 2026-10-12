@@ -102,30 +102,17 @@ await Promise.all([waitForPort(POSTGRES_HOST, POSTGRES_PORT, "Postgres"), waitFo
 
 log("All services ready. Starting dev servers...\n");
 
-// Spawn with env overrides for localhost.
-// Use pnpm run dev which already has the concurrently command configured.
-const child =
-	process.platform === "win32"
-		? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "pnpm", "run", "dev"], {
-				stdio: "inherit",
-				env: {
-					...process.env,
-					POSTGRES_HOST,
-					POSTGRES_PORT,
-					QDRANT_HOST,
-					QDRANT_PORT,
-				},
-			})
-		: spawn("pnpm", ["run", "dev"], {
-				stdio: "inherit",
-				env: {
-					...process.env,
-					POSTGRES_HOST,
-					POSTGRES_PORT,
-					QDRANT_HOST,
-					QDRANT_PORT,
-				},
-			});
+// ! node --run, never pnpm: on Windows pnpm is a .cmd shim, and cmd.exe answers Ctrl+C with a prompt that holds the console
+const child = spawn(process.execPath, ["--run", "dev"], {
+	stdio: "inherit",
+	env: {
+		...process.env,
+		POSTGRES_HOST,
+		POSTGRES_PORT,
+		QDRANT_HOST,
+		QDRANT_PORT,
+	},
+});
 
 child.on("exit", (code) => {
 	process.exit(code ?? 0);
