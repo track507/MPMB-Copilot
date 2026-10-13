@@ -39,6 +39,8 @@ dependencies = [
 	"uuid-utils>=0.12.0",
 	"argon2-cffi>=25.1.0",
 	"pypdfium2>=5.13.0",
+	"google-re2>=1.1.20251105",
+	"regex>=2026.9.10",
 ]
 
 [project.optional-dependencies]

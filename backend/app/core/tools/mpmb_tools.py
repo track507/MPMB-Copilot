@@ -24,6 +24,7 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from app.core.catalog import EMPTY_CATALOG, CatalogSnapshot
 from app.core.retriever import Retriever
+from app.core.tools.line_patterns import compile_line_pattern
 from app.core.tools.source_paths import (
     _build_default_roots,
     cache_scope_for,
@@ -131,10 +132,9 @@ def _mpmb_grep_impl(
     if len(pattern) > settings.tool_grep_pattern_max_len:
         return f"[error] pattern too long: {len(pattern)} chars (max {settings.tool_grep_pattern_max_len})"
 
-    try:
-        regex = re.compile(pattern)
-    except re.error as e:
-        return f"[error] invalid regex: {e}"
+    search = compile_line_pattern(pattern)
+    if isinstance(search, str):
+        return search
 
     if root not in roots:
         return f"[error] unknown root: {root}"
@@ -169,9 +169,18 @@ def _mpmb_grep_impl(
 
         t0 = time.perf_counter()
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if (time.perf_counter() - t0) > settings.tool_grep_file_timeout_sec:
+            remaining = settings.tool_grep_file_timeout_sec - (time.perf_counter() - t0)
+            if remaining <= 0:
                 break
-            if regex.search(line):
+            try:
+                hit = search(line, remaining)
+            except TimeoutError:
+                return (
+                    f"[error] pattern too slow: it ran past {settings.tool_grep_file_timeout_sec:g}s on "
+                    f"{rel.as_posix()}:{lineno}; drop the lookaround or backreference so it runs on the linear-time "
+                    "engine, or avoid nested quantifiers"
+                )
+            if hit:
                 total_matches += 1
                 if len(matches) < max_matches:
                     # ! Always the original path, never the sidecar, so the model can pass it straight to mpmb_read

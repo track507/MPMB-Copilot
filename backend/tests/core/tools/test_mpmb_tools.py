@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -175,3 +176,30 @@ def test_mpmb_grep_skips_oversized_files(tmp_path: Path, monkeypatch: pytest.Mon
     out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", "SpellsList")
     assert "small.js" in out
     assert "big.js" not in out
+
+
+def test_mpmb_grep_survives_a_catastrophic_pattern(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "a.js").write_text("a" * 27 + "!")
+    start = time.perf_counter()
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", r"^(a+)+$")
+    assert time.perf_counter() - start < 1.0
+    assert out.startswith("No matches")
+
+
+def test_mpmb_grep_runs_lookaround_on_the_fallback_engine(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "a.js").write_text("var x = AddFeatsList;\nvar y = FeatsList;\n")
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", r"(?<=Add)FeatsList")
+    assert "a.js:1:" in out
+    assert "a.js:2:" not in out
+
+
+def test_mpmb_grep_reports_a_fallback_pattern_that_runs_too_long(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "tool_grep_file_timeout_sec", 0.2)
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "a.js").write_text("a" * 34 + "!")
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", r"^(?=a)(a|aa)+$")
+    assert out.startswith("[error] pattern too slow")
