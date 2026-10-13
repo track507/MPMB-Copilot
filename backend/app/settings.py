@@ -199,6 +199,9 @@ class Settings:
     tool_read_max_lines: int = 2000
     """Hard cap on lines returned by mpmb_read in a single call."""
 
+    tool_result_max_bytes: int = 262_144
+    """Byte cap on any single tool result, applied where results leave the toolset; 0 disables it"""
+
     tool_grep_pattern_max_len: int = 500
     """Reject grep patterns longer than this many characters."""
 

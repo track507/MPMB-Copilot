@@ -60,6 +60,8 @@ SourceRoot = Literal[
     "./data/uploads/shared/",
 ]
 
+GREP_LINE_MAX_CHARS = 400
+
 
 @dataclass
 class Deps:
@@ -183,8 +185,10 @@ def _mpmb_grep_impl(
             if hit:
                 total_matches += 1
                 if len(matches) < max_matches:
-                    # ! Always the original path, never the sidecar, so the model can pass it straight to mpmb_read
-                    matches.append(f"{rel.as_posix()}:{lineno}: {line.rstrip()}")
+                    shown = line.rstrip()
+                    if len(shown) > GREP_LINE_MAX_CHARS:
+                        shown = shown[:GREP_LINE_MAX_CHARS] + " [...]"
+                    matches.append(f"{rel.as_posix()}:{lineno}: {shown}")
 
     notes = extraction.notes()
     if not matches:

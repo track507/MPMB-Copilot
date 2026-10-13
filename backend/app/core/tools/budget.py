@@ -14,6 +14,7 @@ from pydantic_ai.toolsets import AbstractToolset, WrapperToolset
 from pydantic_ai.toolsets.abstract import ToolsetTool
 
 from app.logger import get_logger
+from app.settings import settings
 
 logger = get_logger(__name__)
 
@@ -48,7 +49,26 @@ class ToolBudgetToolset(WrapperToolset[Any]):
             logger.warning(f"tool.budget_exhausted name={name} budget={self.budget}")
             return BUDGET_EXHAUSTED_MSG.format(budget=self.budget)
         self.calls_made += 1
-        return await super().call_tool(name, tool_args, ctx, tool)
+        return cap_result(await super().call_tool(name, tool_args, ctx, tool), settings.tool_result_max_bytes)
+
+
+def cap_result(result: Any, max_bytes: int) -> Any:
+    """
+    A text result cut to max_bytes of UTF-8 with a note saying so; anything else unchanged
+
+    max_bytes <= 0 disables the cap
+    """
+    if not isinstance(result, str) or max_bytes <= 0:
+        return result
+    encoded = result.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return result
+    # ! errors="ignore" drops a character cut in half at the boundary instead of raising
+    kept = encoded[:max_bytes].decode("utf-8", errors="ignore")
+    return (
+        f"{kept}\n[truncated: showing the first {max_bytes} of {len(encoded)} bytes; "
+        "narrow the request with a line range or a tighter pattern]"
+    )
 
 
 def wrap_with_budget(toolset: AbstractToolset[Any], budget: int) -> ToolBudgetToolset:

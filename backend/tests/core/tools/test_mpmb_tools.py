@@ -203,3 +203,11 @@ def test_mpmb_grep_reports_a_fallback_pattern_that_runs_too_long(tmp_path: Path,
     (roots["./data/mpmb_source/"] / "a.js").write_text("a" * 34 + "!")
     out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", r"^(?=a)(a|aa)+$")
     assert out.startswith("[error] pattern too slow")
+
+
+def test_mpmb_grep_clips_a_long_matched_line(tmp_path: Path):
+    roots, deps = _setup_roots(tmp_path)
+    (roots["./data/mpmb_source/"] / "min.js").write_text("SpellsList" + "x" * 5_000)
+    out = _mpmb_grep_impl(roots, deps, "./data/mpmb_source/", "SpellsList")
+    assert len(out.splitlines()[0]) < 500
+    assert out.splitlines()[0].endswith("[...]")
