@@ -5,7 +5,7 @@ Both enforce the same policy: root allowlist, `..` rejection, extension allowlis
 """
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Iterator, Optional
 
 from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
@@ -149,6 +149,20 @@ def missing_root_error(root: str) -> str:
     if root == ROOT_UPLOADS_SHARED:
         return "[error] no files uploaded: the shared library is empty"
     return f"[error] root directory missing: {root}"
+
+
+def glob_error(glob_pattern: str) -> Optional[str]:
+    """
+    An [error] string for a glob that names a location outside its root, otherwise None
+
+    Parsed as a Windows path, which reads both separators and finds drive and UNC anchors on any host
+    """
+    windows = PureWindowsPath(glob_pattern)
+    if windows.anchor or PurePosixPath(glob_pattern).is_absolute():
+        return "[error] path_glob must be relative to the root"
+    if ".." in windows.parts:
+        return "[error] path_glob must not contain '..'"
+    return None
 
 
 def iter_searchable_files(root_dir: Path, glob_pattern: str = "**/*") -> Iterator[tuple[Path, Path]]:

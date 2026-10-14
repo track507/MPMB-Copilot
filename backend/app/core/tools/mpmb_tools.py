@@ -28,6 +28,7 @@ from app.core.tools.line_patterns import compile_line_pattern
 from app.core.tools.source_paths import (
     _build_default_roots,
     cache_scope_for,
+    glob_error,
     iter_searchable_files,
     missing_root_error,
     resolve_safe_path,
@@ -144,6 +145,10 @@ def _mpmb_grep_impl(
     if not root_dir.exists():
         return missing_root_error(root)
 
+    glob_pattern = path_glob or "**/*"
+    if (error := glob_error(glob_pattern)) is not None:
+        return error
+
     matches: list[str] = []
     max_matches = settings.tool_grep_max_matches
     total_matches = 0
@@ -154,7 +159,7 @@ def _mpmb_grep_impl(
     )
     scope: Optional[CacheScope] = None
 
-    for file_path, rel in iter_searchable_files(root_dir, path_glob or "**/*"):
+    for file_path, rel in iter_searchable_files(root_dir, glob_pattern):
         read_path = file_path
         if is_extractable(file_path.suffix):
             if scope is None:
