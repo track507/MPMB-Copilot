@@ -230,6 +230,9 @@ def resolve_safe_path(
         return PathResolution(error="[error] absolute paths not allowed")
     if ".." in p.parts:
         return PathResolution(error="[error] parent-directory traversal not allowed")
+    # ! On Windows ':' opens an NTFS stream or a drive-relative path, and the extension check would judge the wrong name
+    if any(":" in part for part in p.parts):
+        return PathResolution(error="[error] ':' is not allowed in a path")
 
     root_dir = roots[root]
     if not root_dir.exists():
