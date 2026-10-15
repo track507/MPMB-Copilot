@@ -81,7 +81,7 @@ A one-line docstring may stay on one line (`"""Soft-delete a session"""`), still
 without a trailing period.
 
 Add `Args:`, `Returns:` and `Raises:` sections only when they say something the signature does not,
-one entry per line. In TypeScript, JSDoc follows the same shape: a summary line, a blank ` *` line,
+one entry per line. In TypeScript, JSDoc follows the same shape: a summary line, a blank `*` line,
 detail, and `@param name - text`, `@returns`, `@throws`, `@example` or `@deprecated` where they add
 information. Omit `{type}` braces in TypeScript, since the signature carries the type.
 
