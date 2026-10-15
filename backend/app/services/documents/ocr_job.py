@@ -4,7 +4,9 @@ The "ocr" job: transcribe the empty pages of an uploaded PDF off the request pat
 Attempts persist in a progress file beside the cache pair and survive a restart
 """
 
+import hashlib
 import json
+import tempfile
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
@@ -99,13 +101,34 @@ def _scope_from(kind: str, key: str) -> CacheScope:
     raise ValueError(f"no OCR for cache scope kind {kind!r}")
 
 
-def _resolve_upload(storage_key: str) -> Optional[Path]:
-    """The upload's file, or None when the key escapes the tenants tree or the file is gone"""
+def _resolve_upload(storage_key: str, *, tenant_id: str) -> Optional[Path]:
+    """
+    The upload's file, or None when the key escapes the tenants tree, names another tenant, or the file is gone
+    """
     tenants = Path(config.tenants_dir).resolve()
     path = (Path(config.data_dir) / storage_key).resolve()
-    if not path.is_relative_to(tenants) or not path.is_file():
+    if not path.is_relative_to(tenants):
         return None
-    return path
+    identity = _upload_identity(path)
+    # ! The job's tenant is the authority: a key naming another tenant is a forged or misrouted queue row
+    if identity is None or identity[0] != tenant_id:
+        logger.warning("ocr_job_foreign_tenant", tenant_id=tenant_id)
+        return None
+    return path if path.is_file() else None
+
+
+def _snapshot(path: Path, digest: str, into: Path) -> Optional[Path]:
+    """
+    A private copy of the upload, made only when its bytes still hash to digest
+
+    ! Every later read parses this copy, so the bytes checked are the bytes parsed
+    """
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != digest:
+        return None
+    copy = into / f"upload{path.suffix}"
+    copy.write_bytes(data)
+    return copy
 
 
 def run(job: Job) -> None:
@@ -115,12 +138,17 @@ def run(job: Job) -> None:
     extension = str(payload["extension"])
     scope = _scope_from(str(payload["scope_kind"]), str(payload["scope_key"]))
 
-    path = _resolve_upload(str(payload["storage_key"]))
+    path = _resolve_upload(str(payload["storage_key"]), tenant_id=job.tenant_id)
+    with tempfile.TemporaryDirectory(prefix="ocr-") as scratch:
+        snapshot = None if path is None else _snapshot(path, digest, Path(scratch))
+        if snapshot is None:
+            logger.info("ocr_job_stale", tenant_id=job.tenant_id, file_hash=digest)
+            return
+        _transcribe(snapshot, scope, digest, extension)
 
-    if path is None or service.file_hash(path) != digest:
-        logger.info("ocr_job_stale", tenant_id=job.tenant_id, file_hash=digest)
-        return
 
+def _transcribe(path: Path, scope: CacheScope, digest: str, extension: str) -> None:
+    """The job's work on a verified private copy; path is never the live upload"""
     progress = read_progress(scope, digest)
     if not should_run(progress):
         return

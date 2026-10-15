@@ -83,3 +83,49 @@ def test_a_page_inside_the_pixel_budget_is_still_transcribed(tmp_path: Path):
     assert extraction.pages_without_text == []
     assert transcriber.calls == 1
     assert "oversized_pages" not in extraction.summary
+
+
+class _SpyLock:
+    def __init__(self) -> None:
+        self.held = False
+        self.entries = 0
+
+    def __enter__(self):
+        assert not self.held
+        self.held = True
+        self.entries += 1
+
+    def __exit__(self, *_exc):
+        self.held = False
+
+
+def test_every_pdfium_call_holds_the_lock_and_ocr_runs_outside_it(tmp_path: Path, monkeypatch):
+    import pypdfium2
+
+    from app.services.documents.ops import pdf
+
+    spy = _SpyLock()
+    monkeypatch.setattr(pdf, "_PDFIUM", spy)
+
+    def guarded(name):
+        real = getattr(pypdfium2.PdfPage, name)
+
+        def call(self, *args, **kwargs):
+            assert spy.held
+            return real(self, *args, **kwargs)
+
+        return call
+
+    monkeypatch.setattr(pypdfium2.PdfPage, "get_textpage", guarded("get_textpage"))
+    monkeypatch.setattr(pypdfium2.PdfPage, "render", guarded("render"))
+
+    class _OutsideTranscriber(_CountingTranscriber):
+        def transcribe(self, image: bytes) -> str:
+            assert not spy.held
+            return super().transcribe(image)
+
+    transcriber = _OutsideTranscriber()
+    PdfExtractor(transcriber).extract(_square_blank_page(tmp_path / "scan.pdf", 612))
+    assert transcriber.calls == 1
+    assert spy.entries >= 4
+    assert not spy.held

@@ -203,3 +203,35 @@ def test_the_reader_reports_off_when_ocr_is_disabled(monkeypatch):
     document = OcrAwareReader(service, submit=queued.append).ensure_extracted(_upload(), SCOPE)
     assert document.summary["ocr"] == "off"
     assert queued == []
+
+
+def test_a_key_naming_another_tenant_is_refused(monkeypatch):
+    fake = _Fake()
+    _use(monkeypatch, fake)
+    foreign = write_pdf(
+        Path(config.tenants_dir) / "t2" / "library" / "scan.pdf", pages=[[]], outline=[], images=FULL_PAGE_IMAGE
+    )
+    storage_key = foreign.resolve().relative_to(Path(config.data_dir).resolve()).as_posix()
+    job = ocr_job.job_for(TENANT, storage_key, SCOPE, service.file_hash(foreign), ".pdf")
+    ocr_job.run(job)
+    assert fake.calls == 0
+    assert ocr_job.read_progress(SCOPE, service.file_hash(foreign)).attempts == 0
+
+
+def test_the_job_parses_the_bytes_it_checked(monkeypatch):
+    fake = _Fake()
+    _use(monkeypatch, fake)
+    path = _upload()
+    job = _job_for(path)
+    parsed: list[Path] = []
+    real_ensure = service.ensure_extracted
+
+    def swap_then_extract(target, scope):
+        parsed.append(target)
+        write_pdf(path, pages=[["swapped after the hash check"]], outline=[])
+        return real_ensure(target, scope)
+
+    monkeypatch.setattr(service, "ensure_extracted", swap_then_extract)
+    ocr_job.run(job)
+    assert parsed and parsed[0] != path
+    assert fake.calls == 1

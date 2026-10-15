@@ -10,6 +10,7 @@ import io
 import json
 import math
 import re
+import threading
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -29,6 +30,7 @@ CAPTION_BAND_MAX = 40.0
 CAPTION_MAX_CHARS = 200
 
 MARKER = re.compile(r"\[page \d+\]")
+_PDFIUM = threading.Lock()
 
 
 def marker(page_number: int) -> str:
@@ -68,7 +70,8 @@ class PdfExtractor:
         deadline = time.monotonic() + budget_sec
 
         try:
-            document = pypdfium2.PdfDocument(str(path))
+            with _PDFIUM:
+                document = pypdfium2.PdfDocument(str(path))
         except Exception as e:
             raise DocumentError("extraction_failed", f"could not open the PDF ({e}); try re-uploading it") from e
 
@@ -80,7 +83,8 @@ class PdfExtractor:
         oversized: list[int] = []
 
         try:
-            page_count = len(document)
+            with _PDFIUM:
+                page_count = len(document)
             if page_count > max_pages:
                 raise DocumentError(
                     "limit_exceeded", f"the PDF has {page_count} pages; documents over {max_pages} pages are not read"
@@ -95,14 +99,15 @@ class PdfExtractor:
                 lines.append(marker(page_number))
                 page_start_line[index] = len(lines)
 
-                page = document[index]
-                textpage = page.get_textpage()
-                try:
-                    text = textpage.get_text_bounded()
-                    visuals = _page_visuals(page, textpage, page_number)
-                finally:
-                    textpage.close()
-                    page.close()
+                with _PDFIUM:
+                    page = document[index]
+                    textpage = page.get_textpage()
+                    try:
+                        text = textpage.get_text_bounded()
+                        visuals = _page_visuals(page, textpage, page_number)
+                    finally:
+                        textpage.close()
+                        page.close()
 
                 text_bytes += len(text.encode("utf-8"))
                 if text_bytes > max_text_bytes:
@@ -119,13 +124,15 @@ class PdfExtractor:
             if self._transcriber is not None and empty_pages:
                 oversized = self._transcribe_empty(document, empty_pages, page_start_line, lines, page_visuals)
 
-            outline = _read_outline(document, page_start_line)
+            with _PDFIUM:
+                outline = _read_outline(document, page_start_line)
         except DocumentError:
             raise
         except Exception as e:
             raise DocumentError("extraction_failed", f"could not read the PDF ({e}); try re-uploading it") from e
         finally:
-            document.close()
+            with _PDFIUM:
+                document.close()
 
         # ? Trailing blank lines carry nothing, and dropping them keeps split and splitlines counts equal at the end too
         while lines and not lines[-1]:
@@ -163,16 +170,20 @@ class PdfExtractor:
 
         for page_number in empty_pages:
             index = page_number - 1
-            page = document[index]
-            try:
-                # ! Before render: PDFium clamps no declared page size and skips its size check on a caller-supplied buffer
-                if _render_pixels(page) > max_pixels:
-                    oversized.append(page_number)
-                    still_empty.append(page_number)
-                    continue
-                image = page.render(scale=RENDER_DPI / 72).to_pil()
-            finally:
-                page.close()
+            with _PDFIUM:
+                page = document[index]
+                try:
+                    # ! Before render: PDFium clamps no declared page size and skips its size check on a caller-supplied buffer
+                    if _render_pixels(page) > max_pixels:
+                        image = None
+                    else:
+                        image = page.render(scale=RENDER_DPI / 72).to_pil()
+                finally:
+                    page.close()
+            if image is None:
+                oversized.append(page_number)
+                still_empty.append(page_number)
+                continue
 
             buffer = io.BytesIO()
             image.save(buffer, format="PNG")
