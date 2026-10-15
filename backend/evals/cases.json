@@ -44,6 +44,12 @@
 		"expect": { "source_substring": "Functions1" }
 	},
 	{
+		"id": "error-class-features-2014",
+		"query": "my subclass import errors out when the sheet applies class features",
+		"edition": "2014",
+		"expect": { "source_substring": "Functions1" }
+	},
+	{
 		"id": "error-magic-item-attribute",
 		"query": "importing my magic item gives an error about a missing required attribute",
 		"expect": { "object_type": "MagicItemsList" }

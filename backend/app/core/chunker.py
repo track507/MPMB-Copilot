@@ -31,6 +31,8 @@ logger = get_logger(__name__)
 
 # * Bump when chunk boundaries/logic change; stamped onto the index for soft staleness
 CHUNKER_VERSION = "2"
+# ! Retrieval admits this value under every edition filter
+EDITION_UNKNOWN = "unknown"
 
 
 # Constants - lookup tables, not config
@@ -117,14 +119,14 @@ def detect_edition(content: str, file_path: Path, source_config: dict[str, Any])
     if "WotC material" in path_str:
         return "2014"
     if "Homebrew" in path_str:
-        return "unknown"
+        return EDITION_UNKNOWN
 
     version_match = re.search(r'RequiredSheetVersion\(["\'](\d+)', content)
     if version_match:
         major = int(version_match.group(1))
         return "2024" if major >= 24 else "2014"
 
-    return "unknown"
+    return EDITION_UNKNOWN
 
 
 def determine_source_tier(file_path: Path, source_config: dict[str, Any]) -> str:

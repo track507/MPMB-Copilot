@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.core.catalog import CatalogSnapshot
+from app.core.chunker import EDITION_UNKNOWN
 from app.core.intent import IntentClassifier, IntentResult
 from app.core.query_analysis import QueryAnalysis, analyze_query
 from app.logger import get_logger
@@ -403,7 +404,7 @@ class Retriever:
         filters: dict[str, Any] = {}
 
         if edition:
-            filters["edition"] = edition
+            filters["edition"] = [edition, EDITION_UNKNOWN]
 
         if analysis.object_type:
             filters["object_type"] = analysis.object_type
