@@ -55,7 +55,6 @@ class SettingsUpdate(BaseModel):
     anthropic_cache_messages: bool | None = None
     enable_extended_thinking: bool | None = None
     system_prompt: str | None = None
-    source_catalog_path: Optional[str] = None
     source_catalog_enabled: Optional[bool] = None
     inject_catalog_context: Optional[bool] = None
     inference_device: Literal["cpu", "gpu"] | None = None
