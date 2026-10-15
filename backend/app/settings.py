@@ -63,6 +63,9 @@ _DEFAULT_DOCUMENTS: dict[str, Any] = {
     "extract_budget_sec": 120,
     # ? Extraction-time ceiling, above the read-time max_extracted_bytes so mpmb_outline still navigates large documents
     "max_document_text_bytes": 67_108_864,
+    # ! Checked before rendering: a page's size is attacker-declared and PDFium allocates whatever it says
+    # ? A 24 x 36 inch poster map at the render DPI is about 35 MP, so 50 MP refuses no printed page
+    "max_render_pixels": 50_000_000,
     "libreoffice_enabled": False,
     "ocr_enabled": True,
 }

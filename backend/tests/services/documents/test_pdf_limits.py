@@ -36,3 +36,50 @@ def test_extraction_stops_once_the_text_passes_the_ceiling(tmp_path: Path, monke
 
 def test_a_pdf_inside_every_limit_still_reads(tmp_path: Path):
     assert PdfExtractor().extract(_five_pages(tmp_path)).summary["pages"] == 5
+
+
+class _CountingTranscriber:
+    id = "fake"
+    version = "1"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def check_availability(self):
+        return None
+
+    def transcribe(self, image: bytes) -> str:
+        self.calls += 1
+        return "words"
+
+
+def _square_blank_page(path: Path, side: float) -> Path:
+    import pypdfium2
+
+    document = pypdfium2.PdfDocument.new()
+    document.new_page(side, side)
+    document.save(str(path))
+    document.close()
+    return path
+
+
+def test_a_page_too_large_to_rasterize_is_never_rendered(tmp_path: Path, monkeypatch):
+    import pypdfium2
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("render was called")
+
+    monkeypatch.setattr(pypdfium2.PdfPage, "render", refuse)
+    transcriber = _CountingTranscriber()
+    extraction = PdfExtractor(transcriber).extract(_square_blank_page(tmp_path / "huge.pdf", 30_000))
+    assert extraction.pages_without_text == [1]
+    assert extraction.summary["oversized_pages"] == [1]
+    assert transcriber.calls == 0
+
+
+def test_a_page_inside_the_pixel_budget_is_still_transcribed(tmp_path: Path):
+    transcriber = _CountingTranscriber()
+    extraction = PdfExtractor(transcriber).extract(_square_blank_page(tmp_path / "letter.pdf", 612))
+    assert extraction.pages_without_text == []
+    assert transcriber.calls == 1
+    assert "oversized_pages" not in extraction.summary

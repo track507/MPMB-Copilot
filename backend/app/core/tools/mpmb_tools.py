@@ -302,6 +302,10 @@ def _mpmb_outline_impl(
         if document.pages_without_text:
             pages = ", ".join(str(p) for p in document.pages_without_text)
             lines.append(f"[no text layer on pages {pages}; {ocr_note(summary)}]")
+            oversized = summary.get("oversized_pages") or []
+            if oversized:
+                listed = ", ".join(str(p) for p in oversized)
+                lines.append(f"[pages {listed} declare a size too large to render, so OCR never read them]")
         if not document.outline:
             lines.append("This PDF has no bookmarks. Each page starts at a [page N] line, so mpmb_grep for one to jump")
     else:

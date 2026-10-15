@@ -8,6 +8,7 @@ A table-aware extractor can join behind the same port if that turns out to limit
 import hashlib
 import io
 import json
+import math
 import re
 import time
 from dataclasses import replace
@@ -76,6 +77,7 @@ class PdfExtractor:
         page_visuals: list[PageVisuals] = []
         page_start_line: dict[int, int] = {}
         text_bytes = 0
+        oversized: list[int] = []
 
         try:
             page_count = len(document)
@@ -115,7 +117,7 @@ class PdfExtractor:
                 lines.extend(_escape_marker(line) for line in normalize(text).split("\n"))
 
             if self._transcriber is not None and empty_pages:
-                self._transcribe_empty(document, empty_pages, page_start_line, lines, page_visuals)
+                oversized = self._transcribe_empty(document, empty_pages, page_start_line, lines, page_visuals)
 
             outline = _read_outline(document, page_start_line)
         except DocumentError:
@@ -130,6 +132,8 @@ class PdfExtractor:
             lines.pop()
 
         summary: dict[str, Any] = {"pages": len(page_start_line), "extractor": "pdf", "version": VERSION}
+        if oversized:
+            summary["oversized_pages"] = oversized
         return Extraction(
             text="\n".join(lines),
             outline=outline,
@@ -145,20 +149,27 @@ class PdfExtractor:
         page_start_line: dict[int, int],
         lines: list[str],
         page_visuals: list[PageVisuals],
-    ) -> None:
+    ) -> list[int]:
         """
-        Fill pages that produced no text layer, in place
+        Fill pages that produced no text layer, in place, and return the pages too large to render
 
-        A page the engine cannot read stays in empty_pages
+        A page the engine cannot read, or one too large to rasterize, stays in empty_pages
         """
         assert self._transcriber is not None
+        max_pixels = int(settings.document_setting("max_render_pixels"))
         still_empty: list[int] = []
+        oversized: list[int] = []
         transcribed: set[int] = set()
 
         for page_number in empty_pages:
             index = page_number - 1
             page = document[index]
             try:
+                # ! Before render: PDFium clamps no declared page size and skips its size check on a caller-supplied buffer
+                if _render_pixels(page) > max_pixels:
+                    oversized.append(page_number)
+                    still_empty.append(page_number)
+                    continue
                 image = page.render(scale=RENDER_DPI / 72).to_pil()
             finally:
                 page.close()
@@ -180,6 +191,7 @@ class PdfExtractor:
         for i, visual in enumerate(page_visuals):
             if visual.page in transcribed:
                 page_visuals[i] = replace(visual, transcribed_by=self._transcriber.id)
+        return oversized
 
 
 def _shift_starts_after(page_start_line: dict[int, int], index: int, inserted: int) -> None:
@@ -187,6 +199,13 @@ def _shift_starts_after(page_start_line: dict[int, int], index: int, inserted: i
     for other in page_start_line:
         if other > index:
             page_start_line[other] += inserted
+
+
+def _render_pixels(page: Any) -> int:
+    """Pixels a render at RENDER_DPI allocates for this page, from the size the file declares"""
+    width, height = page.get_size()
+    scale = RENDER_DPI / 72
+    return math.ceil(abs(float(width)) * scale) * math.ceil(abs(float(height)) * scale)
 
 
 def _escape_marker(line: str) -> str:
