@@ -64,7 +64,7 @@ console.log(`If this fails to connect, create it first:\n  docker exec mpmb-post
 const result = spawnSync(
 	"uv",
 	["--cache-dir", ".uv-cache", "run", "--no-sync", "--project", "backend", "--group", "dev", "pytest", "backend/tests/services/db", ...passthrough],
-	{ cwd: REPO_ROOT, stdio: "inherit", env: { ...process.env, TEST_DATABASE_URL: url }, shell: process.platform === "win32" }
+	{ cwd: REPO_ROOT, stdio: "inherit", env: { ...process.env, TEST_DATABASE_URL: url } }
 );
 
 process.exit(result.status ?? 1);

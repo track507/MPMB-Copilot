@@ -113,6 +113,13 @@ class Settings:
     similarity_threshold: float = 0.5
     context_window_size: int = 8000
 
+    # * Conversation history sent with each turn
+    history_max_messages: int = 50
+    """Newest messages loaded per turn"""
+
+    history_max_chars: int = 60_000
+    """Character budget for that history, about 15k tokens; the oldest messages drop first"""
+
     # Retrieval
     retrieval_mode: str = "dual"
     """'single' = one hybrid search, split after.
