@@ -55,7 +55,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/tmp/huggingface \
     DATA_DIR=/app/data \
     FASTEMBED_CACHE_DIR=/app/data/runtime/models/fastembed \
-	VALIDATOR_SCRIPT_PATH=/app/scripts/validate/src/validate.mjs
+    VALIDATOR_SCRIPT_PATH=/app/scripts/validate/src/validate.mjs \
+    ORT_DISABLE_TELEMETRY=1
 
 WORKDIR /app
 
