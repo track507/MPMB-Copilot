@@ -3,6 +3,7 @@ Shared backend test fixtures.
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -70,3 +71,13 @@ def _storage_root_is_never_the_real_one(tmp_path_factory, monkeypatch):
 @pytest.fixture(autouse=True)
 def _testclient_host_is_allowed(monkeypatch):
     monkeypatch.setattr(config, "allowed_hosts", [*config.allowed_hosts, "testserver"], raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _vector_store_is_never_the_real_one(monkeypatch):
+    from app.services.vector import store as store_module
+
+    unreachable = AsyncMock()
+    unreachable.health_check.return_value = False
+    unreachable.connect.return_value = False
+    monkeypatch.setattr(store_module, "_store_instance", unreachable)
