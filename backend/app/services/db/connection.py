@@ -17,7 +17,7 @@ Usage:
 """
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -94,7 +94,7 @@ class Database:
             logger.info("Database pool disposed")
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[AsyncSession]:
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
         """Yield a transactional async session.
 
         Commits on clean exit, rolls back on exception.
