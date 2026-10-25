@@ -14,13 +14,17 @@ Session persistence:
 """
 
 import asyncio
-from typing import Any
+import weakref
+from collections.abc import AsyncGenerator, Awaitable
+from typing import Any, TypeVar
 from uuid import UUID
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import Principal, current_principal
+from app.api.admission import turn_gate
+from app.api.deps import Principal, current_principal, is_instance_admin
 from app.composition import get_rag_engine
 from app.config import config
 from app.logger import get_logger
@@ -34,21 +38,81 @@ from app.settings import settings
 logger = get_logger(__name__)
 router = APIRouter()
 
+T = TypeVar("T")
+
+
+def _overran(seconds: float) -> TimeoutError:
+    return TimeoutError(f"the turn exceeded its {seconds:g}s limit")
+
+
+async def _within_deadline(work: Awaitable[T]) -> T:
+    seconds = settings.turn_timeout_sec
+    timer = asyncio.timeout(seconds)
+    try:
+        async with timer:
+            return await work
+    except TimeoutError:
+        if timer.expired():
+            raise _overran(seconds) from None
+        raise
+
+
+async def _bounded(events: AsyncGenerator[T, None]) -> AsyncGenerator[T, None]:
+    """
+    Yield a turn's events until its deadline
+
+    The timer runs only while awaiting the agent, never across a yield
+    """
+    seconds = settings.turn_timeout_sec
+    deadline = asyncio.get_running_loop().time() + seconds
+    try:
+        while True:
+            timer = asyncio.timeout_at(deadline)
+            try:
+                async with timer:
+                    event = await anext(events)
+            except StopAsyncIteration:
+                return
+            except TimeoutError:
+                if timer.expired():
+                    raise _overran(seconds) from None
+                raise
+            yield event
+    finally:
+        await events.aclose()
+
+
+def _check_model_override(request: ChatRequest, principal: Principal) -> None:
+    """Choosing the provider or model per request is an instance admin's call; everyone else gets the configured one"""
+    if (request.provider or request.model) and not is_instance_admin(principal):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Choosing the provider or model requires an instance admin"
+        )
+
+
+async def _persist(
+    session_uuid: UUID | None, text: str, rag_response=None, *, user_id: str, error: str | None = None
+) -> None:
+    """Save the assistant message, even from inside a turn that is being cancelled"""
+    # ! anyio re-cancels every await inside a cancelled scope
+    with anyio.CancelScope(shield=True):
+        await _save_assistant_message(session_uuid, text, rag_response, error=error, user_id=user_id)
+
 
 # * Helpers
-async def _load_history(session_id_str: str | None, user_id: str) -> tuple[UUID | None, list[dict[str, Any]]]:
-    """Load conversation history for a session the caller owns."""
-    if not session_id_str or not db.is_connected:
-        return None, []
+async def _resolve_session(session_id: UUID | None, user_id: str) -> tuple[UUID | None, list[dict[str, Any]]]:
+    """
+    The caller's own active session and its history, or neither
 
-    try:
-        session_uuid = UUID(session_id_str)
-        # ! Scoped read: a foreign session id returns empty history, never another user's turns
-        history = await session_service.get_conversation_history(session_uuid, user_id=user_id)
-        return session_uuid, history
-    except (ValueError, Exception) as e:
-        logger.warning(f"Failed to load session history: {e}")
+    A session the caller does not own, or one that is soft-deleted, is a 404, as on every route in api/sessions.py
+    Without a database the turn runs stateless and nothing is written
+    """
+    if session_id is None or not db.is_connected:
         return None, []
+    # ! 404, never 403: a 403 would confirm the session exists
+    if await session_service.get_session(session_id, user_id=user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    return session_id, await session_service.get_conversation_history(session_id, user_id=user_id)
 
 
 async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_id: str, tenant_id: str) -> UUID | None:
@@ -72,7 +136,9 @@ async def _ensure_session(session_uuid: UUID | None, edition: str | None, user_i
         return None
 
 
-async def _save_user_message(session_uuid: UUID | None, user_message: str, user_id: str) -> Message | None:
+async def _save_user_message(
+    session_uuid: UUID | None, user_message: str, user_id: str, *, provider: str | None = None
+) -> Message | None:
     """
     Save the user message and trigger title generation on the first message
 
@@ -86,11 +152,12 @@ async def _save_user_message(session_uuid: UUID | None, user_message: str, user_
             session_id=session_uuid,
             role="user",
             content={"text": user_message},
+            user_id=user_id,
         )
 
         # ? First user message in a new session - kick off async title generation
         if user_msg.sequence_number == 1:
-            asyncio.create_task(generate_session_title(session_uuid, user_message, user_id))
+            asyncio.create_task(generate_session_title(session_uuid, user_message, user_id, provider=provider))
         return user_msg
     except Exception as e:
         logger.error(f"Failed to save user message: {e}")
@@ -102,6 +169,8 @@ async def _save_assistant_message(
     assistant_content: str,
     rag_response=None,
     error: str | None = None,
+    *,
+    user_id: str,
 ) -> None:
     """Save the assistant message. Records partial content + error when the stream fails."""
     if not session_uuid or not db.is_connected:
@@ -148,6 +217,7 @@ async def _save_assistant_message(
             session_id=session_uuid,
             role="assistant",
             content=assistant_content_dict,
+            user_id=user_id,
             **kwargs,
         )
     except Exception as e:
@@ -185,7 +255,7 @@ def _build_metadata(
     return meta
 
 
-async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
+async def _upload_manifest(session_uuid: UUID | None, user_id: str, tenant_id: str) -> str:
     """
     The per-turn inventory of uploaded files, assembled at the edge and passed into the agent loop
 
@@ -193,7 +263,7 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
     """
     if not settings.enable_tool_use:
         return ""
-    return await build_upload_manifest(session_id=session_uuid, user_id=user_id)
+    return await build_upload_manifest(session_id=session_uuid, user_id=user_id, tenant_id=tenant_id)
 
 
 # * POST /chat - complete response
@@ -205,19 +275,24 @@ async def _upload_manifest(session_uuid: UUID | None, user_id: str) -> str:
     description="Send a message and receive AI-generated MPMB code assistance",
 )
 async def chat(request: ChatRequest, principal: Principal = Depends(current_principal)):
-    """Generate a complete RAG-powered response with session persistence."""
+    """Generate a complete RAG-powered response with session persistence"""
+    _check_model_override(request, principal)
+    # ! Both before anything is persisted: ownership first, then admission
+    session_uuid, history = await _resolve_session(request.session_id, principal.user_id)
+    slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id, principal.user_id)
         session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
-        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
+        session_id = str(session_uuid) if session_uuid else ""
 
         # * Persist user message before generation so it survives downstream failures
-        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
+        user_msg = await _save_user_message(
+            session_uuid, request.message, user_id=principal.user_id, provider=request.provider
+        )
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,
@@ -226,24 +301,26 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             )
 
         try:
-            rag_response = await get_rag_engine().generate(
-                query=request.message,
-                conversation_history=history,
-                user_id=principal.user_id,
-                tenant_id=principal.tenant_id,
-                session_id=session_id,
-                edition=request.edition or settings.default_edition,
-                provider=request.provider,
-                model=request.model,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+            rag_response = await _within_deadline(
+                get_rag_engine().generate(
+                    query=request.message,
+                    conversation_history=history,
+                    user_id=principal.user_id,
+                    tenant_id=principal.tenant_id,
+                    session_id=session_id,
+                    edition=request.edition or settings.default_edition,
+                    provider=request.provider,
+                    model=request.model,
+                    temperature=request.temperature,
+                    max_tokens=request.max_tokens,
+                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id, principal.tenant_id),
+                )
             )
         except Exception as gen_error:
-            await _save_assistant_message(session_uuid, "", error=str(gen_error))
+            await _save_assistant_message(session_uuid, "", error=str(gen_error), user_id=principal.user_id)
             raise
 
-        await _save_assistant_message(session_uuid, rag_response.content, rag_response)
+        await _save_assistant_message(session_uuid, rag_response.content, rag_response, user_id=principal.user_id)
 
         metadata = _build_metadata(
             session_id=session_id,
@@ -261,6 +338,9 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             metadata=metadata,
         )
 
+    except TimeoutError as e:
+        logger.warning(f"Chat turn timed out: {e}")
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(e))
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
         raise HTTPException(
@@ -275,6 +355,8 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
             if config.is_development
             else "An error occurred while generating the response.",
         )
+    finally:
+        slot.release()
 
 
 # * POST /chat/stream - streaming SSE response
@@ -285,19 +367,24 @@ async def chat(request: ChatRequest, principal: Principal = Depends(current_prin
     description="Stream AI-generated responses via Server-Sent Events (SSE)",
 )
 async def chat_stream(request: ChatRequest, principal: Principal = Depends(current_principal)):
-    """Stream a RAG-powered response via SSE with session persistence."""
+    """Stream a RAG-powered response via SSE with session persistence"""
+    _check_model_override(request, principal)
+    # ! Both before anything is persisted: ownership first, then admission
+    session_uuid, history = await _resolve_session(request.session_id, principal.user_id)
+    slot = turn_gate.acquire(principal.user_id)
     try:
         logger.info(
             f"Streaming chat request: session_id={request.session_id} provider={request.provider} edition={request.edition}"
         )
 
-        session_uuid, history = await _load_history(request.session_id, principal.user_id)
         session_uuid = await _ensure_session(session_uuid, request.edition, principal.user_id, principal.tenant_id)
 
-        session_id = str(session_uuid) if session_uuid else (request.session_id or "")
+        session_id = str(session_uuid) if session_uuid else ""
 
         # * Persist user message before streaming so it survives any agent/model failure
-        user_msg = await _save_user_message(session_uuid, request.message, user_id=principal.user_id)
+        user_msg = await _save_user_message(
+            session_uuid, request.message, user_id=principal.user_id, provider=request.provider
+        )
         if user_msg is not None and session_uuid is not None and request.attached_file_ids:
             await upload_registry.link_message(
                 message_id=user_msg.id,
@@ -308,26 +395,27 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         async def event_generator():
             """Generate SSE events from the RAG stream."""
             full_content = []
-            final_event = None
+            saved = False
 
             try:
-                async for event in get_rag_engine().stream(
-                    query=request.message,
-                    conversation_history=history,
-                    user_id=principal.user_id,
-                    tenant_id=principal.tenant_id,
-                    session_id=session_id,
-                    edition=request.edition or settings.default_edition,
-                    provider=request.provider,
-                    model=request.model,
-                    temperature=request.temperature,
-                    max_tokens=request.max_tokens,
-                    upload_manifest=await _upload_manifest(session_uuid, principal.user_id),
+                async for event in _bounded(
+                    get_rag_engine().stream(
+                        query=request.message,
+                        conversation_history=history,
+                        user_id=principal.user_id,
+                        tenant_id=principal.tenant_id,
+                        session_id=session_id,
+                        edition=request.edition or settings.default_edition,
+                        provider=request.provider,
+                        model=request.model,
+                        temperature=request.temperature,
+                        max_tokens=request.max_tokens,
+                        upload_manifest=await _upload_manifest(session_uuid, principal.user_id, principal.tenant_id),
+                    )
                 ):
                     if event.done:
-                        final_event = event
-                        assistant_text = "".join(full_content)
-                        await _save_assistant_message(session_uuid, assistant_text, final_event)
+                        await _persist(session_uuid, "".join(full_content), event, user_id=principal.user_id)
+                        saved = True
                         final_chunk = ChatStreamChunk(
                             chunk="",
                             done=True,
@@ -363,8 +451,9 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
             except Exception as e:
                 logger.error(f"Stream error: {e}", exc_info=True)
                 # ! Persist partial text + error so the user's question survives the page reload
-                partial_text = "".join(full_content)
-                await _save_assistant_message(session_uuid, partial_text, error=str(e))
+                if not saved:
+                    await _persist(session_uuid, "".join(full_content), error=str(e), user_id=principal.user_id)
+                    saved = True
                 error_chunk = ChatStreamChunk(
                     chunk="",
                     done=True,
@@ -372,9 +461,23 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
                 )
                 yield f"data: {error_chunk.model_dump_json()}\n\n"
                 yield "data: [DONE]\n\n"
+            except (asyncio.CancelledError, GeneratorExit):
+                if not saved:
+                    await _persist(
+                        session_uuid,
+                        "".join(full_content),
+                        error="interrupted before the answer finished",
+                        user_id=principal.user_id,
+                    )
+                raise
+            finally:
+                slot.release()
 
+        stream = event_generator()
+        # ! A generator that never starts never runs its finally
+        weakref.finalize(stream, slot.release)
         return StreamingResponse(
-            event_generator(),
+            stream,
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -385,14 +488,19 @@ async def chat_stream(request: ChatRequest, principal: Principal = Depends(curre
         )
 
     except ValueError as e:
+        slot.release()
         logger.error(f"Configuration error: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        slot.release()
         logger.error(f"Chat stream endpoint error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start streaming: {str(e)}" if config.is_development else "An error occurred.",
         )
+    except BaseException:
+        slot.release()
+        raise

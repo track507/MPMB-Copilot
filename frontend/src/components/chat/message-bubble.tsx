@@ -117,6 +117,16 @@ export const MessageBubble = memo(function MessageBubble({
 										return <CodeBlock code={code} language={langMatch[1] ?? "text"} />;
 									},
 									pre: ({ children }) => <>{children}</>,
+									img: ({ alt, src }) => (
+										<span className="font-mono text-xs text-muted-foreground">
+											[image{alt !== undefined && alt !== "" ? `: ${alt}` : ""}]{typeof src === "string" && src !== "" ? ` ${src}` : ""}
+										</span>
+									),
+									a: ({ href, children }) => (
+										<a href={href} target="_blank" rel="noopener noreferrer nofollow">
+											{children}
+										</a>
+									),
 									table: ({ children, ...props }) => (
 										<div className="my-2 max-w-full overflow-x-auto">
 											<table className="w-full border-collapse text-xs" {...props}>

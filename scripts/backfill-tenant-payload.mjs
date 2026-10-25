@@ -28,7 +28,7 @@ const apply = process.argv.includes("--apply");
 async function qdrant(path, body) {
 	const res = await fetch(`${QDRANT}${path}`, {
 		method: "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: { "Content-Type": "application/json", "api-key": process.env.QDRANT_API_KEY ?? "" },
 		body: JSON.stringify(body),
 	});
 	if (!res.ok) throw new Error(`${path} -> ${res.status} ${await res.text()}`);

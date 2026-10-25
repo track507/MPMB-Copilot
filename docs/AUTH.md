@@ -6,13 +6,13 @@ MPMB-Copilot is gated behind a login. Identity lives in Postgres, passwords are 
 
 On a fresh install no accounts exist, so the app shows a one-time **Create the admin account** screen instead of a login. The admin account manages users and settings; existing chats from before the upgrade are claimed by this account.
 
-**Network-exposed installs (including the default Docker setup) additionally require a setup token.** When the backend starts bound to a non-loopback interface with no admin yet, it generates a one-time token and prints it to the logs:
+**Network-exposed installs (including the default Docker setup) additionally require a setup token.** When the backend starts bound to a non-loopback interface with no admin yet, it generates a one-time token and prints it to the logs in the `setup_code` field:
 
-```text
+```text {data-source-line="1317"}
 docker compose logs backend | grep setup_token_required
 ```
 
-Paste that token into the setup screen's token field. This closes the window where the first visitor to an exposed fresh install could claim the admin account. Local (loopback) installs skip the token.
+Paste the `setup_code` value into the setup screen's token field. It works once and stops mattering as soon as the admin exists. This closes the window where the first visitor to an exposed fresh install could claim the admin account. Local (loopback) installs skip the token, and accept setup only from this machine.
 
 ## Sessions
 

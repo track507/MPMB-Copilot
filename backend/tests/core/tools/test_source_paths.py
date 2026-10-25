@@ -7,6 +7,7 @@ from app.core.tools.source_paths import (
     ALLOWED_ROOTS,
     DENIED_SUBDIRS,
     PathResolution,
+    glob_error,
     iter_searchable_files,
     missing_root_error,
     resolve_safe_path,
@@ -212,3 +213,20 @@ def test_iter_searchable_files_excludes_symlink_escape(tmp_path: Path):
         pytest.skip("symlink not supported on this platform")
     rels = [rel.as_posix() for _, rel in iter_searchable_files(root)]
     assert rels == []
+
+
+@pytest.mark.parametrize("pattern", ["/abs/*", "C:*", "\\\\server\\share\\*", "../*", "**/../../*.js"])
+def test_glob_error_refuses_patterns_that_leave_the_root(pattern: str):
+    assert glob_error(pattern) is not None
+
+
+@pytest.mark.parametrize("pattern", ["**/*", "*.js", "_functions/*.js"])
+def test_glob_error_accepts_relative_patterns(pattern: str):
+    assert glob_error(pattern) is None
+
+
+@pytest.mark.parametrize("path", ["secret.env:s.js", "C:other.js", "dir/a.js:stream"])
+def test_a_colon_in_a_tool_path_is_refused(tmp_path: Path, path: str):
+    roots = _make_roots(tmp_path)
+    result = resolve_safe_path("./data/mpmb_source/", path, FakeDeps(), roots)
+    assert result.error == "[error] ':' is not allowed in a path"

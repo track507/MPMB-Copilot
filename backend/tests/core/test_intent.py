@@ -90,3 +90,41 @@ def test_intent_method_rule_only_with_missing_catalog(missing_service: SourceCat
     intent, method = _classify(missing_service, "How do I add a feat?")
     assert intent == QueryIntent.HOW_TO
     assert method in ("fallback", "embedding")
+
+
+class _SizedEmbedder:
+    def __init__(self, model: str, dimension: int) -> None:
+        self.model = model
+        self.dimension = dimension
+
+    def embed_query(self, text: str) -> list[float]:
+        return [1.0] * self.dimension
+
+    def identity(self) -> dict:
+        return {"provider": "fake", "model": self.model, "dimension": self.dimension}
+
+
+def test_switching_the_embedding_model_recomputes_the_centroids(tmp_path):
+    import json
+
+    from app.core.intent import _CentroidStore
+
+    examples = tmp_path / "intent_examples.json"
+    examples.write_text(json.dumps({"how_to": ["how do I add a feat"]}), encoding="utf-8")
+    store = _CentroidStore()
+    store._examples_path = examples
+
+    small = store.get_centroids(_SizedEmbedder("small", 4))
+    large = store.get_centroids(_SizedEmbedder("large", 6))
+
+    assert [len(c) for c in small.values()] == [4]
+    assert [len(c) for c in large.values()] == [6]
+
+
+def test_cosine_refuses_vectors_of_different_lengths():
+    import pytest
+
+    from app.core.intent import _cosine_similarity
+
+    with pytest.raises(ValueError):
+        _cosine_similarity([1.0, 0.0], [1.0, 0.0, 0.0])

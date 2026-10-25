@@ -37,3 +37,33 @@ def test_rejects(name, code):
     with pytest.raises(UploadError) as exc:
         sanitize_filename(name)
     assert exc.value.code == code
+
+
+@pytest.mark.parametrize("name", ["_meta.json", "BY-NAME.json", "_Meta.JSON"])
+def test_refuses_storage_metadata_names(name):
+    with pytest.raises(UploadError) as exc:
+        sanitize_filename(name)
+    assert exc.value.code == "invalid_filename"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "C:victim.js",
+        "C:_meta.json",
+        "ab:c.js",
+        "foo\u202ejs.txt",
+        "a\u2028b.js",
+        "zero\u200bwidth.js",
+        "a\uff0f..\uff0fb.js",
+        "a\uff3cb.js",
+    ],
+)
+def test_refuses_names_that_redirect_or_disguise(name):
+    with pytest.raises(UploadError) as exc:
+        sanitize_filename(name)
+    assert exc.value.code == "invalid_filename"
+
+
+def test_accepts_ordinary_unicode_letters():
+    assert sanitize_filename("caf\u00e9.js") == "caf\u00e9.js"

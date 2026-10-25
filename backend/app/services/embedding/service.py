@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from typing import Any, List, Optional, Protocol
 
 from app.config import config
@@ -19,6 +20,7 @@ class EmbeddingService:
     provider: Optional[EmbeddingProvider] = None
     # ? (provider, model, device) - the device joins the key so a GPU fallback reloads the provider
     _selection: Optional[tuple[str, str, str]] = None
+    _load_lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def _load_provider(self) -> EmbeddingProvider:
         from app.settings import settings
@@ -59,13 +61,14 @@ class EmbeddingService:
 
         # * Reload when the embedding selection changes so a settings switch (or a GPU fallback) takes effect
         selection = (settings.embedding_provider, settings.embedding_model, effective_device())
-        if self.provider is None or self._selection != selection:
-            self.provider = self._load_provider()
-            self._selection = selection
-            logger.info(
-                f"Embedding backend loaded: {type(self.provider).__name__} ({selection[1]}, device={selection[2]})"
-            )
-        return self.provider
+        with self._load_lock:
+            if self.provider is None or self._selection != selection:
+                self.provider = self._load_provider()
+                self._selection = selection
+                logger.info(
+                    f"Embedding backend loaded: {type(self.provider).__name__} ({selection[1]}, device={selection[2]})"
+                )
+            return self.provider
 
     def _embed(self, payload: List[str]) -> List[List[float]]:
         """
@@ -73,15 +76,23 @@ class EmbeddingService:
 
         A DirectML/CUDA device hang (Windows TDR resets a GPU whose dispatch outran the watchdog) would otherwise fail a long re-index outright; retrying on CPU costs time, not the run
         """
-        from app.services.onnx_device import force_cpu_fallback, is_device_failure
+        from app.services.onnx_device import force_cpu_fallback, inference_slot, is_device_failure
 
         try:
-            return self._ensure_provider().embed_texts(payload)
+            provider = self._ensure_provider()
+            with inference_slot(self._onnx_device()):
+                return provider.embed_texts(payload)
         except Exception as e:
             if not (is_device_failure(e) and force_cpu_fallback(str(e))):
                 raise
             # _ensure_provider reloads on CPU because effective_device() now reports "cpu"
             return self._ensure_provider().embed_texts(payload)
+
+    def _onnx_device(self) -> str:
+        """The device the local ONNX session was built on; a remote provider runs none"""
+        if self._selection is None or self._selection[0] != "fastembed":
+            return "remote"
+        return self._selection[2]
 
     def _prefixes(self) -> tuple[str, str]:
         # (query_prefix, doc_prefix) for the current model; empty for non-prefix models

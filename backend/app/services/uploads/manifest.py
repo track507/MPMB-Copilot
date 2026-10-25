@@ -16,7 +16,7 @@ from app.services.documents import CacheScope
 _MAX_PER_SCOPE = 20
 
 
-async def build_upload_manifest(*, session_id: Optional[UUID], user_id: str) -> str:
+async def build_upload_manifest(*, session_id: Optional[UUID], user_id: str, tenant_id: str) -> str:
     """
     Short inventory of available uploads or empty string if none
     """
@@ -25,12 +25,23 @@ async def build_upload_manifest(*, session_id: Optional[UUID], user_id: str) -> 
 
     sections: list[str] = []
     targets: list[tuple[str, dict[str, Any], CacheScope]] = [
-        ("library", {"scope": "global", "owner_user_id": user_id}, CacheScope.for_user(user_id)),
-        ("shared", {"scope": "shared"}, CacheScope.shared()),
+        (
+            "library",
+            {"scope": "global", "tenant_id": tenant_id, "owner_user_id": user_id},
+            CacheScope.for_user(user_id),
+        ),
+        ("shared", {"scope": "shared", "tenant_id": tenant_id}, CacheScope.shared(tenant_id)),
     ]
 
     if session_id is not None:
-        targets.insert(0, ("session", {"scope": "session", "session_id": session_id}, CacheScope.for_user(user_id)))
+        targets.insert(
+            0,
+            (
+                "session",
+                {"scope": "session", "tenant_id": tenant_id, "session_id": session_id},
+                CacheScope.for_user(user_id),
+            ),
+        )
 
     for label, filters, cache_scope in targets:
         rows = await upload_registry.list_files(**filters)

@@ -5,6 +5,7 @@ DocumentErrorCategory = Literal[
     "extractor_unavailable",
     "no_text_layer",
     "extracted_too_large",
+    "limit_exceeded",
     "unsupported_format",
 ]
 

@@ -19,9 +19,9 @@ from app.services.db.connection import db
 logger = get_logger(__name__)
 
 
-def _scope_filters(scope: str, owner_user_id: Optional[str], session_id: Optional[UUID]) -> list[Any]:
-    """WHERE clauses identifying one scope target (a session, a user's library, or shared)."""
-    filters = [File.scope == scope]
+def _scope_filters(scope: str, tenant_id: str, owner_user_id: Optional[str], session_id: Optional[UUID]) -> list[Any]:
+    """WHERE clauses identifying one scope target (a session, a user's library, or a tenant's shared library)"""
+    filters = [File.scope == scope, File.tenant_id == tenant_id]
     if scope == "session":
         filters.append(File.session_id == session_id)
     elif scope == "global":
@@ -56,7 +56,7 @@ class UploadRegistry:
             index_elements = ["owner_user_id", "filename"]
             index_where = text("scope = 'global'")
         else:
-            index_elements = ["filename"]
+            index_elements = ["tenant_id", "filename"]
             index_where = text("scope = 'shared'")
 
         stmt = (
@@ -103,61 +103,96 @@ class UploadRegistry:
         self,
         *,
         scope: str,
+        tenant_id: str,
         filename: str,
         owner_user_id: Optional[str] = None,
         session_id: Optional[UUID] = None,
     ) -> Optional[File]:
         async with db.session() as s:
             result = await s.execute(
-                select(File).where(*_scope_filters(scope, owner_user_id, session_id), File.filename == filename)
+                select(File).where(
+                    *_scope_filters(scope, tenant_id, owner_user_id, session_id), File.filename == filename
+                )
             )
             return result.scalar_one_or_none()
 
+    async def get_by_casefolded_name(
+        self,
+        *,
+        scope: str,
+        tenant_id: str,
+        filename: str,
+        owner_user_id: Optional[str] = None,
+        session_id: Optional[UUID] = None,
+    ) -> Optional[File]:
+        """A row whose name differs from filename only in case, if one exists"""
+        async with db.session() as s:
+            result = await s.execute(
+                select(File).where(
+                    *_scope_filters(scope, tenant_id, owner_user_id, session_id),
+                    func.lower(File.filename) == filename.lower(),
+                    File.filename != filename,
+                )
+            )
+            return result.scalars().first()
+
     async def list_files(
-        self, *, scope: str, owner_user_id: Optional[str] = None, session_id: Optional[UUID] = None
+        self,
+        *,
+        scope: str,
+        tenant_id: str,
+        owner_user_id: Optional[str] = None,
+        session_id: Optional[UUID] = None,
     ) -> list[File]:
         async with db.session() as s:
             result = await s.execute(
-                select(File).where(*_scope_filters(scope, owner_user_id, session_id)).order_by(File.filename)
+                select(File).where(*_scope_filters(scope, tenant_id, owner_user_id, session_id)).order_by(File.filename)
             )
             return list(result.scalars().all())
 
     async def count_files(
-        self, *, scope: str, owner_user_id: Optional[str] = None, session_id: Optional[UUID] = None
+        self,
+        *,
+        scope: str,
+        tenant_id: str,
+        owner_user_id: Optional[str] = None,
+        session_id: Optional[UUID] = None,
     ) -> int:
         async with db.session() as s:
             result = await s.execute(
-                select(func.count()).select_from(File).where(*_scope_filters(scope, owner_user_id, session_id))
+                select(func.count())
+                .select_from(File)
+                .where(*_scope_filters(scope, tenant_id, owner_user_id, session_id))
             )
             return int(result.scalar_one())
 
-    async def count_hash_in_bucket(self, *, file_hash: str, owner_user_id: Optional[str]) -> int:
+    async def count_hash_in_bucket(self, *, file_hash: str, tenant_id: str, owner_user_id: Optional[str]) -> int:
         """
         Rows still holding these bytes within one extraction cache bucket
 
-        owner_user_id None means the shared bucket; otherwise one user's session and global uploads together
+        owner_user_id None means the tenant's shared bucket; otherwise one user's session and global uploads together
         Scoped to the bucket, so another user's identical upload cannot keep this user's extracted text alive
         """
         filters: list[Any] = [File.file_hash == file_hash]
         if owner_user_id is None:
-            filters.append(File.scope == "shared")
+            filters.extend([File.scope == "shared", File.tenant_id == tenant_id])
         else:
             filters.extend([File.scope.in_(("session", "global")), File.owner_user_id == owner_user_id])
         async with db.session() as s:
             result = await s.execute(select(func.count()).select_from(File).where(*filters))
             return int(result.scalar_one())
 
-    async def hashes_by_bucket(self) -> dict[Optional[str], set[str]]:
+    async def hashes_by_bucket(self) -> dict[tuple[str, str], set[str]]:
         """
         Every stored hash grouped by the cache bucket it keeps alive, for the orphan sweep
 
-        The key is the owning user id, or None for the shared bucket
+        The key is ("shared", tenant_id) for a tenant's library, or ("user", owner_user_id)
         """
         async with db.session() as s:
-            result = await s.execute(select(File.scope, File.owner_user_id, File.file_hash))
-            buckets: dict[Optional[str], set[str]] = {}
-            for scope, owner_user_id, file_hash in result.all():
-                key = None if scope == "shared" else owner_user_id
+            result = await s.execute(select(File.scope, File.tenant_id, File.owner_user_id, File.file_hash))
+            buckets: dict[tuple[str, str], set[str]] = {}
+            for scope, tenant_id, owner_user_id, file_hash in result.all():
+                key = ("shared", str(tenant_id)) if scope == "shared" else ("user", owner_user_id)
                 buckets.setdefault(key, set()).add(file_hash)
             return buckets
 

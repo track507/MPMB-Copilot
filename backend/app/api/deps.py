@@ -6,6 +6,7 @@ auth_disabled is an env-only dev escape honored only on loopback
 """
 
 from dataclasses import dataclass
+from ipaddress import IPv6Address, ip_address
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -28,12 +29,33 @@ _DEFAULT_ADMIN = Principal(user_id="default", role="admin", tenant_id=DEFAULT_TE
 
 
 def is_loopback(host: str) -> bool:
-    return host in {"127.0.0.1", "localhost", "::1"}
+    if host == "localhost":
+        return True
+    try:
+        address = ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped.is_loopback
+    return address.is_loopback
 
 
-def auth_bypassed() -> bool:
-    # ! Never allow the escape hatch on an exposed interface
-    return config.auth_disabled and is_loopback(config.bind_host)
+def is_local_request(request: Request) -> bool:
+    """
+    True only when the TCP peer and every forwarding hop the request declares are this machine
+
+    The Vite dev proxy appends the browser's address to X-Forwarded-For, which is how a LAN peer behind it shows up here
+    """
+    peer = request.client.host if request.client else ""
+    if not is_loopback(peer) or "forwarded" in request.headers:
+        return False
+    hops = [hop.strip() for value in request.headers.getlist("x-forwarded-for") for hop in value.split(",")]
+    return all(is_loopback(hop) for hop in hops if hop)
+
+
+def auth_bypassed(request: Request) -> bool:
+    # ! Never allow the escape hatch on an exposed interface or for a request that did not originate on this machine
+    return config.auth_disabled and is_loopback(config.bind_host) and is_local_request(request)
 
 
 async def resolve_optional_principal(request: Request) -> Principal | None:
@@ -47,7 +69,7 @@ async def resolve_optional_principal(request: Request) -> Principal | None:
 
 
 async def current_principal(request: Request) -> Principal:
-    if auth_bypassed():
+    if auth_bypassed(request):
         return _DEFAULT_ADMIN
     raw = request.cookies.get(COOKIE_NAME)
     if not raw:
@@ -63,7 +85,7 @@ async def current_principal(request: Request) -> Principal:
 
 async def principal_or_service(request: Request) -> Principal:
     """Ops wall: cookie principal OR a server-granted API key (index/tasks routers only)."""
-    if auth_bypassed():
+    if auth_bypassed(request):
         return _DEFAULT_ADMIN
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -78,11 +100,16 @@ async def principal_or_service(request: Request) -> Principal:
     return await current_principal(request)
 
 
+def is_instance_admin(principal: Principal) -> bool:
+    """An admin of the operator tenant: the only principal that may change instance-wide state"""
+    return principal.role == "admin" and principal.tenant_id == DEFAULT_TENANT_ID
+
+
 def require_scope(scope: str):
-    """Admins hold all scopes implicitly; service principals need the explicit grant; plain users are refused."""
+    """Instance admins hold all scopes implicitly; service principals need the explicit grant; others are refused"""
 
     async def _check(principal: Principal = Depends(principal_or_service)) -> Principal:
-        if principal.role == "admin":
+        if is_instance_admin(principal):
             return principal
         if principal.role == "service" and scope in principal.scopes:
             return principal
@@ -94,4 +121,10 @@ def require_scope(scope: str):
 async def require_admin(principal: Principal = Depends(current_principal)) -> Principal:
     if principal.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return principal
+
+
+async def require_instance_admin(principal: Principal = Depends(current_principal)) -> Principal:
+    if not is_instance_admin(principal):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Instance admin access required")
     return principal

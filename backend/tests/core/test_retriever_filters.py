@@ -1,7 +1,10 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.chunker import EDITION_UNKNOWN, detect_edition
+from app.core.query_analysis import QueryAnalysis
 from app.core.storage_keys import DEFAULT_TENANT_ID
 from tests.core.builders import build_retriever
 
@@ -102,3 +105,18 @@ async def test_single_search_fallback_drops_object_type_when_empty():
     assert len(auth) == 1 and len(examples) == 1
     relaxed_filters = store.hybrid_search.await_args_list[1].kwargs["filters"]
     assert "object_type" not in relaxed_filters
+
+
+def test_edition_filter_admits_edition_agnostic_chunks():
+    filters = build_retriever()._build_filters(QueryAnalysis(object_type=None, edition=None), "2014")
+    assert filters["edition"] == ["2014", EDITION_UNKNOWN]
+
+
+def test_engine_functions_carry_the_edition_the_filter_admits():
+    edition = detect_edition("function GetFeatureChoice() {}", Path("_functions/Functions1.js"), {})
+    assert edition == EDITION_UNKNOWN
+
+
+def test_no_edition_means_no_edition_filter():
+    filters = build_retriever()._build_filters(QueryAnalysis(object_type=None, edition=None), None)
+    assert "edition" not in filters

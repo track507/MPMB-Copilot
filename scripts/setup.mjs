@@ -21,6 +21,7 @@
 // ! Temporal has no Node runtime (V8 ships none through Node 24); install the global polyfill before any use
 import "temporal-polyfill/global";
 import { spawnSync } from "child_process";
+import { randomBytes } from "crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -147,6 +148,9 @@ function initializeEnvFile() {
 				.replace(/^(?<key>POSTGRES_HOST=)postgres(?=\s|$)/, "$<key>127.0.0.1")
 				.replace(/^(?<key>POSTGRES_PORT=)5432(?=\s|$)/, "$<key>5433")
 				.replace(/^(?<key>QDRANT_HOST=)qdrant(?=\s|$)/, "$<key>127.0.0.1")
+				// * base64url stays valid inside DATABASE_URL without escaping
+				.replace(/^(?<key>POSTGRES_PASSWORD=)$/, `$<key>${randomBytes(24).toString("base64url")}`)
+				.replace(/^(?<key>QDRANT_API_KEY=)$/, `$<key>${randomBytes(24).toString("base64url")}`)
 		)
 		.join("\n");
 

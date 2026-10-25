@@ -1,6 +1,6 @@
 import pytest
 
-from app.core.tools.budget import BUDGET_EXHAUSTED_MSG, ToolBudgetToolset, wrap_with_budget
+from app.core.tools.budget import BUDGET_EXHAUSTED_MSG, ToolBudgetToolset, cap_result, wrap_with_budget
 
 
 class FakeToolset:
@@ -12,6 +12,11 @@ class FakeToolset:
     async def call_tool(self, name, tool_args, ctx, tool):
         self.calls.append((name, tool_args))
         return f"ran {name}"
+
+
+class BigToolset(FakeToolset):
+    async def call_tool(self, name, tool_args, ctx, tool):
+        return "x" * 1_000
 
 
 @pytest.mark.asyncio
@@ -72,3 +77,23 @@ def test_wrap_with_budget_returns_fresh_instance():
     assert first is not second
     assert first.budget == 3
     assert first.calls_made == 0
+
+
+@pytest.mark.asyncio
+async def test_an_oversized_result_is_truncated_with_a_note(monkeypatch):
+    from app.settings import settings
+
+    monkeypatch.setattr(settings, "tool_result_max_bytes", 100)
+    result = await ToolBudgetToolset(wrapped=BigToolset(), budget=5).call_tool("mpmb_read", {}, None, None)
+    assert result.startswith("x" * 100 + "\n[truncated: showing the first 100 of 1000 bytes")
+
+
+def test_truncation_never_splits_a_multibyte_character():
+    result = cap_result("\u00e9" * 100, 51)
+    assert result.startswith("\u00e9" * 25 + "\n[truncated:")
+
+
+def test_results_under_the_cap_and_non_text_results_pass_through():
+    assert cap_result("short", 100) == "short"
+    assert cap_result({"k": "v"}, 1) == {"k": "v"}
+    assert cap_result("x" * 10, 0) == "x" * 10

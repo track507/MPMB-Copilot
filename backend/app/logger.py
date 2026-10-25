@@ -372,12 +372,15 @@ class RequestLoggingMiddleware:
             finally:
                 duration_ms = round((time.perf_counter() - t0) * 1000, 1)
                 log_fn = self.logger.warning if status_code >= 400 else self.logger.info
+                client = scope.get("client")
                 log_fn(
                     "http_request",
                     method=method,
                     path=path,
                     status=status_code,
                     duration_ms=duration_ms,
+                    client_ip=client[0] if client else None,
+                    peer=scope.get("state", {}).get("socket_peer"),
                 )
 
 

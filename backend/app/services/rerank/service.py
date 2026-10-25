@@ -6,7 +6,8 @@ reloads when the settings selection changes, and degrades gracefully - any failu
 non-fastembed provider falls back to the input order so a rerank problem never breaks a search
 """
 
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
@@ -23,8 +24,13 @@ class RerankService:
     _model: Optional["TextCrossEncoder"] = None
     # ? (provider, model, device) - the device joins the key so a faulted GPU reloads on CPU
     _selection: Optional[tuple[str, str, str]] = None
+    _load_lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def _ensure_model(self) -> Optional["TextCrossEncoder"]:
+        with self._load_lock:
+            return self._load_for_selection()
+
+    def _load_for_selection(self) -> Optional["TextCrossEncoder"]:
         from app.services.onnx_device import effective_device
         from app.settings import settings
 
@@ -63,6 +69,8 @@ class RerankService:
         return self._model
 
     def rerank(self, query: str, candidates: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
+        from app.services.onnx_device import inference_slot
+
         if not candidates:
             return []
         model = self._ensure_model()
@@ -70,7 +78,8 @@ class RerankService:
             return candidates[:top_k]
         try:
             docs = [c.get("content", "") for c in candidates]
-            scores = list(model.rerank(query, docs))
+            with inference_slot(self._selection[2] if self._selection else "cpu"):
+                scores = list(model.rerank(query, docs))
             ranked = sorted(zip(candidates, scores), key=lambda pair: pair[1], reverse=True)
             return [{**cand, "rerank_score": float(score)} for cand, score in ranked[:top_k]]
         except Exception as e:  # ! never break a search on a rerank failure

@@ -212,3 +212,47 @@ def test_requires_db_returns_503(client, svc, monkeypatch):
     monkeypatch.setattr("app.api.uploads.db", SimpleNamespace(is_connected=False))
     resp = client.get("/api/uploads", params={"scope": "global"})
     assert resp.status_code == 503
+
+
+@pytest.fixture
+def runner(monkeypatch):
+    submit = AsyncMock(return_value="job-1")
+    monkeypatch.setattr("app.api.uploads.get_job_runner", lambda: SimpleNamespace(submit=submit))
+    return submit
+
+
+def _pdf_row():
+    return _row(
+        scope="shared",
+        filename="scan.pdf",
+        content_type="application/pdf",
+        file_hash="a" * 64,
+        tenant_id=uuid4(),
+        owner_user_id=uuid4(),
+        storage_key="tenants/t/library/scan.pdf",
+    )
+
+
+def test_a_pdf_upload_queues_one_ocr_job(client, svc, runner):
+    svc.store.return_value = _pdf_row()
+    resp = client.post(
+        "/api/uploads", data={"scope": "shared"}, files={"file": ("scan.pdf", b"%PDF", "application/pdf")}
+    )
+    assert resp.status_code == 201
+    job = runner.await_args.args[0]
+    assert job.kind == "ocr"
+    assert job.payload["storage_key"] == "tenants/t/library/scan.pdf"
+
+
+def test_a_non_pdf_upload_queues_nothing(client, svc, runner):
+    client.post("/api/uploads", data={"scope": "global"}, files={"file": ("a.js", b"content", "text/javascript")})
+    runner.assert_not_awaited()
+
+
+def test_a_failed_queue_never_fails_the_upload(client, svc, runner):
+    svc.store.return_value = _pdf_row()
+    runner.side_effect = RuntimeError("runner down")
+    resp = client.post(
+        "/api/uploads", data={"scope": "shared"}, files={"file": ("scan.pdf", b"%PDF", "application/pdf")}
+    )
+    assert resp.status_code == 201

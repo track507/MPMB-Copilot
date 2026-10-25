@@ -51,11 +51,9 @@ def lookup(path: Path, scope: CacheScope) -> Optional[CachedDocument]:
 
     Grep and the upload manifest use this, because both must stay cheap and never trigger work on their own
     """
-    extractor = registry.extractor_for(path.suffix)
-    extractor_id = registry.extractor_id(path.suffix)
-    if extractor is None or extractor_id is None:
+    if registry.extractor_id(path.suffix) is None:
         return None
-    return cache.read_pair(scope, file_hash(path), extractor_id, extractor.version)
+    return _read_best(file_hash(path), path.suffix, scope)
 
 
 def cached_summary(file_hash: str, extension: str, scope: CacheScope) -> Optional[dict[str, Any]]:
@@ -64,15 +62,23 @@ def cached_summary(file_hash: str, extension: str, scope: CacheScope) -> Optiona
 
     For callers that already hold the hash, like the per-turn upload manifest, which must never trigger extraction
     """
-    extractor = registry.extractor_for(extension)
-    extractor_id = registry.extractor_id(extension)
-    if extractor is None or extractor_id is None:
-        return None
     try:
-        document = cache.read_pair(scope, file_hash, extractor_id, extractor.version)
+        document = _read_best(file_hash, extension, scope)
     except ValueError:
         return None
     return document.summary if document is not None else None
+
+
+def _read_best(digest: str, extension: str, scope: CacheScope) -> Optional[CachedDocument]:
+    """The OCR'd extraction when one exists, otherwise the text-only one"""
+    extractor_id = registry.extractor_id(extension)
+    if extractor_id is None:
+        return None
+    for version in registry.candidate_versions(extension):
+        found = cache.read_pair(scope, digest, extractor_id, version)
+        if found is not None:
+            return found
+    return None
 
 
 def release(file_hash: str, extension: str, scope: CacheScope) -> int:
@@ -105,7 +111,7 @@ def ensure_extracted(path: Path, scope: CacheScope) -> CachedDocument:
         raise DocumentError("extractor_unavailable", reason)
 
     digest = file_hash(path)
-    cached = cache.read_pair(scope, digest, extractor_id, extractor.version)
+    cached = _read_best(digest, path.suffix, scope)
     if cached is not None:
         return cached
 

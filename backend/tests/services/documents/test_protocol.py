@@ -32,7 +32,7 @@ def test_normalize_is_idempotent():
 
 def test_cache_scope_builds_each_kind():
     assert CacheScope.for_user("0192f3a4-1111-7abc-8def-0123456789ab").kind == "user"
-    assert CacheScope.shared().key == ""
+    assert CacheScope.shared("t1").key == "t1"
     assert CacheScope.for_source_root("mpmb_source").kind == "source_root"
 
 
@@ -43,6 +43,7 @@ def test_cache_scope_rejects_keys_that_are_not_one_path_component(key):
         CacheScope.for_user(key)
 
 
-def test_shared_scope_carries_no_key():
+def test_a_shared_scope_belongs_to_one_tenant():
     with pytest.raises(ValueError):
-        CacheScope(kind="shared", key="u1")
+        CacheScope.shared("")
+    assert CacheScope.shared("t1") != CacheScope.shared("t2")

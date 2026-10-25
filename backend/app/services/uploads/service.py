@@ -67,23 +67,30 @@ class UploadService:
             return base / user_global_prefix(tenant_id, owner_user_id)
         return base / library_prefix(tenant_id)
 
-    def _check_access(self, *, scope: str, row_owner: str, user_id: str, role: str, write: bool) -> None:
+    def _check_access(
+        self, *, scope: str, row_owner: str, row_tenant: str, user_id: str, tenant_id: str, role: str, write: bool
+    ) -> None:
+        # ! Before the admin bypass: another tenant's file does not exist for this caller
+        if row_tenant != tenant_id:
+            raise UploadError(404, "not_found", "File not found")
         if role == "admin":
             return
-        if scope == "global" and row_owner != user_id:
+        if scope in ("global", "session") and row_owner != user_id:
             raise UploadError(403, "forbidden", "Not your file")
         if scope == "shared" and write:
             raise UploadError(403, "forbidden", "The shared library is admin-managed")
 
-    def _registry_target(self, *, scope: str, user_id: str, session_id: Optional[UUID]) -> dict[str, Any]:
+    def _registry_target(
+        self, *, scope: str, tenant_id: str, user_id: str, session_id: Optional[UUID]
+    ) -> dict[str, Any]:
         """
         Filters identifying one scope target for count/get_by_name/list
         """
         if scope == "session":
-            return {"scope": scope, "session_id": session_id}
+            return {"scope": scope, "tenant_id": tenant_id, "session_id": session_id}
         if scope == "global":
-            return {"scope": scope, "owner_user_id": user_id}
-        return {"scope": scope}
+            return {"scope": scope, "tenant_id": tenant_id, "owner_user_id": user_id}
+        return {"scope": scope, "tenant_id": tenant_id}
 
     async def store(
         self,
@@ -99,10 +106,21 @@ class UploadService:
             raise UploadError(400, "invalid_scope", f"Unknown scope: {scope}")
         if (scope == "session") != (session_id is not None):
             raise UploadError(400, "invalid_scope", "Session uploads require session_id. Other scopes reject it.")
-        self._check_access(scope=scope, row_owner=user_id, user_id=user_id, role=role, write=True)
+        self._check_access(
+            scope=scope,
+            row_owner=user_id,
+            row_tenant=tenant_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+            write=True,
+        )
         filename = sanitize_filename(upload.filename or "")
 
-        target = self._registry_target(scope=scope, user_id=user_id, session_id=session_id)
+        target = self._registry_target(scope=scope, tenant_id=tenant_id, user_id=user_id, session_id=session_id)
+        # ! Names are unique ignoring case
+        if await upload_registry.get_by_casefolded_name(filename=filename, **target) is not None:
+            raise UploadError(409, "name_conflict", "A file whose name differs only in case already exists")
         if await upload_registry.count_files(**target) >= settings.upload_max_files_per_scope:
             raise UploadError(400, "quota_exceeded", f"Scope holds {settings.upload_max_files_per_scope} files already")
 
@@ -162,20 +180,25 @@ class UploadService:
         if existing is not None and existing.file_hash != file_hash:
             # ? The replaced bytes are gone from disk, so their extracted text must not outlive them
             await self._release_extraction(
-                filename=existing.filename, scope=scope, owner_user_id=user_id, file_hash=existing.file_hash
+                filename=existing.filename,
+                scope=scope,
+                owner_user_id=user_id,
+                tenant_id=tenant_id,
+                file_hash=existing.file_hash,
             )
         # * Extension point: post-store steps (metadata JSON, indexing) future state
         return row
 
     async def list_with_reconcile(
-        self, *, scope: str, user_id: str, role: str, session_id: Optional[UUID] = None
+        self, *, scope: str, user_id: str, role: str, tenant_id: str, session_id: Optional[UUID] = None
     ) -> list[File]:
         if scope not in _SCOPES:
             raise UploadError(400, "invalid_scope", f"Unknown scope: {scope}")
-        self._check_access(scope=scope, row_owner=user_id, user_id=user_id, role=role, write=False)
         rows = await upload_registry.list_files(
-            **self._registry_target(scope=scope, user_id=user_id, session_id=session_id)
+            **self._registry_target(scope=scope, tenant_id=tenant_id, user_id=user_id, session_id=session_id)
         )
+        if scope == "session" and role != "admin":
+            rows = [row for row in rows if row.owner_user_id == user_id]
         base = Path(config.data_dir)
         for row in rows:
             if not (base / row.storage_key).exists() and not (row.meta_data or {}).get("missing"):
@@ -183,11 +206,19 @@ class UploadService:
                 row.meta_data = {**(row.meta_data or {}), "missing": True}
         return rows
 
-    async def open_content(self, *, file_id: UUID, user_id: str, role: str) -> tuple[Path, File]:
+    async def open_content(self, *, file_id: UUID, user_id: str, role: str, tenant_id: str) -> tuple[Path, File]:
         row = await upload_registry.get_file(file_id)
         if row is None:
             raise UploadError(404, "not_found", "File not found")
-        self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=False)
+        self._check_access(
+            scope=row.scope,
+            row_owner=row.owner_user_id,
+            row_tenant=str(row.tenant_id),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+            write=False,
+        )
         base = Path(config.tenants_dir).resolve()
         resolved = (Path(config.data_dir) / row.storage_key).resolve()
         try:
@@ -200,18 +231,32 @@ class UploadService:
             raise UploadError(404, "file_missing", "File content is missing on disk")
         return resolved, row
 
-    async def delete(self, *, file_id: UUID, user_id: str, role: str) -> None:
+    async def delete(self, *, file_id: UUID, user_id: str, role: str, tenant_id: str) -> None:
         row = await upload_registry.get_file(file_id)
         if row is None:
             raise UploadError(404, "not_found", "File not found")
-        self._check_access(scope=row.scope, row_owner=row.owner_user_id, user_id=user_id, role=role, write=True)
+        self._check_access(
+            scope=row.scope,
+            row_owner=row.owner_user_id,
+            row_tenant=str(row.tenant_id),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+            write=True,
+        )
         (Path(config.data_dir) / row.storage_key).unlink(missing_ok=True)
         await upload_registry.delete_file(file_id)
         await self._release_extraction(
-            filename=row.filename, scope=row.scope, owner_user_id=row.owner_user_id, file_hash=row.file_hash
+            filename=row.filename,
+            scope=row.scope,
+            owner_user_id=row.owner_user_id,
+            tenant_id=str(row.tenant_id),
+            file_hash=row.file_hash,
         )
 
-    async def _release_extraction(self, *, filename: str, scope: str, owner_user_id: str, file_hash: str) -> None:
+    async def _release_extraction(
+        self, *, filename: str, scope: str, owner_user_id: str, tenant_id: str, file_hash: str
+    ) -> None:
         """
         Delete a document's extracted text once no upload in its cache bucket still holds the same bytes
 
@@ -221,9 +266,9 @@ class UploadService:
         if not documents.is_extractable(extension):
             return
         owner = None if scope == "shared" else owner_user_id
-        if await upload_registry.count_hash_in_bucket(file_hash=file_hash, owner_user_id=owner):
+        if await upload_registry.count_hash_in_bucket(file_hash=file_hash, tenant_id=tenant_id, owner_user_id=owner):
             return
-        cache_scope = CacheScope.shared() if owner is None else CacheScope.for_user(owner)
+        cache_scope = CacheScope.shared(tenant_id) if owner is None else CacheScope.for_user(owner)
         try:
             documents.release(file_hash, extension, cache_scope)
         except (OSError, ValueError) as e:

@@ -13,10 +13,12 @@ from app.services.documents.errors import DocumentError
 from app.services.documents.protocol import Extraction, normalize
 
 EXTENSIONS = frozenset({".csv", ".tsv"})
-VERSION = "1"
+VERSION = "2"
 
-_SNIFF_BYTES = 65_536
+_SNIFF_BYTES = 4_096
 _CELL_SEPARATOR = " | "
+_FIRST_ROW_CELLS = 50
+_FIRST_ROW_CELL_CHARS = 200
 
 
 class CsvExtractor:
@@ -36,12 +38,14 @@ class CsvExtractor:
         dialect = _dialect_for(path, raw)
         rows: list[str] = []
         first_row: list[str] = []
+        columns = 0
         try:
             for record in csv.reader(io.StringIO(raw, newline=""), dialect):
                 # ! A quoted cell may contain newlines, and one row must stay one line or read and grep lose their place
                 cells = [" ".join(cell.split()) for cell in record]
                 if not first_row:
-                    first_row = cells
+                    columns = len(cells)
+                    first_row = [cell[:_FIRST_ROW_CELL_CHARS] for cell in cells[:_FIRST_ROW_CELLS]]
                 rows.append(_CELL_SEPARATOR.join(cells))
         except csv.Error as e:
             # ? The realistic cause is one unterminated quote swallowing the rest of the file into a single field
@@ -49,7 +53,7 @@ class CsvExtractor:
 
         summary: dict[str, Any] = {
             "rows": len(rows),
-            "columns": len(first_row),
+            "columns": columns,
             "first_row": first_row,
             "extractor": "csv",
             "version": VERSION,

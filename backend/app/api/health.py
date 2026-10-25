@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
+from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.logger import get_logger
@@ -12,6 +13,7 @@ from app.services.db import db
 from app.services.llm.credentials import api_key_for
 from app.services.source_catalog import source_catalog_service
 from app.services.vector import get_vector_store
+from app.settings import settings
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -40,19 +42,14 @@ async def check_qdrant() -> ServiceStatus:
 async def check_llm_provider() -> ServiceStatus:
     """Check LLM provider configuration"""
     try:
-        api_key = api_key_for(config.default_llm_provider)
-        if config.default_llm_provider == "ollama":
+        provider = settings.default_llm_provider
+        api_key = api_key_for(provider)
+        if provider == "ollama":
             return ServiceStatus(status="configured", message=f"Ollama at {config.ollama_host}")
         elif api_key:
-            return ServiceStatus(
-                status="configured",
-                message=f"{config.default_llm_provider} - {config.default_model}",
-            )
+            return ServiceStatus(status="configured", message=f"{provider} - {settings.default_model}")
         else:
-            return ServiceStatus(
-                status="not_configured",
-                message=f"Missing API key for {config.default_llm_provider}",
-            )
+            return ServiceStatus(status="not_configured", message=f"Missing API key for {provider}")
     except Exception as e:
         logger.error(f"LLM provider check failed: {e}")
         return ServiceStatus(status="error", message=str(e))
@@ -113,7 +110,10 @@ async def health_check():
 
     # Determine overall status
     overall_status = "healthy"
-    if any(s.status in ["unavailable", "error"] for s in [qdrant_status, llm_status, embedding_status, db_status]):
+    if any(
+        s.status in ["unavailable", "error", "degraded"]
+        for s in [qdrant_status, llm_status, embedding_status, db_status]
+    ):
         overall_status = "degraded"
 
     # Catalog issues degrade the overall status but never produce "unhealthy"
@@ -139,3 +139,15 @@ async def health_check():
 async def ping():
     """Simple ping endpoint"""
     return {"ping": "pong", "timestamp": datetime.now(timezone.utc)}
+
+
+@router.get("/ready")
+async def ready(request: Request) -> JSONResponse:
+    """Readiness: models warm, the database connected and migrated; /ping is liveness"""
+    state = request.app.state
+    checks = {
+        "models": bool(getattr(state, "warm", False)),
+        "database": db.is_connected and bool(getattr(state, "migrated", False)),
+    }
+    ok = all(checks.values())
+    return JSONResponse(status_code=200 if ok else 503, content={"ready": ok, **checks})

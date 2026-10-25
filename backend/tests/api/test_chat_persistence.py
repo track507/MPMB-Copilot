@@ -38,6 +38,6 @@ async def test_save_assistant_message_persists_retrieval(monkeypatch):
         stop_reason=None,
         retrieval=trace,
     )
-    await chat_mod._save_assistant_message(uuid4(), "answer", rag_response)
+    await chat_mod._save_assistant_message(uuid4(), "answer", rag_response, user_id="u1")
 
     assert captured["meta_data"]["retrieval"] == trace

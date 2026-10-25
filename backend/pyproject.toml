@@ -22,6 +22,8 @@ dependencies = [
 	"fastembed>=0.7.4",
 	# GPU-capable ONNX runtime on Windows (DirectML; superset of the CPU build)
 	"onnxruntime-directml>=1.24; sys_platform == 'win32'",
+	"rapidocr-onnxruntime>=1.4",
+	"opencv-python-headless>=4.5.1.48",
 	# LLM Providers
 	"pydantic-ai-slim[anthropic,openai]>=1.107.0",
 	# Logging
@@ -37,6 +39,8 @@ dependencies = [
 	"uuid-utils>=0.12.0",
 	"argon2-cffi>=25.1.0",
 	"pypdfium2>=5.13.0",
+	"google-re2>=1.1.20251105",
+	"regex>=2026.9.10",
 ]
 
 [project.optional-dependencies]
@@ -85,7 +89,12 @@ dev = [
 
 [tool.uv]
 # ! onnxruntime distributions all provide the same module and must not coexist: on Windows the DirectML build (declared above) replaces fastembed's plain onnxruntime
-override-dependencies = ["onnxruntime>=1.22; sys_platform != 'win32'"]
+override-dependencies = [
+	"onnxruntime>=1.22; sys_platform != 'win32'",
+	# ! opencv-python and opencv-python-headless both provide cv2 and must not coexist
+	# ! The impossible marker drops rapidocr's GUI build; the headless build is a direct dependency
+	"opencv-python; sys_platform == '__never__'",
+]
 
 
 [tool.importlinter]
@@ -137,9 +146,11 @@ type = "forbidden"
 source_modules = ["app.services.*.protocol"]
 forbidden_modules = [
 	"app.model.orm",
+	"app.services.compute.threads",
 	"app.services.db",
 	"app.services.embedding.providers",
 	"app.services.embedding.service",
+	"app.services.jobs.local",
 	"app.services.rerank.service",
 	"app.services.vector.qdrant",
 	"app.services.vector.store",
@@ -162,13 +173,16 @@ type = "forbidden"
 source_modules = ["app.core"]
 forbidden_modules = [
 	"app.model.orm",
+	"app.services.compute.threads",
 	"app.services.db",
 	"app.services.documents.cache",
+	"app.services.documents.ocr_job",
 	"app.services.documents.registry",
 	"app.services.documents.service",
 	"app.services.documents.sweep",
 	"app.services.embedding.providers",
 	"app.services.embedding.service",
+	"app.services.jobs.local",
 	"app.services.indexing",
 	"app.services.llm.catalog",
 	"app.services.llm.credentials",

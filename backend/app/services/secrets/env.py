@@ -7,7 +7,7 @@ Reading through config rather than os.environ keeps .env honoured, since config 
 from typing import Optional
 
 from app.config import config
-from app.services.secrets.protocol import ANTHROPIC_API_KEY, OPENAI_API_KEY
+from app.services.secrets.protocol import ANTHROPIC_API_KEY, OPENAI_API_KEY, QDRANT_API_KEY
 
 
 class EnvSecretsProvider:
@@ -18,6 +18,7 @@ class EnvSecretsProvider:
     _FIELDS = {
         ANTHROPIC_API_KEY: "anthropic_api_key",
         OPENAI_API_KEY: "openai_api_key",
+        QDRANT_API_KEY: "qdrant_api_key",
     }
 
     def get(self, name: str) -> Optional[str]:

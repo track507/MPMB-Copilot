@@ -47,6 +47,11 @@ class Config(BaseSettings):
             "http://localhost:5001",
         ]
     )
+    max_request_body_bytes: int = 1_048_576
+    # ! Host header allowlist: the DNS-rebinding defense; add public hostnames for a deployment, "*" disables it
+    allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "::1"])
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    client_ip_header: Literal["X-Forwarded-For", "CF-Connecting-IP"] = "X-Forwarded-For"
 
     # LLM Provider Settings
     default_llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
@@ -89,6 +94,8 @@ class Config(BaseSettings):
     qdrant_port: int = 6333
     qdrant_collection: str = "mpmb_code"
     qdrant_timeout: int = 30
+    qdrant_api_key: Optional[str] = None
+    qdrant_https: bool = False
 
     # Embedding Settings
     embedding_provider: str = "fastembed"
@@ -104,6 +111,11 @@ class Config(BaseSettings):
         if self.embedding_threads > 0:
             return self.embedding_threads
         return max(1, (os.cpu_count() or 4) // 2)
+
+    # * Compute lanes
+    interactive_workers: int = 4
+    job_workers: int = 2
+    jobs_per_tenant: int = 1
 
     # RAG Parameters
     chunk_size: int = 1000
@@ -174,10 +186,10 @@ class Config(BaseSettings):
                 return False
         return value
 
-    @field_validator("allowed_origins", mode="before")
+    @field_validator("allowed_origins", "allowed_hosts", "trusted_proxy_cidrs", mode="before")
     @classmethod
     def normalize_allowed_origins(cls, value: object) -> object:
-        """Accept ALLOWED_ORIGINS as either JSON or comma-separated text."""
+        """Accept a list setting as either JSON or comma-separated text"""
         if isinstance(value, str):
             normalized = value.strip()
             if not normalized:

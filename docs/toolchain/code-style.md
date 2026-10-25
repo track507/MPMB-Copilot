@@ -9,13 +9,33 @@ apply it to code you are already touching, per the refactor-in-context rule.
 
 ## Comments
 
-Better Comments markers, and only these three:
+### Every comment is load-bearing
+
+A comment survives only if deleting it would let a competent reader break something or waste an
+hour. It states what is true of the code now, in the present tense.
+
+Never write temporal or changelog comments ("now", "previously", "used to", "replaced X", "for
+now"), counterfactuals ("or X would happen"), why it was written today or in which phase or ticket,
+lists of current callers, components that do not exist yet, or a restatement of a line that already
+reads clearly. **Tests carry no comments.**
+
+Do write the reason when the code is surprising and the consequence is invisible from the code,
+phrased as a present-tense constraint, and do write a docstring stating what a function, class or
+module is for - that is its contract, not noise.
+
+The test: would a competent developer, six months from now, delete the line believing it was cargo
+cult? If yes and they would be wrong, it stays.
+
+### Markers
+
+Better Comments markers:
 
 | Marker | Means |
 | --- | --- |
 | `# !` / `// !` | Critical - a correctness or security constraint that breaks if ignored |
 | `# *` / `// *` | Important - a section header or a fact worth finding later |
 | `# ?` / `// ?` | Context - why this is the way it is, for a reader who would otherwise change it |
+| `# TODO` / `// TODO` | Named deferred work; never a vague "fix later" |
 
 **Single line only.** A marker comment that needs a paragraph belongs in a docstring
 or a tracked doc.
@@ -60,6 +80,18 @@ Same rules as comments: no trailing periods, one sentence per line.
 A one-line docstring may stay on one line (`"""Soft-delete a session"""`), still
 without a trailing period.
 
+Add `Args:`, `Returns:` and `Raises:` sections only when they say something the signature does not,
+one entry per line. In TypeScript, JSDoc follows the same shape: a summary line, a blank `*` line,
+detail, and `@param name - text`, `@returns`, `@throws`, `@example` or `@deprecated` where they add
+information. Omit `{type}` braces in TypeScript, since the signature carries the type.
+
+## Cite the source for anything non-obvious
+
+A constraint the reader cannot verify from the code links its primary source: vendor
+documentation, a spec, a published advisory. In Python use a `See:` line in the docstring or a bare
+URL on its own comment line; in TypeScript use `@see`. Prefer versioned or anchored URLs, and vendor
+documentation over Stack Overflow.
+
 ## Never cite an uncommitted document
 
 `docs/superpowers/` is gitignored - specs, plans and research never reach a clone.
@@ -79,6 +111,21 @@ State the reason inline instead, and cite **committed** code freely:
 
 If a decision needs more explanation than a comment holds, it belongs in a tracked
 doc (`README.md`, `docs/`), not in a link to an untracked one.
+
+## Voice and spelling
+
+- **Impersonal.** No "you", "your" or "we" in comments, docstrings or internal docs: "Called once at startup", not "You should call this once". User-facing UI copy is exempt
+- **American English** throughout: `behavior`, `initialize`, `defense`, including identifiers and commit messages
+- **Placeholders name the thing:** `TENANT_ID=tenant-id`, never `your-tenant-id-here`
+
+## Diagrams
+
+Documentation uses Mermaid in a fenced `mermaid` block, only where a picture carries information
+the prose cannot: a flow across more than two participants, an ordering that matters, a set of
+states, or a branching structure. Use the stable types (`sequenceDiagram`, `flowchart`,
+`stateDiagram-v2`, `erDiagram`, `gitGraph`, `mindmap`, `timeline`, `gantt`), since GitHub may not
+render the beta ones. Every diagram carries `accTitle` and `accDescr` so assistive technology can
+read it. Keep each small, answering one question, and describing the system as it is now.
 
 ## ASCII only
 

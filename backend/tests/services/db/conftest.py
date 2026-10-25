@@ -68,5 +68,5 @@ async def message_id(session_id):
     """
     from app.services.db import session_service
 
-    message = await session_service.add_message(session_id, "user", {"text": "hi"})
+    message = await session_service.add_message(session_id, "user", {"text": "hi"}, user_id="test-owner")
     return message.id

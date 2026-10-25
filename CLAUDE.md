@@ -136,6 +136,13 @@ a duplicate - it now runs typecheck twice.
   `tests/` is linted by ruff but never executed. The live suite is `backend/tests/`.
 - **`frontend/test/**` was outside the prettier glob until 2026-09-27**, so its files had never
   been format-checked. It is in scope now; the one-time normalization touched five files.
+- **Dev servers start through `node`, never through a `node_modules/.bin` shim.** On Windows those shims are
+  `.cmd` files, and `cmd.exe` answers Ctrl+C with "Terminate batch job (Y/N)?" - the orphaned prompt keeps
+  reading the console, so Backspace prints `^H` and keystrokes go missing. `dev`, `dev:frontend` and
+  `scripts/dev.mjs` call `node --run` or a package's JS entry point for that reason; spelling them back as
+  `concurrently ...` or `pnpm --filter ... run dev` brings the broken terminal back. Start them with
+  `node --run dev` (or `dev:full`), not `pnpm run dev`: when the global pnpm differs from `packageManager`,
+  pnpm hands off to the pinned version through a `pnpm.cmd`, which puts the same prompt back on top.
 - **The backend container is CPU-only.** DirectML/CUDA exist only in a host backend from
   `backend/.venv`; `setup:all` runs postgres + qdrant in Docker and indexes through a host
   backend. "GPU support not installed" in Settings usually means a container is holding `:8000`.

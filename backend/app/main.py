@@ -17,8 +17,13 @@ from app.api import (
     source_catalog as source_catalog_api,
 )
 from app.api import uploads as uploads_api
+from app.api.body_limit import BodyLimitMiddleware
+from app.api.client_ip import TrustedProxyMiddleware
 from app.api.deps import current_principal, is_loopback, principal_or_service
+from app.api.hosts import HostAllowlistMiddleware
 from app.api.problem import register_problem_handlers
+from app.composition import get_job_runner
+from app.composition import warm as warm_models
 from app.config import config
 from app.logger import RequestLoggingMiddleware, configure_logging, get_logger
 from app.services.db import auth_service, db
@@ -38,9 +43,18 @@ async def _init_setup_token() -> str | None:
     if await auth_service.count_users() > 0:
         return None
     token = secrets.token_urlsafe(16)
-    # ! Printed once; required by POST /api/auth/setup while no admin exists
-    logger.warning("setup_token_required", token=token, hint="submit as setup_token on the first-run setup screen")
+    # ! The field name must not contain token, secret or password: the log censor masks those, and a masked code cannot claim the install
+    logger.warning("setup_token_required", setup_code=token, hint="submit as setup_token on the first-run setup screen")
     return token
+
+
+async def _warm_models(app: FastAPI) -> None:
+    try:
+        await asyncio.to_thread(warm_models)
+    except Exception as e:
+        logger.warning("model_warmup_failed", error=str(e))
+    # ! Set even when warm-up fails: ready means warm-up finished
+    app.state.warm = True
 
 
 @asynccontextmanager
@@ -59,6 +73,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     app.state.setup_token = None
+    app.state.warm = False
+    app.state.migrated = False
 
     # Connect to PostgreSQL
     try:
@@ -68,6 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             from app.services.db.migrations import run_migrations
 
             await asyncio.to_thread(run_migrations)
+            app.state.migrated = True
             app.state.setup_token = await _init_setup_token()
         else:
             await db.disconnect()
@@ -106,12 +123,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.catalog_warmup = asyncio.create_task(get_model_catalog())
     app.state.catalog_warmup.add_done_callback(_warmup_done)
+    app.state.model_warmup = asyncio.create_task(_warm_models(app))
+    get_job_runner().attach(asyncio.get_running_loop())
     yield
 
     # Shutdown
     logger.info("app_shutting_down", app=config.app_name)
-    await db.disconnect()
+    await get_job_runner().shutdown()
     await task_manager.shutdown()
+    await db.disconnect()
 
 
 # Create FastAPI application
@@ -126,6 +146,8 @@ app = FastAPI(
 )
 
 # Middleware
+app.add_middleware(BodyLimitMiddleware)
+# ! Starlette runs the last-added middleware first: request logging wraps the host check, so refused hosts are logged
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.allowed_origins,
@@ -133,7 +155,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(HostAllowlistMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(TrustedProxyMiddleware)
 
 
 # * RFC 9457 problem+json for every error (HTTPException, validation, ProblemException, UploadError, unhandled)

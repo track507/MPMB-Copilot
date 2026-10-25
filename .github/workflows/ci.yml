@@ -176,7 +176,9 @@ jobs:
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Create CI env file for Compose validation
-              run: cp .env.example .env
+              run: |
+                  cp .env.example .env
+                  sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-compose-validation/; s/^QDRANT_API_KEY=$/QDRANT_API_KEY=ci-compose-validation/' .env
 
             - name: Validate Compose file
               run: docker compose config --quiet

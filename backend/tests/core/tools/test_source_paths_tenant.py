@@ -187,3 +187,18 @@ def test_an_upload_root_is_never_a_parent_of_another_tenants(tmp_path: Path):
 
     assert not a.as_posix().startswith(b.as_posix())
     assert not b.as_posix().startswith(a.as_posix())
+
+
+def test_a_traversal_session_id_never_becomes_a_tool_root():
+    import pytest
+
+    with pytest.raises(ValueError):
+        _build_default_roots(FakeDeps(session_id="../../../.."))
+
+
+def test_a_library_document_is_extracted_into_the_callers_tenant_bucket():
+    from app.core.tools.source_paths import cache_scope_for
+    from app.services.documents.protocol import CacheScope
+
+    assert cache_scope_for(ROOT_UPLOADS_SHARED, FakeDeps(tenant_id=TENANT_A)) == CacheScope.shared(TENANT_A)
+    assert cache_scope_for(ROOT_UPLOADS_SHARED, FakeDeps(tenant_id=TENANT_B)) == CacheScope.shared(TENANT_B)

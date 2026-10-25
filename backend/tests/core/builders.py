@@ -4,18 +4,41 @@ Test doubles for the domain's ports
 Injection means a test supplies only the dependency it exercises, and the rest are inert stand-ins
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Optional, cast
+from typing import Any, Optional, TypeVar, cast
 
 from app.core.intent import IntentClassifier
 from app.core.retriever import Retriever
 from app.core.storage_keys import DEFAULT_TENANT_ID
 from app.core.tools.mpmb_tools import Deps
+from app.services.compute.protocol import ComputeLane
 from app.services.documents.protocol import CachedDocument, CacheScope
 from app.services.embedding.protocol import QueryEmbedder
 from app.services.rerank.protocol import Reranker
 from app.services.vector.protocol import VectorStore
+
+T = TypeVar("T")
+
+
+class _FakeEmbedder:
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0] * 8
+
+    def identity(self) -> dict[str, Any]:
+        return {"provider": "fake", "model": "fake", "dimension": 8}
+
+
+class InlineLane:
+    """A compute lane that runs work inline"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run(self, fn: Callable[[], T]) -> T:
+        self.calls += 1
+        return fn()
 
 
 def build_retriever(
@@ -24,6 +47,7 @@ def build_retriever(
     embedder: Any = None,
     reranker: Any = None,
     classifier: Any = None,
+    compute: Any = None,
 ) -> Retriever:
     """A Retriever wired with stand-ins, overriding only what a test cares about"""
     return Retriever(
@@ -33,14 +57,13 @@ def build_retriever(
             Reranker, reranker or SimpleNamespace(rerank=lambda query, candidates, top_k: candidates[:top_k])
         ),
         classifier=cast(Any, classifier or SimpleNamespace(classify=lambda **kwargs: None)),
+        compute=cast(ComputeLane, compute or InlineLane()),
     )
 
 
 def build_classifier(*, embedder: Any = None) -> IntentClassifier:
     """An IntentClassifier with an inert embedder, for the layers that never reach a centroid"""
-    return IntentClassifier(
-        embedder=cast(QueryEmbedder, embedder or SimpleNamespace(embed_query=lambda text: [0.0] * 8))
-    )
+    return IntentClassifier(embedder=cast(QueryEmbedder, embedder or _FakeEmbedder()))
 
 
 class InertDocuments:

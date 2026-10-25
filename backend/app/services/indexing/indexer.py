@@ -161,12 +161,6 @@ class IndexingService:
             points_uploaded = loop.run_until_complete(
                 store.upsert_chunks(chunks, all_embeddings, tenant_id=SHARED_TENANT)
             )
-            # Stamp the index with the embedding model + chunker version that built these vectors
-            from app.core.chunker import CHUNKER_VERSION
-
-            loop.run_until_complete(
-                store.write_identity({**embedding_service.identity(), "chunker_version": CHUNKER_VERSION})
-            )
         finally:
             loop.close()
 
@@ -180,6 +174,26 @@ class IndexingService:
             "source_file": json_path.name,
             "_source_keys": sorted(source_keys),
         }
+
+    def _stamp(self, *, complete: bool) -> None:
+        """
+        Stamp the embedding model and chunker version that built the stored vectors
+
+        complete False marks a build in progress; health reports it degraded until a stamp with complete True
+        """
+        import asyncio
+
+        from app.core.chunker import CHUNKER_VERSION
+
+        store = self._get_store()
+        loop = asyncio.new_event_loop()
+        try:
+            if not loop.run_until_complete(store.health_check()):
+                loop.run_until_complete(store.connect())
+            identity = {**embedding_service.identity(), "chunker_version": CHUNKER_VERSION, "complete": complete}
+            loop.run_until_complete(store.write_identity(identity))
+        finally:
+            loop.close()
 
     # =================================================================
     # Full corpus indexing
@@ -219,6 +233,7 @@ class IndexingService:
         results = []
         total_files = len(json_files)
         indexed_source_keys: set[str] = set()
+        self._stamp(complete=False)
 
         for i, json_file in enumerate(json_files, 1):
             logger.info(f"Indexing file {i}/{total_files}: {json_file.name}")
@@ -235,6 +250,7 @@ class IndexingService:
                 f"Indexed {i}/{total_files} chunk files ({result['points_uploaded']} vectors from {json_file.name})",
             )
 
+        self._stamp(complete=True)
         total_chunks = sum(r["chunks_loaded"] for r in results)
         total_uploaded = sum(r["points_uploaded"] for r in results)
         indexed_files = len(indexed_source_keys)

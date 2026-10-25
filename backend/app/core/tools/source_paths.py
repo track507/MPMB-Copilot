@@ -5,7 +5,7 @@ Both enforce the same policy: root allowlist, `..` rejection, extension allowlis
 """
 
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Iterator, Optional
 
 from app.core.storage_keys import library_prefix, session_prefix, user_global_prefix
@@ -16,6 +16,7 @@ from app.services.documents.protocol import (
     CacheScope,
     DocumentReader,
     is_extractable,
+    ocr_note,
 )
 from app.settings import settings
 
@@ -89,7 +90,7 @@ def cache_scope_for(root: str, deps: Any) -> CacheScope:
     Only this and user_id are request-derived, which is why extraction takes a CacheScope rather than the whole deps
     """
     if root == ROOT_UPLOADS_SHARED:
-        return CacheScope.shared()
+        return CacheScope.shared(deps.tenant_id)
     if root in (ROOT_UPLOADS_SESSION, ROOT_UPLOADS_GLOBAL):
         return CacheScope.for_user(deps.user_id)
     return CacheScope.for_source_root(_SOURCE_ROOT_CACHE_KEYS[root])
@@ -116,7 +117,7 @@ def resolve_readable(
         # ? A partly scanned guide still reads; only a document with no text anywhere is refused outright
         return PathResolution(
             error=DocumentError(
-                "no_text_layer", f"{path.name} has no text layer on any page; OCR is not available yet"
+                "no_text_layer", f"{path.name} has no text layer on any page; {ocr_note(document.summary)}"
             ).as_tool_error()
         )
 
@@ -148,6 +149,20 @@ def missing_root_error(root: str) -> str:
     if root == ROOT_UPLOADS_SHARED:
         return "[error] no files uploaded: the shared library is empty"
     return f"[error] root directory missing: {root}"
+
+
+def glob_error(glob_pattern: str) -> Optional[str]:
+    """
+    An [error] string for a glob that names a location outside its root, otherwise None
+
+    Parsed as a Windows path, which reads both separators and finds drive and UNC anchors on any host
+    """
+    windows = PureWindowsPath(glob_pattern)
+    if windows.anchor or PurePosixPath(glob_pattern).is_absolute():
+        return "[error] path_glob must be relative to the root"
+    if ".." in windows.parts:
+        return "[error] path_glob must not contain '..'"
+    return None
 
 
 def iter_searchable_files(root_dir: Path, glob_pattern: str = "**/*") -> Iterator[tuple[Path, Path]]:
@@ -215,6 +230,9 @@ def resolve_safe_path(
         return PathResolution(error="[error] absolute paths not allowed")
     if ".." in p.parts:
         return PathResolution(error="[error] parent-directory traversal not allowed")
+    # ! On Windows ':' opens an NTFS stream or a drive-relative path, and the extension check would judge the wrong name
+    if any(":" in part for part in p.parts):
+        return PathResolution(error="[error] ':' is not allowed in a path")
 
     root_dir = roots[root]
     if not root_dir.exists():

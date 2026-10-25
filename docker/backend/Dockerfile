@@ -55,7 +55,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/tmp/huggingface \
     DATA_DIR=/app/data \
     FASTEMBED_CACHE_DIR=/app/data/runtime/models/fastembed \
-	VALIDATOR_SCRIPT_PATH=/app/scripts/validate/src/validate.mjs
+    VALIDATOR_SCRIPT_PATH=/app/scripts/validate/src/validate.mjs \
+    ORT_DISABLE_TELEMETRY=1
 
 WORKDIR /app
 
@@ -78,4 +79,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# ! Must stay under the 30s stop grace period
+CMD ["/app/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "25", "--no-proxy-headers"]
+

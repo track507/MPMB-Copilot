@@ -1,3 +1,5 @@
+import contextlib
+import time
 from pathlib import Path
 
 import pytest
@@ -53,3 +55,21 @@ def test_an_unterminated_quote_is_a_clean_error(tmp_path: Path):
     with pytest.raises(DocumentError) as exc:
         CsvExtractor().extract(path)
     assert exc.value.category == "extraction_failed"
+
+
+def test_the_summary_keeps_a_bounded_preview_of_a_wide_first_row(tmp_path: Path):
+    path = tmp_path / "wide.csv"
+    path.write_text(",".join("c" * 500 for _ in range(1_000)) + "\n", encoding="utf-8")
+    summary = CsvExtractor().extract(path).summary
+    assert summary["columns"] == 1_000
+    assert len(summary["first_row"]) == 50
+    assert all(len(cell) == 200 for cell in summary["first_row"])
+
+
+def test_sniffing_an_adversarial_sample_is_fast(tmp_path: Path):
+    path = tmp_path / "slow.csv"
+    path.write_text(',"' * 32_768, encoding="utf-8")
+    start = time.perf_counter()
+    with contextlib.suppress(DocumentError):
+        CsvExtractor().extract(path)
+    assert time.perf_counter() - start < 2.0

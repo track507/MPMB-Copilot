@@ -6,14 +6,14 @@ services:
             dockerfile: Dockerfile
         container_name: mpmb-postgres
         ports:
-            # Use a non-default host port by default so local PostgreSQL installs
-            # don't intercept development traffic intended for the Docker service.
-            - "${POSTGRES_HOST_PORT:-5433}:5432"
+            # Non-default host port so a native PostgreSQL install does not intercept dev traffic
+            # Loopback only: the backend container reaches postgres over mpmb-network
+            - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
         volumes:
             - postgres_data:/var/lib/postgresql/data
         environment:
             POSTGRES_USER: ${POSTGRES_USER:-mpmb_user}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mpmb_password}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (pnpm run setup generates one)}
             POSTGRES_DB: ${POSTGRES_DB:-mpmb_copilot}
             POSTGRES_HOST_AUTH_METHOD: scram-sha-256
         healthcheck:
@@ -30,14 +30,16 @@ services:
         image: qdrant/qdrant:latest
         container_name: mpmb-qdrant
         ports:
-            - "6333:6333"
-            - "6334:6334"
+            - "127.0.0.1:6333:6333"
+            - "127.0.0.1:6334:6334"
         volumes:
             - qdrant_storage:/qdrant/storage
             - qdrant_snapshots:/qdrant/snapshots
         environment:
             - QDRANT__SERVICE__GRPC_PORT=6334
             - QDRANT__LOG_LEVEL=INFO
+            - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:?set QDRANT_API_KEY in .env (pnpm run setup generates one)}
+
         healthcheck:
             test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
             interval: 10s
@@ -56,7 +58,7 @@ services:
                 PYTHON_VERSION: "3.13"
         container_name: mpmb-backend
         ports:
-            - "8000:8000"
+            - "127.0.0.1:8000:8000"
         volumes:
             - backend_logs:/app/logs
             - backend_index_cache:/app/data/runtime/index_cache
@@ -84,9 +86,9 @@ services:
             - POSTGRES_HOST=postgres
             - POSTGRES_PORT=5432
             - POSTGRES_USER=${POSTGRES_USER:-mpmb_user}
-            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mpmb_password}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (pnpm run setup generates one)}
             - POSTGRES_DB=${POSTGRES_DB:-mpmb_copilot}
-            - DATABASE_URL=postgresql://${POSTGRES_USER:-mpmb_user}:${POSTGRES_PASSWORD:-mpmb_password}@postgres:5432/${POSTGRES_DB:-mpmb_copilot}
+            - DATABASE_URL=postgresql://${POSTGRES_USER:-mpmb_user}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-mpmb_copilot}
 
             # Qdrant
             - QDRANT_HOST=qdrant
@@ -108,6 +110,8 @@ services:
             # Docker Desktop resolves to host.docker.internal, linux needs the additional mapping
             - "host.docker.internal:host-gateway"
         restart: unless-stopped
+        # ! Must exceed uvicorn's 25s --timeout-graceful-shutdown
+        stop_grace_period: 30s
         networks:
             - mpmb-network
 

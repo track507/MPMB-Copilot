@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import COOKIE_NAME, Principal, current_principal
+from app.api.deps import COOKIE_NAME, Principal, current_principal, is_local_request
 from app.config import config
 from app.core import security
 from app.logger import get_logger
@@ -46,7 +46,7 @@ def _cookie_secure(request: Request) -> bool:
         return True
     if config.cookie_secure == "never":
         return False
-    # ? auto: trust the effective scheme (uvicorn --proxy-headers makes this correct behind a trusted proxy)
+    # ? auto: trust the effective scheme, which TrustedProxyMiddleware sets from X-Forwarded-Proto only for a trusted peer
     return request.url.scheme == "https"
 
 
@@ -68,11 +68,16 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _socket_peer(request: Request) -> str:
+    peer = getattr(request.state, "socket_peer", None)
+    return peer if isinstance(peer, str) and peer else _client_ip(request)
+
+
 @router.get("/state", summary="Auth state for frontend routing")
 async def auth_state(request: Request) -> dict[str, Any]:
     from app.api.deps import auth_bypassed
 
-    if auth_bypassed():
+    if auth_bypassed(request):
         return {"state": "authenticated", "user": {"username": "default", "role": "admin"}}
     _require_db()
     if await auth_service.count_users() == 0:
@@ -97,6 +102,9 @@ async def setup(body: SetupRequest, request: Request, response: Response) -> dic
     if await auth_service.count_users() > 0:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Setup already completed")
     required = getattr(request.app.state, "setup_token", None)
+    if required is None and not is_local_request(request):
+        # ! No token is issued on a loopback bind, so a remote first visitor must not be able to claim the install
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Complete setup from this machine")
     if required is not None and not _secrets.compare_digest(body.setup_token or "", required):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="A valid setup token is required")
     try:
@@ -108,7 +116,13 @@ async def setup(body: SetupRequest, request: Request, response: Response) -> dic
     request.app.state.setup_token = None
     raw = await auth_service.create_session(user.id)
     _set_session_cookie(response, request, raw)
-    logger.info(f"admin_created username={user.username} claimed_sessions={claimed}")
+    logger.info(
+        "admin_created",
+        username=user.username,
+        claimed_sessions=claimed,
+        client_ip=_client_ip(request),
+        peer=_socket_peer(request),
+    )
     return {"username": user.username, "role": user.role}
 
 
@@ -126,11 +140,14 @@ async def login(body: LoginRequest, request: Request, response: Response) -> dic
     if user is None:
         security.dummy_verify()  # ? uniform timing for unknown usernames
         await auth_service.record_login_failure(body.username, ip)
+        logger.warning("login_failed", username=body.username, client_ip=ip, peer=_socket_peer(request))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNIFORM_LOGIN_ERROR)
     if user.disabled or not user.password_hash or not security.verify_password(user.password_hash, body.password):
         await auth_service.record_login_failure(body.username, ip)
+        logger.warning("login_failed", username=body.username, client_ip=ip, peer=_socket_peer(request))
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNIFORM_LOGIN_ERROR)
     await auth_service.clear_login_failures(body.username, ip)
+    logger.info("login_succeeded", username=body.username, client_ip=ip, peer=_socket_peer(request))
     raw = await auth_service.create_session(user.id)
     _set_session_cookie(response, request, raw)
     return {"username": user.username, "role": user.role}

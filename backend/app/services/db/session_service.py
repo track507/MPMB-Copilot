@@ -6,9 +6,9 @@ All operations use the async database pool from `database.py`.
 Usage:
     from app.services.db import session_service
 
-    session = await session_service.create_session(title="My Chat")
-    msg = await session_service.add_message(session.id, "user", {"text": "Hello"})
-    history = await session_service.get_messages(session.id)
+    session = await session_service.create_session(title="My Chat", user_id=user_id, tenant_id=tenant_id)
+    msg = await session_service.add_message(session.id, "user", {"text": "Hello"}, user_id=user_id)
+    history = await session_service.get_messages(session.id, user_id=user_id)
 """
 
 from datetime import datetime, timezone
@@ -23,6 +23,7 @@ from app.logger import get_logger
 from app.model.orm import Message, Session
 from app.services.db.connection import db
 from app.services.storage import meta
+from app.settings import settings
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,29 @@ def _owned(user_id: str) -> list[ColumnElement[bool]]:
     That differs from uploads, where role == "admin" bypasses (services/uploads/service.py:46)
     """
     return [Session.user_id == user_id]
+
+
+def _history_window(newest_first: list[Message], *, max_chars: int) -> list[dict[str, Any]]:
+    """
+    The newest turns that fit max_chars, oldest first, formatted for the model
+
+    The newest turn is admitted even when it alone exceeds the budget
+    """
+    window: list[dict[str, Any]] = []
+    used = 0
+    for msg in newest_first:
+        text = msg.content.get("text", "") if isinstance(msg.content, dict) else str(msg.content)
+        if not text or msg.role not in ("user", "assistant"):
+            continue
+        used += len(text)
+        if window and used > max_chars:
+            break
+        window.append({"role": msg.role, "content": text})
+    window.reverse()
+    # ! A leading assistant turn has lost the question it answers
+    while window and window[0]["role"] != "user":
+        window.pop(0)
+    return window
 
 
 class SessionService:
@@ -185,6 +209,7 @@ class SessionService:
         role: str,
         content: dict[str, Any],
         *,
+        user_id: str,
         provider: Optional[str] = None,
         model: Optional[str] = None,
         prompt_tokens: int = 0,
@@ -194,13 +219,22 @@ class SessionService:
         stop_reason: Optional[str] = None,
         meta_data: Optional[dict[str, Any]] = None,
     ) -> Message:
-        """Add a message to a session.
+        """
+        Append a message to an active session the caller owns
 
-        Sequence number is auto-incremented based on the current max
-        for the session.
+        Raises LookupError for a foreign or soft-deleted session, so nothing is written into it
+        The sequence number is one past the session's current maximum
         """
         async with db.session() as s:
-            # Get next sequence number
+            # ! The row lock also serializes concurrent appends, so two turns never take the same sequence number
+            owned = await s.execute(
+                select(Session.id)
+                .where(Session.id == session_id, Session.deleted_at.is_(None), *_owned(user_id))
+                .with_for_update()
+            )
+            if owned.scalar_one_or_none() is None:
+                raise LookupError(f"Session {session_id} not found")
+
             result = await s.execute(
                 select(func.coalesce(func.max(Message.sequence_number), 0)).where(Message.session_id == session_id)
             )
@@ -224,7 +258,6 @@ class SessionService:
             await s.flush()
             await s.refresh(message)
 
-            # Update session's updated_at
             await s.execute(
                 update(Session).where(Session.id == session_id).values(updated_at=datetime.now(timezone.utc))
             )
@@ -256,22 +289,24 @@ class SessionService:
             )
             return list(result.scalars().all())
 
-    async def get_conversation_history(
-        self, session_id: UUID, *, user_id: str, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    async def get_conversation_history(self, session_id: UUID, *, user_id: str) -> list[dict[str, Any]]:
         """
-        Get conversation history formatted for the LLM context, scoped to its owner
+        The latest turns of a session the caller owns, oldest first, formatted for the model
+
+        Bounded by settings.history_max_messages and settings.history_max_chars
         """
         # ! A foreign session id reads as empty, never as someone else's turns
         if await self.get_session(session_id, user_id=user_id) is None:
             return []
-        messages = await self.get_messages(session_id, user_id=user_id, limit=limit)
-        history = []
-        for msg in messages:
-            text = msg.content.get("text", "") if isinstance(msg.content, dict) else str(msg.content)
-            if text and msg.role in ("user", "assistant"):
-                history.append({"role": msg.role, "content": text})
-        return history
+        async with db.session() as s:
+            result = await s.execute(
+                select(Message)
+                .where(Message.session_id == session_id, Message.role.in_(("user", "assistant")))
+                .order_by(Message.sequence_number.desc())
+                .limit(settings.history_max_messages)
+            )
+            newest_first = list(result.scalars().all())
+        return _history_window(newest_first, max_chars=settings.history_max_chars)
 
     # * Stats
     async def get_session_count(self, *, user_id: str) -> int:

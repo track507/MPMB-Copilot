@@ -65,3 +65,8 @@ def _storage_root_is_never_the_real_one(tmp_path_factory, monkeypatch):
     root = tmp_path_factory.mktemp("storage")
     monkeypatch.setattr(config, "data_dir", str(root), raising=False)
     monkeypatch.setattr(config, "tenants_dir", str(root / "tenants"), raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _testclient_host_is_allowed(monkeypatch):
+    monkeypatch.setattr(config, "allowed_hosts", [*config.allowed_hosts, "testserver"], raising=False)

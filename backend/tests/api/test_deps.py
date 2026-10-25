@@ -3,15 +3,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from starlette.datastructures import Headers
 
 from app.api import deps
 from app.api.deps import Principal, current_principal, require_admin
 from app.core.storage_keys import DEFAULT_TENANT_ID
 
 
-def _request(cookie: str | None = None):
+def _request(cookie: str | None = None, *, peer: str = "127.0.0.1", headers: dict[str, str] | None = None):
     cookies = {deps.COOKIE_NAME: cookie} if cookie else {}
-    return SimpleNamespace(cookies=cookies)
+    return SimpleNamespace(cookies=cookies, client=SimpleNamespace(host=peer), headers=Headers(headers or {}))
 
 
 @pytest.fixture(autouse=True)
@@ -81,3 +82,44 @@ async def test_auth_disabled_ignored_off_loopback(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await current_principal(_request())
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_ignored_for_a_lan_peer(monkeypatch):
+    monkeypatch.setattr(deps.config, "auth_disabled", True, raising=False)
+    monkeypatch.setattr(deps.config, "bind_host", "127.0.0.1", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await current_principal(_request(peer="192.168.1.77"))
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_ignored_when_a_proxy_forwards_a_lan_client(monkeypatch):
+    monkeypatch.setattr(deps.config, "auth_disabled", True, raising=False)
+    monkeypatch.setattr(deps.config, "bind_host", "127.0.0.1", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        await current_principal(_request(headers={"X-Forwarded-For": "192.168.1.77"}))
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_auth_disabled_honored_through_the_local_dev_proxy(monkeypatch):
+    monkeypatch.setattr(deps.config, "auth_disabled", True, raising=False)
+    monkeypatch.setattr(deps.config, "bind_host", "127.0.0.1", raising=False)
+    p = await current_principal(_request(headers={"X-Forwarded-For": "::ffff:127.0.0.1"}))
+    assert p.role == "admin"
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("127.0.0.1", True),
+        ("::1", True),
+        ("::ffff:127.0.0.1", True),
+        ("localhost", True),
+        ("0.0.0.0", False),
+        ("testclient", False),
+    ],
+)
+def test_is_loopback(host, expected):
+    assert deps.is_loopback(host) is expected

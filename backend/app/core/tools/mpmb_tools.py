@@ -24,9 +24,11 @@ from pydantic_ai.toolsets.function import FunctionToolset
 
 from app.core.catalog import EMPTY_CATALOG, CatalogSnapshot
 from app.core.retriever import Retriever
+from app.core.tools.line_patterns import compile_line_pattern
 from app.core.tools.source_paths import (
     _build_default_roots,
     cache_scope_for,
+    glob_error,
     iter_searchable_files,
     missing_root_error,
     resolve_safe_path,
@@ -40,6 +42,7 @@ from app.services.documents.protocol import (
     CacheScope,
     DocumentReader,
     is_extractable,
+    ocr_note,
 )
 from app.settings import settings
 
@@ -57,6 +60,8 @@ SourceRoot = Literal[
     "./data/uploads/global/",
     "./data/uploads/shared/",
 ]
+
+GREP_LINE_MAX_CHARS = 400
 
 
 @dataclass
@@ -130,16 +135,19 @@ def _mpmb_grep_impl(
     if len(pattern) > settings.tool_grep_pattern_max_len:
         return f"[error] pattern too long: {len(pattern)} chars (max {settings.tool_grep_pattern_max_len})"
 
-    try:
-        regex = re.compile(pattern)
-    except re.error as e:
-        return f"[error] invalid regex: {e}"
+    search = compile_line_pattern(pattern)
+    if isinstance(search, str):
+        return search
 
     if root not in roots:
         return f"[error] unknown root: {root}"
     root_dir = roots[root]
     if not root_dir.exists():
         return missing_root_error(root)
+
+    glob_pattern = path_glob or "**/*"
+    if (error := glob_error(glob_pattern)) is not None:
+        return error
 
     matches: list[str] = []
     max_matches = settings.tool_grep_max_matches
@@ -151,7 +159,7 @@ def _mpmb_grep_impl(
     )
     scope: Optional[CacheScope] = None
 
-    for file_path, rel in iter_searchable_files(root_dir, path_glob or "**/*"):
+    for file_path, rel in iter_searchable_files(root_dir, glob_pattern):
         read_path = file_path
         if is_extractable(file_path.suffix):
             if scope is None:
@@ -168,13 +176,24 @@ def _mpmb_grep_impl(
 
         t0 = time.perf_counter()
         for lineno, line in enumerate(text.splitlines(), start=1):
-            if (time.perf_counter() - t0) > settings.tool_grep_file_timeout_sec:
+            remaining = settings.tool_grep_file_timeout_sec - (time.perf_counter() - t0)
+            if remaining <= 0:
                 break
-            if regex.search(line):
+            try:
+                hit = search(line, remaining)
+            except TimeoutError:
+                return (
+                    f"[error] pattern too slow: it ran past {settings.tool_grep_file_timeout_sec:g}s on "
+                    f"{rel.as_posix()}:{lineno}; drop the lookaround or backreference so it runs on the linear-time "
+                    "engine, or avoid nested quantifiers"
+                )
+            if hit:
                 total_matches += 1
                 if len(matches) < max_matches:
-                    # ! Always the original path, never the sidecar, so the model can pass it straight to mpmb_read
-                    matches.append(f"{rel.as_posix()}:{lineno}: {line.rstrip()}")
+                    shown = line.rstrip()
+                    if len(shown) > GREP_LINE_MAX_CHARS:
+                        shown = shown[:GREP_LINE_MAX_CHARS] + " [...]"
+                    matches.append(f"{rel.as_posix()}:{lineno}: {shown}")
 
     notes = extraction.notes()
     if not matches:
@@ -282,7 +301,11 @@ def _mpmb_outline_impl(
         lines.append(f"{name}: {summary['pages']} pages, {len(document.outline)} outline entries")
         if document.pages_without_text:
             pages = ", ".join(str(p) for p in document.pages_without_text)
-            lines.append(f"[no text layer on pages {pages}; OCR is not available yet, so they read as empty]")
+            lines.append(f"[no text layer on pages {pages}; {ocr_note(summary)}]")
+            oversized = summary.get("oversized_pages") or []
+            if oversized:
+                listed = ", ".join(str(p) for p in oversized)
+                lines.append(f"[pages {listed} declare a size too large to render, so OCR never read them]")
         if not document.outline:
             lines.append("This PDF has no bookmarks. Each page starts at a [page N] line, so mpmb_grep for one to jump")
     else:
@@ -510,7 +533,7 @@ def build_mpmb_toolset() -> FunctionToolset[Deps]:
 
         Use first on an uploaded .pdf, .csv or .tsv: each entry is `L<line>: <section>`, and that line number is what mpmb_read takes
         Then mpmb_grep to locate a term and mpmb_read a line range for the passage
-        Also lists pages with no text layer, which read as empty because OCR is not available yet
+        Also lists pages with no text layer and where OCR stands for them
         """
         roots = _build_default_roots(ctx.deps)
         logger.info(f"tool.mpmb_outline root={root} path={path}")

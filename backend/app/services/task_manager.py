@@ -230,8 +230,7 @@ class TaskManager:
         if self.active_tasks:
             await asyncio.gather(*self.active_tasks.values(), return_exceptions=True)
 
-        # Shutdown executor
-        self.executor.shutdown(wait=True)
+        await asyncio.to_thread(self.executor.shutdown, wait=True)
         logger.info("TaskManager shutdown complete")
 
 

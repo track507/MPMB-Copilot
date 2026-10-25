@@ -20,7 +20,7 @@ Usage:
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import UsageLimitExceeded
@@ -267,7 +267,7 @@ class RAGEngine:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         upload_manifest: str = "",
-    ) -> AsyncIterator[RAGStreamEvent]:
+    ) -> AsyncGenerator[RAGStreamEvent, None]:
         t_start = time.perf_counter()
         resolved_provider = provider or settings.default_llm_provider
 

@@ -57,7 +57,17 @@ _DEFAULT_DOCUMENTS: dict[str, Any] = {
     "grep_extract_max_file_bytes": 10_485_760,
     # ? A 300-page guide extracts to roughly 1-3 MB, so this bounds the pathological case without rejecting real ones
     "max_extracted_bytes": 8_388_608,
+    # ? The largest real references (the PDF 1.7 specification) run to about 750 pages
+    "max_pdf_pages": 2_000,
+    # ! Checked between pages only: a single page stuck inside PDFium cannot be interrupted in process
+    "extract_budget_sec": 120,
+    # ? Extraction-time ceiling, above the read-time max_extracted_bytes so mpmb_outline still navigates large documents
+    "max_document_text_bytes": 67_108_864,
+    # ! Checked before rendering: a page's size is attacker-declared and PDFium allocates whatever it says
+    # ? A 24 x 36 inch poster map at the render DPI is about 35 MP, so 50 MP refuses no printed page
+    "max_render_pixels": 50_000_000,
     "libreoffice_enabled": False,
+    "ocr_enabled": True,
 }
 
 
@@ -102,6 +112,13 @@ class Settings:
     top_k_results: int = 8
     similarity_threshold: float = 0.5
     context_window_size: int = 8000
+
+    # * Conversation history sent with each turn
+    history_max_messages: int = 50
+    """Newest messages loaded per turn"""
+
+    history_max_chars: int = 60_000
+    """Character budget for that history, about 15k tokens; the oldest messages drop first"""
 
     # Retrieval
     retrieval_mode: str = "dual"
@@ -158,6 +175,16 @@ class Settings:
     so the model answers with what it has. 0 = no soft cap (a hard net of 50 model
     requests per turn still applies, handled gracefully)."""
 
+    # * Turn admission
+    max_concurrent_turns: int = 64
+    """Chat turns this process runs at once"""
+
+    max_concurrent_turns_per_user: int = 3
+    """Chat turns one user may run at once"""
+
+    turn_timeout_sec: float = 600.0
+    """Wall-clock limit on one chat turn"""
+
     source_catalog_path: Optional[str] = None
     """Override path to mpmb-analysis.json. None → resolution falls through to
     config/env, then to ./scripts/analyze/reports/mpmb-analysis.json."""
@@ -181,6 +208,9 @@ class Settings:
 
     tool_read_max_lines: int = 2000
     """Hard cap on lines returned by mpmb_read in a single call."""
+
+    tool_result_max_bytes: int = 262_144
+    """Byte cap on any single tool result, applied where results leave the toolset; 0 disables it"""
 
     tool_grep_pattern_max_len: int = 500
     """Reject grep patterns longer than this many characters."""

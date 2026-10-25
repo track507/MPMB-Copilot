@@ -6,7 +6,15 @@ Imports nothing from the database layer, so the tool layer can depend on it with
 
 from app.services.documents.cache import CachedDocument
 from app.services.documents.errors import DocumentError
-from app.services.documents.protocol import CacheScope, DocumentExtractor, Extraction, OutlineEntry, normalize
+from app.services.documents.protocol import (
+    CacheScope,
+    DocumentExtractor,
+    Extraction,
+    OutlineEntry,
+    PageTranscriber,
+    PageVisuals,
+    normalize,
+)
 from app.services.documents.registry import EXTRACTABLE_EXTENSIONS, is_extractable
 from app.services.documents.service import cached_summary, ensure_extracted, lookup, release
 
@@ -18,6 +26,8 @@ __all__ = [
     "DocumentExtractor",
     "Extraction",
     "OutlineEntry",
+    "PageTranscriber",
+    "PageVisuals",
     "cached_summary",
     "ensure_extracted",
     "is_extractable",
