@@ -125,7 +125,8 @@ jobs:
             - name: pip-audit
               id: pip_audit
               continue-on-error: true
-              run: uvx pip-audit -r security-reports/backend-requirements.txt --format json --output security-reports/pip-audit.json
+              # ! The export is pinned by uv.lock; pip's resolver cannot install rapidocr-onnxruntime and writes no report
+              run: uvx pip-audit -r security-reports/backend-requirements.txt --no-deps --disable-pip --format json --output security-reports/pip-audit.json
 
             # ! A report that exists means the tool ran; no report means it could not, and that must fail loudly
             - name: Assert the audits actually ran
