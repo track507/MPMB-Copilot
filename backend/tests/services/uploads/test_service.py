@@ -34,12 +34,13 @@ def test_check_access_admin_bypasses_all():
     )
 
 
-def test_check_access_global_non_owner_forbidden():
+def test_check_access_global_non_owner_is_not_found():
     with pytest.raises(UploadError) as exc:
         upload_service._check_access(
             row_tenant=T, tenant_id=T, scope="global", row_owner="u2", user_id="u1", role="user", write=False
         )
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
+    assert exc.value.code == "not_found"
 
 
 def test_check_access_global_owner_allowed():
@@ -70,12 +71,13 @@ def test_check_access_another_tenants_file_is_not_found_even_for_an_admin():
     assert exc.value.status_code == 404
 
 
-def test_check_access_session_non_owner_forbidden():
+def test_check_access_session_non_owner_is_not_found():
     with pytest.raises(UploadError) as exc:
         upload_service._check_access(
             row_tenant=T, tenant_id=T, scope="session", row_owner="u2", user_id="u1", role="user", write=False
         )
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
+    assert exc.value.code == "not_found"
 
 
 def test_check_access_session_owner_allowed():
@@ -248,13 +250,14 @@ async def test_open_content_not_found(upload_root, registry):
     assert exc.value.code == "not_found"
 
 
-async def test_open_content_forbidden_for_other_owner(upload_root, registry):
+async def test_open_content_of_other_owner_is_not_found(upload_root, registry):
     registry.get_file.return_value = SimpleNamespace(
         id=uuid4(), tenant_id=T, scope="global", owner_user_id="u2", storage_key="global/u2/a.js"
     )
     with pytest.raises(UploadError) as exc:
         await upload_service.open_content(file_id=uuid4(), user_id="u1", role="user", tenant_id=T)
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
+    assert exc.value.code == "not_found"
 
 
 async def test_open_content_rejects_path_traversal(upload_root, registry):

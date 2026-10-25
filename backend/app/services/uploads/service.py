@@ -76,7 +76,7 @@ class UploadService:
         if role == "admin":
             return
         if scope in ("global", "session") and row_owner != user_id:
-            raise UploadError(403, "forbidden", "Not your file")
+            raise UploadError(404, "not_found", "File not found")
         if scope == "shared" and write:
             raise UploadError(403, "forbidden", "The shared library is admin-managed")
 
