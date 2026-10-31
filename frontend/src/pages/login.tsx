@@ -42,7 +42,7 @@ export default function LoginPage(): ReactElement {
 	};
 
 	return (
-		<div className="flex h-screen items-center justify-center bg-background">
+		<div className="flex h-screen flex-col items-center justify-center gap-4 bg-background px-4">
 			<form
 				onSubmit={(e) => {
 					void handleSubmit(onSubmit)(e);
@@ -75,6 +75,17 @@ export default function LoginPage(): ReactElement {
 					{login.isPending ? "Signing in..." : "Sign in"}
 				</button>
 			</form>
+			<footer className="w-full max-w-sm text-center text-xs text-muted-foreground">
+				Not affiliated with, endorsed by or supported by MorePurpleMoreBetter (MPMB). Get the official character sheets from{" "}
+				<a href="https://www.flapkan.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+					the MPMB website
+				</a>{" "}
+				or{" "}
+				<a href="https://www.patreon.com/morepurplemorebetter" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+					MPMB on Patreon
+				</a>
+				.
+			</footer>
 		</div>
 	);
 }

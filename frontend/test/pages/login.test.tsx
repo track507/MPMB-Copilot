@@ -26,4 +26,11 @@ describe("LoginPage", () => {
 		await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 		expect(await screen.findByText("Username is required")).toBeInTheDocument();
 	});
+
+	it("states it is not affiliated with MPMB and links the official sheets", () => {
+		render(<LoginPage />);
+		expect(screen.getByText(/Not affiliated with, endorsed by or supported by MorePurpleMoreBetter \(MPMB\)/)).toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "the MPMB website" })).toHaveAttribute("href", "https://www.flapkan.com/");
+		expect(screen.getByRole("link", { name: "MPMB on Patreon" })).toHaveAttribute("href", "https://www.patreon.com/morepurplemorebetter");
+	});
 });

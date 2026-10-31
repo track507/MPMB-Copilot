@@ -2,6 +2,8 @@
 
 > **AI assistant that helps you write MPMB JS scripts using the actual MPMB source code and examples as ground truth.**
 > ⚠️ **Pre-release.** This is a working prototype, not a polished product. Setup involves several moving parts (Docker, an LLM API key, indexing) and the UX still has rough edges. If you're a D&D player who just wants AI help writing MPMB scripts, expect a bumpy ride for now — feedback welcome.
+>
+> **Not affiliated with MPMB.** MPMB-Copilot is an independent project, not affiliated with, endorsed by or supported by MorePurpleMoreBetter (MPMB). Get the official character sheets from [the MPMB website](https://www.flapkan.com/) or [MPMB on Patreon](https://www.patreon.com/morepurplemorebetter).
 
 ## NOTES
 
